@@ -140,7 +140,8 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
   
   // Ensure the URL is clean before appending query params
   baseUrl = baseUrl.split('?')[0];
-  const studentUrl = baseUrl + '?page=student&code=' + encodeURIComponent(sess.code);
+  const studentUrl = resolveStudentLandingUrl(baseUrl);
+  if (!studentUrl) return { error: 'System could not identify the student landing URL.' };
   
   let sent = 0, skipped = 0, errors = [];
   
@@ -150,7 +151,7 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
     }
     try {
       const fname = student.firstName || student.name.split(' ')[0] || 'Student';
-      const html = buildAssessmentEmail(fname, studentUrl, student.email, sess.setName);
+      const html = buildAssessmentEmail(fname, studentUrl, student.email, sess.setName, sess.code);
       const subject = 'Your VERITAS Assess Link – ' + new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
       
       // Using MailApp. It handles EDU restrictions much better than GmailApp
@@ -195,6 +196,63 @@ function resolveWebAppBaseUrl(clientBaseUrl) {
   }
 
   return String(baseUrl).split('?')[0];
+}
+
+
+function resolveStudentLandingUrl(fallbackBaseUrl) {
+  const props = PropertiesService.getScriptProperties();
+  const configuredLandingUrl = 'https://veritas.courses/';
+  const candidates = [
+    props.getProperty('STUDENT_LANDING_URL') || '',
+    configuredLandingUrl,
+    fallbackBaseUrl || ''
+  ];
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = String(candidates[i] || '').trim().split('?')[0];
+    if (!candidate) continue;
+    if (isPreviewEditorUrl(candidate)) continue;
+    return candidate.endsWith('/') ? candidate : candidate + '/';
+  }
+
+  return '';
+}
+
+function resolveWebAppBaseUrl(clientBaseUrl) {
+  const configuredDeployUrl = 'https://script.google.com/a/macros/malvernprep.org/s/AKfycby9WBkucfUgkoo3LBhHZmGuAtZWx9uGeSEIhY3hqhhxMJRxft1l8IgT36pGoIYAAztY/exec';
+  const props = PropertiesService.getScriptProperties();
+
+  const candidates = [];
+  try { candidates.push(ScriptApp.getService().getUrl() || ''); } catch (e) {}
+  candidates.push(props.getProperty('DEPLOY_URL') || '');
+  candidates.push(props.getProperty('WEBAPP_EXEC_URL') || '');
+  candidates.push(clientBaseUrl || '');
+  candidates.push(configuredDeployUrl);
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = String(candidates[i] || '').trim().split('?')[0];
+    if (!candidate) continue;
+    if (isPreviewEditorUrl(candidate)) continue;
+    if (isCanonicalExecUrl(candidate)) return candidate;
+  }
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = String(candidates[i] || '').trim().split('?')[0];
+    if (!candidate) continue;
+    if (isPreviewEditorUrl(candidate)) continue;
+    return candidate;
+  }
+
+  return '';
+}
+
+function isPreviewEditorUrl(url) {
+  return String(url).indexOf('userCodeAppPanel') > -1 || String(url).indexOf('script.googleusercontent.com') > -1;
+}
+
+function isCanonicalExecUrl(url) {
+  const normalized = String(url || '').trim();
+  return /^https:\/\/script\.google\.com\/.+\/exec$/i.test(normalized);
 }
 
 
@@ -259,7 +317,7 @@ Grader wrappers
 - regradeWithContext(sessId, qId, ctx) -> Grader.regradeWithContext() => { ok, updated, message }|{ error }
 */
 
-function buildAssessmentEmail(name, url, email, assessName) {
+function buildAssessmentEmail(name, url, email, assessName, sessionCode) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -296,9 +354,14 @@ function buildAssessmentEmail(name, url, email, assessName) {
         </div>
         <div class="content-padding">
             <p>Hello <strong>${name}</strong>,</p>
-            <p>Your personalized link for <strong>${assessName}</strong> is ready. Please click the button below to begin.</p>
+            <p>Your personalized link for <strong>${assessName}</strong> is ready. Please click the button below, then enter your session code.</p>
             <div style="text-align: center;">
-                <a href="${url}" class="btn">Begin Session</a>
+                <a href="${url}" class="btn">Open Veritas</a>
+            </div>
+            <div style="background:#f8fafc;border:1px solid #d1d5db;border-radius:6px;padding:16px;text-align:center;margin:16px 0;">
+                <p style="margin:0 0 8px 0;font-size:12px;letter-spacing:.7px;text-transform:uppercase;color:#6b7280;font-weight:700;">Session Code</p>
+                <p style="margin:0;font-size:30px;letter-spacing:2px;font-weight:800;color:#111827;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;">${sessionCode}</p>
+                <p style="margin:8px 0 0 0;font-size:13px;color:#6b7280;">Copy this code and paste it after opening Veritas.</p>
             </div>
             <hr class="divider">
             <div style="background-color: #ffdcdc; padding: 20px; border-radius: 6px; border: 1px solid #fed7d7;">
