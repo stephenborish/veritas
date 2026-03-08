@@ -3,14 +3,38 @@
 //  Optimized for Concurrency, Security, UI/UX, and Custom Email
 // ═══════════════════════════════════════════════════════════════════
 
-// ⚠️ RUN THIS FUNCTION ONCE FROM THE EDITOR TO GRANT EMAIL PERMISSIONS
+// ⚠️ RUN THIS FUNCTION ONCE FROM THE EDITOR TO GRANT ALL PERMISSIONS
+// This touches every API the app uses so Google prompts for all required scopes.
+// After running, re-deploy the web app as "Execute as: Me" / "Anyone" access.
 function AUTHORIZE_SYSTEM() {
   try {
-    MailApp.sendEmail(Session.getActiveUser().getEmail(), "Veritas Assess: Authorized", "Permissions successfully granted. You can now send assessment links to your students.");
-    Logger.log("Authorization successful.");
-  } catch(e) {
-    Logger.log("Authorization failed: " + e.message);
-  }
+    // Spreadsheet access (Data.gs uses SpreadsheetApp extensively)
+    const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(
+      PropertiesService.getScriptProperties().getProperty('SHEET_ID') || 'none'
+    );
+    Logger.log("SpreadsheetApp authorized. Sheet: " + (ss ? ss.getName() : 'N/A'));
+  } catch(e) { Logger.log("SpreadsheetApp scope triggered: " + e.message); }
+
+  try {
+    // Drive access (image uploads use DriveApp)
+    DriveApp.getRootFolder();
+    Logger.log("DriveApp authorized.");
+  } catch(e) { Logger.log("DriveApp scope triggered: " + e.message); }
+
+  try {
+    // Mail access (assessment email delivery)
+    MailApp.sendEmail(Session.getActiveUser().getEmail(), "Veritas Assess: Authorized", "All permissions successfully granted. You can now send assessment links to your students.");
+    Logger.log("MailApp authorized.");
+  } catch(e) { Logger.log("MailApp scope triggered: " + e.message); }
+
+  try {
+    // Properties and Lock (used by Data.gs for concurrency)
+    PropertiesService.getScriptProperties().getProperty('_auth_check');
+    LockService.getScriptLock();
+    Logger.log("PropertiesService + LockService authorized.");
+  } catch(e) { Logger.log("Properties/Lock scope triggered: " + e.message); }
+
+  Logger.log("AUTHORIZE_SYSTEM complete. Now re-deploy: Deploy > Manage Deployments > Edit > New Version > Execute as Me > Anyone.");
 }
 
 function doGet(e) {
@@ -179,15 +203,17 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
 function resolveWebAppBaseUrl(clientBaseUrl) {
   let baseUrl = '';
 
-  // Always prefer canonical deployment URL first.
+  // 1. Canonical deployment URL from the runtime — always correct when available.
   try { baseUrl = ScriptApp.getService().getUrl() || ''; } catch (e) {}
 
-  // Fallbacks if deployment URL is unavailable in current environment.
-  if (!baseUrl) {
-    baseUrl = PropertiesService.getScriptProperties().getProperty('DEPLOY_URL') || '';
-  }
+  // 2. Caller-provided URL (window.location from the UI) — trustworthy runtime value.
   if (!baseUrl) {
     baseUrl = clientBaseUrl || '';
+  }
+
+  // 3. Stored property as last resort (may be stale after re-deploy).
+  if (!baseUrl) {
+    baseUrl = PropertiesService.getScriptProperties().getProperty('DEPLOY_URL') || '';
   }
 
   // Guard against internal editor preview links that break for students.
@@ -218,33 +244,6 @@ function resolveStudentLandingUrl(fallbackBaseUrl) {
   return '';
 }
 
-function resolveWebAppBaseUrl(clientBaseUrl) {
-  const configuredDeployUrl = 'https://script.google.com/a/macros/malvernprep.org/s/AKfycby9WBkucfUgkoo3LBhHZmGuAtZWx9uGeSEIhY3hqhhxMJRxft1l8IgT36pGoIYAAztY/exec';
-  const props = PropertiesService.getScriptProperties();
-
-  const candidates = [];
-  try { candidates.push(ScriptApp.getService().getUrl() || ''); } catch (e) {}
-  candidates.push(props.getProperty('DEPLOY_URL') || '');
-  candidates.push(props.getProperty('WEBAPP_EXEC_URL') || '');
-  candidates.push(clientBaseUrl || '');
-  candidates.push(configuredDeployUrl);
-
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = String(candidates[i] || '').trim().split('?')[0];
-    if (!candidate) continue;
-    if (isPreviewEditorUrl(candidate)) continue;
-    if (isCanonicalExecUrl(candidate)) return candidate;
-  }
-
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = String(candidates[i] || '').trim().split('?')[0];
-    if (!candidate) continue;
-    if (isPreviewEditorUrl(candidate)) continue;
-    return candidate;
-  }
-
-  return '';
-}
 
 function isPreviewEditorUrl(url) {
   return String(url).indexOf('userCodeAppPanel') > -1 || String(url).indexOf('script.googleusercontent.com') > -1;
