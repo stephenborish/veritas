@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Veritas Assess</title>
+<link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/stephenborish/veritas/008a8431c35df4622e78f8edcbfd7123d90bebdd/favicon.ico">
+<link rel="shortcut icon" type="image/x-icon" href="https://raw.githubusercontent.com/stephenborish/veritas/008a8431c35df4622e78f8edcbfd7123d90bebdd/favicon.ico">
+<link rel="apple-touch-icon" href="https://raw.githubusercontent.com/stephenborish/veritas/008a8431c35df4622e78f8edcbfd7123d90bebdd/favicon.ico">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=Lora:ital,wght@0,400;0,500;0,600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
@@ -198,7 +201,7 @@ function doJoin() {
   
   document.getElementById('jBtn').disabled = true; document.getElementById('jBtn').textContent = 'Joining...';
   
-  google.script.run.withSuccessHandler(r => {
+  google.script.run.withSuccessHandler(function(r) {
     if(r.error) { showE(r.error); document.getElementById('jBtn').disabled = false; document.getElementById('jBtn').textContent = 'Join Session'; return; }
     
     S.sid = r.sessionId; S.stuId = r.studentId; S.mode = r.mode;
@@ -222,7 +225,8 @@ function showE(msg) {
 }
 function toast(msg) {
   const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg;
-  document.body.appendChild(el); setTimeout(() => el.remove(), 3500);
+  document.body.appendChild(el);
+  setTimeout(function() { el.remove(); }, 3500);
 }
 
 function enterFS() {
@@ -236,7 +240,7 @@ function enterFS() {
 }
 
 document.addEventListener('fullscreenchange', onFSChange);
-document.addEventListener('visibilitychange', () => {
+document.addEventListener('visibilitychange', function() {
   if(document.hidden && S.sid && !S.done && !S.locked) triggerLockout('tab_switch');
 });
 
@@ -269,7 +273,7 @@ function beginAssess() {
   document.getElementById('assessUI').style.display = 'block';
   S.locked = false; S.needsFS = false;
   
-  google.script.run.withSuccessHandler(d => {
+  google.script.run.withSuccessHandler(function(d) {
     S.qs = d.questions;
     if(d.existing) Object.assign(S.ans, d.existing);
     if(d.existingMeta) Object.assign(S.conf, d.existingMeta);
@@ -280,7 +284,7 @@ function beginAssess() {
 function startTimer() {
   if(!S.endTime) return;
   document.getElementById('timerPill').style.display = 'inline-block';
-  S.timerInt = setInterval(() => {
+  S.timerInt = setInterval(function() {
     const rem = Math.max(0, Math.floor((S.endTime - Date.now()) / 1000));
     document.getElementById('timerPill').textContent = `${String(Math.floor(rem/60)).padStart(2,'0')}:${String(rem%60).padStart(2,'0')}`;
     if (rem <= 0) { clearInterval(S.timerInt); executeSubmit(); }
@@ -303,11 +307,11 @@ function renderQ() {
   html += `<div class="q-text">${q.text}</div>`;
   
   if(q.type === 'mc') {
-    html += `<div class="mc-list">${q.choices.map((c, i) => `
+    html += `<div class="mc-list">${q.choices.map(function(c, i) { return `
       <div class="mc-opt ${S.ans[q.id] === c ? 'sel' : ''}" data-choice-payload="${encodeURIComponent(JSON.stringify(c))}">
         <div class="ltr">${String.fromCharCode(65+i)}</div><div class="ctxt">${c}</div>
       </div>
-    `).join('')}</div>`;
+    `; }).join('')}</div>`;
   } else {
     html += `<div class="sa"><textarea id="saIn" data-qid="${q.id}" oninput="trackSA('${q.id}')" onblur="saveSA('${q.id}')" placeholder="Type your detailed response here...">${S.ans[q.id]||''}</textarea></div>`;
   }
@@ -319,9 +323,9 @@ function renderQ() {
     html += `<div class="meta ${hasAns ? 'show' : ''}" id="metaPanel">
       <div class="meta-title">How confident are you in your answer?</div>
       <div class="conf-row">
-        ${[{n:1,l:'Guessing'},{n:2,l:'Low'},{n:3,l:'Medium'},{n:4,l:'High'}].map(x => 
+        ${[{n:1,l:'Guessing'},{n:2,l:'Low'},{n:3,l:'Medium'},{n:4,l:'High'}].map(function(x) { return 
           `<div class="conf-opt ${cVal===x.n ? 'active' : ''}" onclick="setConf('${q.id}', ${x.n})">${x.n}<span class="cl">${x.l}</span></div>`
-        ).join('')}
+        }).join('')}
       </div>
     </div>`;
   }
@@ -329,16 +333,16 @@ function renderQ() {
   document.getElementById('qArea').innerHTML = html;
   const shortAnswerInput = document.getElementById('saIn');
   if (shortAnswerInput) {
-    shortAnswerInput.addEventListener('paste', evt => {
+    shortAnswerInput.addEventListener('paste', function(evt) {
       evt.preventDefault();
       toast('Pasting is disabled.');
     });
   }
-  document.querySelectorAll('.katex-inline').forEach(el=>{try{katex.render(el.dataset.latex,el,{throwOnError:false});}catch(e){}});
+  document.querySelectorAll('.katex-inline').forEach(function(el){try{katex.render(el.dataset.latex,el,{throwOnError:false});}catch(e){}});
   window.scrollTo(0,0);
 }
 
-document.getElementById('qArea').addEventListener('click', evt => {
+document.getElementById('qArea').addEventListener('click', function(evt) {
   const opt = evt.target.closest('.mc-opt');
   if (!opt) return;
 
@@ -404,7 +408,7 @@ function executeSubmit() {
   if(document.exitFullscreen) try{document.exitFullscreen()}catch(e){}
   if(S.poll) clearInterval(S.poll); if(S.timerInt) clearInterval(S.timerInt);
   
-  google.script.run.withSuccessHandler(d => {
+  google.script.run.withSuccessHandler(function(d) {
     if (d && d.error) {
       google.script.run.withSuccessHandler(renderSummary).studentGetSummary(S.sid, S.stuId);
       return;
@@ -424,9 +428,9 @@ function renderSummary(d) {
 }
 
 function startPoll() {
-  S.poll = setInterval(() => {
+  S.poll = setInterval(function() {
     if(S.done) return;
-    google.script.run.withSuccessHandler(st => {
+    google.script.run.withSuccessHandler(function(st) {
       if(!st) return;
       if(st.lockedOut && !S.locked) triggerLockout('sync_lock');
       if(!st.lockedOut && S.locked) {
@@ -453,15 +457,15 @@ function toggleCalc() {
 }
 (function(){
   let isDrag=false, offX, offY;
-  document.addEventListener('mousedown',e=>{
+  document.addEventListener('mousedown',function(e){
     if(e.target.closest('#calcBar')&&!e.target.closest('button')){
       isDrag=true; const r=document.getElementById('calcWin').getBoundingClientRect(); offX=e.clientX-r.left; offY=e.clientY-r.top; e.preventDefault();
     }
   });
-  document.addEventListener('mousemove',e=>{
+  document.addEventListener('mousemove',function(e){
     if(isDrag){const w=document.getElementById('calcWin'); w.style.left=(e.clientX-offX)+'px'; w.style.top=(e.clientY-offY)+'px'; w.style.right='auto';}
   });
-  document.addEventListener('mouseup',()=>{isDrag=false;});
+  document.addEventListener('mouseup',function(){isDrag=false;});
 })();
 
 const prefilledCode = <?!= JSON.stringify(prefilledCode || '') ?>;
