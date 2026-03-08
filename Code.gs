@@ -175,7 +175,8 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
     }
     try {
       const fname = student.firstName || student.name.split(' ')[0] || 'Student';
-      const html = buildAssessmentEmail(fname, studentUrl, student.email, sess.setName, sess.code);
+      const joinUrl = buildStudentJoinUrl(studentUrl, sess.code);
+      const html = buildAssessmentEmail(fname, joinUrl, student.email, sess.setName, sess.code);
       const subject = 'Your VERITAS Assess Link – ' + new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
       
       // Using MailApp. It handles EDU restrictions much better than GmailApp
@@ -227,9 +228,10 @@ function resolveWebAppBaseUrl(clientBaseUrl) {
 
 function resolveStudentLandingUrl(fallbackBaseUrl) {
   const props = PropertiesService.getScriptProperties();
-  const configuredLandingUrl = 'https://veritas.courses/';
+  const configuredLandingUrl = props.getProperty('STUDENT_LANDING_URL') || '';
+  const canonicalExecUrl = isCanonicalExecUrl(fallbackBaseUrl) ? fallbackBaseUrl : '';
   const candidates = [
-    props.getProperty('STUDENT_LANDING_URL') || '',
+    canonicalExecUrl,
     configuredLandingUrl,
     fallbackBaseUrl || ''
   ];
@@ -238,10 +240,33 @@ function resolveStudentLandingUrl(fallbackBaseUrl) {
     const candidate = String(candidates[i] || '').trim().split('?')[0];
     if (!candidate) continue;
     if (isPreviewEditorUrl(candidate)) continue;
+    if (isCanonicalExecUrl(candidate)) return candidate;
     return candidate.endsWith('/') ? candidate : candidate + '/';
   }
 
   return '';
+}
+
+function buildStudentJoinUrl(baseUrl, sessionCode) {
+  const normalizedBase = String(baseUrl || '').trim();
+  const normalizedCode = normalizeStudentCode(sessionCode);
+  if (!normalizedBase) return '';
+
+  const params = [];
+  const hasQuery = normalizedBase.indexOf('?') > -1;
+
+  if (isCanonicalExecUrl(normalizedBase)) {
+    params.push('page=student');
+  }
+  if (normalizedCode) {
+    params.push('code=' + encodeURIComponent(normalizedCode));
+  }
+
+  if (!params.length) {
+    return normalizedBase;
+  }
+
+  return normalizedBase + (hasQuery ? '&' : '?') + params.join('&');
 }
 
 
