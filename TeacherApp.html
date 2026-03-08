@@ -108,6 +108,19 @@ td{padding:12px 14px;border-bottom:1px solid var(--bd)}tr:hover td{background:va
 .sys-modal-textarea:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px var(--tBg); }
 .sys-modal-actions { display:flex; justify-content:flex-end; gap:12px; }
 
+
+.student-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.student-tile{background:var(--s);border:1px solid var(--bd);border-radius:10px;padding:12px;cursor:pointer;transition:var(--tr)}
+.student-tile:hover{border-color:var(--teal);box-shadow:0 0 0 2px var(--tBg)}
+.student-tile .nm{font-weight:700;margin-bottom:6px}
+.student-tile .meta{font-size:12px;color:var(--tx2);display:flex;justify-content:space-between}
+.tile-ok{border-left:4px solid var(--grn)} .tile-bad{border-left:4px solid var(--red)} .tile-none{border-left:4px solid var(--bd2)}
+.frow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.fchip{padding:6px 10px;border:1px solid var(--bd);border-radius:999px;background:var(--s2);cursor:pointer;font-size:12px}
+.fchip.active{border-color:var(--teal);color:var(--teal);background:var(--tBg)}
+.detail-list{max-height:52vh;overflow:auto;border:1px solid var(--bd);border-radius:8px}
+.detail-row{padding:10px 12px;border-bottom:1px solid var(--bd);font-size:13px}
+
 @media(max-width:768px){.sb{display:none}.mn{margin-left:0;padding:14px}.stat-row{grid-template-columns:1fr 1fr}.fg{grid-template-columns:1fr}}
 </style>
 </head>
@@ -236,6 +249,16 @@ td{padding:12px 14px;border-bottom:1px solid var(--bd)}tr:hover td{background:va
       <button class="btn bg" id="sysModalCancel" onclick="closeSysModal()">Cancel</button>
       <button class="btn bp" id="sysModalConfirm">Confirm</button>
     </div>
+  </div>
+</div>
+
+
+<div class="sys-modal-bg" id="stuDetailModal">
+  <div class="sys-modal-card" style="max-width:920px">
+    <h2 id="stuDetailTitle">Student Report</h2>
+    <p class="sys-modal-desc" id="stuDetailSummary"></p>
+    <div id="stuDetailBody"></div>
+    <div class="sys-modal-actions"><button class="btn bg" onclick="document.getElementById('stuDetailModal').classList.remove('show')">Close</button></div>
   </div>
 </div>
 
@@ -444,7 +467,7 @@ function addBlockToCourse(id, existingStr) {
         if(val && typeof google !== 'undefined' && google.script) {
             let blocks = existingStr ? existingStr.split(',') : [];
             blocks.push(val.trim());
-            google.script.run.withSuccessHandler(()=>{toast('Block added','ok');loadCourses()}).updateCourse(id, '', blocks);
+            google.script.run.withSuccessHandler(courses=>{const c=(courses||[]).find(x=>x.id===id); const nm=c?c.name:''; google.script.run.withSuccessHandler(()=>{toast('Block added','ok');loadCourses()}).updateCourse(id, nm, blocks);}).getCourses();
         }
     });
 }
@@ -710,9 +733,10 @@ function startLive(){
             if(!d) { document.getElementById('liveStatusBanner').innerHTML='<div class="card">No active session. Please launch one first.</div>'; document.getElementById('lockstepControls').style.display = 'none'; return; }
             window.__liveD = d;
             renderLive(d);
+            if(d.session && d.session.sessionId) {
+              google.script.run.withSuccessHandler(st=>{window.__gradeStatus=st; if(liveTab==='grading'&&window.__liveD) renderLive(window.__liveD);}).getGradingStatus(d.session.sessionId);
+            }
           }).getLiveResults(aSid)
-      } else {
-          console.warn('Google Apps Script API not available. Cannot load live results.');
       }
   };
   go(); liveInt=setInterval(go,4000);
@@ -721,126 +745,73 @@ function startLive(){
 function renderLive(d) {
   const isLS = d.session.mode === 'lockstep';
   curQIdx = d.session.currentQ || 0;
-  
-  document.getElementById('liveStatusBanner').innerHTML = `<div class="sess-banner"><div><div class="sess-meta" style="margin-bottom:6px"><strong>${d.session.setName}</strong> · Block ${d.session.block}</div><div class="sess-code">${d.session.code}</div></div></div>`;
-  
+  document.getElementById('liveStatusBanner').innerHTML = `<div class="sess-banner"><div><div class="sess-meta" style="margin-bottom:6px"><strong>${d.session.setName}</strong> · Block ${d.session.block}</div></div><div style="text-align:right"><div class="sess-meta">SESSION CODE</div><div class="sess-code" style="font-size:28px">${d.session.code}</div></div></div>`;
   if(isLS) {
     document.getElementById('lockstepControls').style.display = 'flex';
     document.getElementById('lsQText').textContent = `Lockstep: Question ${curQIdx + 1} of ${d.session.questionCount}`;
-  } else {
-    document.getElementById('lockstepControls').style.display = 'none';
-  }
-  
-  document.getElementById('liveStatsRow').innerHTML = `
-    <div class="stat-row">
-      <div class="stat-box"><div class="v">${d.totalJoined}</div><div class="l">Joined</div></div>
-      <div class="stat-box"><div class="v">${d.totalFinished}</div><div class="l">Finished</div></div>
-      <div class="stat-box"><div class="v" style="color:var(--red)">${d.violations.filter(v=>!v.resolved).length}</div><div class="l">Violations</div></div>
-    </div>`;
+  } else document.getElementById('lockstepControls').style.display = 'none';
 
-  let violHtml = '';
-  const unres = d.violations.filter(v=>!v.resolved);
-  if(unres.length) {
-    violHtml = `<div class="card" style="border-color:var(--red)"><h3 style="color:var(--red); margin-bottom:10px">⚠ Action Required</h3>
-      ${unres.map(v=>`<div style="display:flex;justify-content:space-between;align-items:center;background:var(--rBg);padding:10px 16px;border-radius:6px;margin-bottom:8px">
-        <div><strong>${v.studentName}</strong>: ${v.type.replace('_',' ')}</div>
-        <button class="btn bp bs" onclick="readmitS('${d.session.sessionId}', '${v.studentId}')">Re-admit Student</button>
-      </div>`).join('')}
-    </div>`;
-  }
+  document.getElementById('liveStatsRow').innerHTML = `<div class="stat-row"><div class="stat-box"><div class="v">${d.totalJoined}</div><div class="l">Joined</div></div><div class="stat-box"><div class="v">${d.totalActiveNow||0}</div><div class="l">Active Now</div></div><div class="stat-box"><div class="v">${d.totalFinished}</div><div class="l">Finished</div></div><div class="stat-box"><div class="v">${d.violations.filter(v=>!v.resolved).length}</div><div class="l">Open Violations</div></div></div>`;
 
   if (liveTab === 'students') {
-    const stdHtml = `${violHtml} <div class="card" style="padding:0; overflow:hidden"><table><thead><tr><th>Student</th><th>Status</th><th>Progress</th><th>Violations</th></tr></thead><tbody>
-      ${d.students.map(s=>`<tr><td><strong>${s.name}</strong></td>
-      <td>${s.status==='finished'?'<span class="badge b-d">Done</span>':s.lockedOut?'<span class="badge b-l">Locked</span>':'<span class="badge b-a">Active</span>'}</td>
-      <td>${s.answered}/${s.total}</td>
-      <td style="color:${s.violationCount>0?'var(--red)':'inherit'}">${s.violationCount}</td></tr>`).join('')}
-    </tbody></table></div>`;
-    if (document.getElementById('tab-students').innerHTML !== stdHtml) document.getElementById('tab-students').innerHTML = stdHtml;
+    const q = (d.qStats||[])[curQIdx] || null;
+    const filter = window.__tileFilter || 'all';
+    const withState = (d.students||[]).map(s=>{
+      if(!q) return {...s,tileState:'all'};
+      const r=(q.studentResponses||[]).find(x=>x.studentId===s.studentId);
+      if(!r||!r.answer) return {...s,tileState:'none',qResp:r};
+      if(r.isCorrect===true||r.isCorrect==='TRUE') return {...s,tileState:'correct',qResp:r};
+      return {...s,tileState:'incorrect',qResp:r};
+    }).filter(s=>filter==='all'||s.tileState===filter);
+
+    let html='';
+    if(isLS && q){
+      html += `<div class="card"><div class="frow"><strong>Q${q.idx+1} filter:</strong><span class="fchip ${filter==='all'?'active':''}" onclick="setTileFilter('all')">All</span><span class="fchip ${filter==='correct'?'active':''}" onclick="setTileFilter('correct')">Correct</span><span class="fchip ${filter==='incorrect'?'active':''}" onclick="setTileFilter('incorrect')">Incorrect</span><span class="fchip ${filter==='none'?'active':''}" onclick="setTileFilter('none')">No Response</span></div></div>`;
+    }
+    html += `<div class="student-grid">${withState.map(s=>`<div class="student-tile ${s.tileState==='correct'?'tile-ok':s.tileState==='incorrect'?'tile-bad':'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId||''}')"><div class="nm">${s.name}</div><div class="meta"><span>${s.status||'not-joined'}</span><span>${s.answered||0}/${s.total||0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp&&s.qResp.confidence)?s.qResp.confidence:(s.avgConf||'/')}</span><span>${s.activeNow?'🟢 now':'⚪ idle'}</span></div></div>`).join('')}</div>`;
+    document.getElementById('tab-students').innerHTML = html;
   }
-  
+
   if (liveTab === 'details') {
     let detHtml = '';
     d.qStats.forEach((q, i) => {
-      if (isLS && i !== curQIdx) return; 
-      detHtml += `<div class="card"><div class="card-title"><span class="badge ${q.type==='mc'?'b-mc':'b-sa'}">Q${q.idx+1}</span></div>
-        <div style="font-size:15px; margin-bottom:16px">${q.text}</div>
-        <div style="background:var(--s2); border-radius:6px; padding:16px;">
-        ${(q.studentResponses||[]).map(r => `
-          <div style="display:flex; justify-content:space-between; align-items:flex-start; padding:12px 0; border-bottom:1px solid var(--bd); flex-direction:column">
-            <div style="display:flex; justify-content:space-between; width:100%">
-               <div style="width:200px; font-weight:600">${r.name}</div>
-               <div style="flex:1; color:var(--tx2)">${r.answer || '<span style="color:var(--tx3)">No answer yet</span>'}</div>
-               ${r.isCorrect !== undefined ? `<div style="width:40px; text-align:right; font-weight:700; color:${r.isCorrect===true||r.isCorrect==='TRUE'?'var(--grn)':'var(--red)'}">${r.isCorrect===true||r.isCorrect==='TRUE'?'✓':'✗'}</div>` : ''}
-            </div>
-            ${r.feedback ? `<div style="margin-top:10px; width:100%; padding:12px; background:rgba(13,115,119,0.06); border-left:3px solid var(--teal); border-radius:4px; font-size:13px; color:var(--tx2)"><strong>AI Score: ${r.score} pt(s)</strong><br/>${r.feedback}</div>` : ''}
-          </div>
-        `).join('')}
-        ${!(q.studentResponses||[]).length ? '<div style="color:var(--tx3); text-align:center; padding:10px">Waiting for student responses...</div>' : ''}
-        </div>
-      </div>`;
+      if (isLS && i !== curQIdx) return;
+      detHtml += `<div class="card"><div class="card-title"><span class="badge ${q.type==='mc'?'b-mc':'b-sa'}">Q${q.idx+1}</span> <span style="margin-left:8px;font-size:12px;color:var(--tx3)">Avg confidence: ${q.avgConf||'-'}</span></div><div style="font-size:15px; margin-bottom:16px">${q.text}</div><div style="background:var(--s2); border-radius:6px; padding:16px;">${(q.studentResponses||[]).map(r=>`<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--bd);"><div style="width:170px; font-weight:600">${r.name}</div><div style="flex:1; color:var(--tx2)">${r.answer || '<span style="color:var(--tx3)">No answer</span>'}</div><div style="width:64px; text-align:right">${r.confidence?`C${r.confidence}`:''}</div>${r.isCorrect!==undefined?`<div style="width:35px; text-align:right; color:${r.isCorrect===true||r.isCorrect==='TRUE'?'var(--grn)':'var(--red)'}">${r.isCorrect===true||r.isCorrect==='TRUE'?'✓':'✗'}</div>`:''}</div>${r.feedback?`<div style="padding:8px 0 12px 170px;color:var(--tx2);font-size:12px"><strong>AI:</strong> ${r.score} pt · ${r.feedback}</div>`:''}`).join('')}</div></div>`;
     });
-    if (document.getElementById('tab-details').innerHTML !== detHtml) document.getElementById('tab-details').innerHTML = detHtml;
+    document.getElementById('tab-details').innerHTML = detHtml || '<div class="card">No responses yet.</div>';
   }
-  
+
   if (liveTab === 'grading') {
-    const gradHtml = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="card-title" style="margin:0">Real-time AI Grading</div><button class="btn bp" onclick="runGrade('${d.session.sessionId}')">🤖 Grade Short Answers Now</button></div><div id="gradeStatus"></div>
-      ${d.qStats.filter(q=>q.type==='sa').map(q=>`<div style="padding:12px;border-bottom:1px solid var(--bd); font-size:14px"><strong>Q${q.idx+1}</strong> — ${q.total} responses collected</div>`).join('')}
-      ${!d.qStats.filter(q=>q.type==='sa').length?'<div style="padding:10px;color:var(--tx3)">No short answer questions exist in this set.</div>':''}
-    </div>`;
-    if (document.getElementById('tab-grading').innerHTML !== gradHtml) document.getElementById('tab-grading').innerHTML = gradHtml;
+    const st = window.__gradeStatus || {state:'idle'};
+    const gradHtml = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div class="card-title" style="margin:0">Real-time AI Grading</div><button class="btn bp" onclick="runGrade('${d.session.sessionId}')">🤖 Grade Short Answers Now</button></div><div id="gradeStatus"><div class="badge b-a">${st.state||'idle'}</div> <span style="margin-left:8px;color:var(--tx2)">${st.message||'No grading task yet.'}</span></div>${d.qStats.filter(q=>q.type==='sa').map(q=>`<div style="padding:12px;border-bottom:1px solid var(--bd); font-size:14px"><strong>Q${q.idx+1}</strong> — ${q.total} responses · ${q.studentResponses.filter(r=>r.feedback).length} graded</div>`).join('') || '<div style="padding:10px;color:var(--tx3)">No short answer questions exist in this set.</div>'}</div>`;
+    document.getElementById('tab-grading').innerHTML = gradHtml;
   }
 }
 
-// Lockstep Controls
-function lsPrev() { 
-    if(curQIdx>0) { 
-        toast('Moving to Previous Question', 'ok'); 
-        if (typeof google !== 'undefined' && google.script && google.script.run) {
-            google.script.run.goToQuestion(aSid, curQIdx-1); 
-        }
-    } 
-}
-function lsNext() { 
-    toast('Moving to Next Question', 'ok'); 
-    if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run.goToQuestion(aSid, curQIdx+1); 
-    }
-}
-function lsReveal() { 
-    toast('Correct Answer Revealed to Students', 'ok'); 
-    const d = window.__liveD; 
-    if(d) {
-        if (typeof google !== 'undefined' && google.script && google.script.run) {
-            google.script.run.revealAnswer(aSid, d.qStats[curQIdx].id); 
-        }
-    }
+function setTileFilter(f){ window.__tileFilter=f; if(window.__liveD) renderLive(window.__liveD); }
+
+function openStudentDetail(sessId, stuId){
+  if(!stuId) return;
+  google.script.run.withSuccessHandler(d=>{
+    if(d.error) return toast(d.error,'err');
+    document.getElementById('stuDetailTitle').textContent = d.student ? d.student.studentName : 'Student Report';
+    document.getElementById('stuDetailSummary').textContent = `${d.session.setName} · ${d.totalPts}/${d.totalMax} points (${d.pct}%)`;
+    document.getElementById('stuDetailBody').innerHTML = `<div class="detail-list">${(d.details||[]).map(x=>`<div class="detail-row"><div style="font-weight:700;margin-bottom:4px">Q${x.qIndex+1} (${x.type.toUpperCase()})</div><div style="color:var(--tx2);margin-bottom:4px">${x.questionText}</div><div><strong>Answer:</strong> ${x.answer||'<em>No response</em>'}</div><div style="margin-top:3px"><strong>Score:</strong> ${x.points}/${x.maxPoints} ${x.isCorrect===true||x.isCorrect==='TRUE'?'✓':x.isCorrect===false||x.isCorrect==='FALSE'?'✗':''} · <strong>Confidence:</strong> ${x.confidence||'-'}</div>${x.aiFeedback?`<div style="margin-top:4px;color:var(--tx2)"><strong>AI (${x.aiScore}):</strong> ${x.aiFeedback}</div>`:''}</div>`).join('')}</div>`;
+    document.getElementById('stuDetailModal').classList.add('show');
+  }).getStudentDetail(sessId, stuId);
 }
 
-// Fixed Re-admit
-function readmitS(sid,stuId){
-    if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(()=>{
-             toast('Student Re-admitted. Waiting for them to enter fullscreen...','ok');
-             startLive(); // Refresh immediately
-        }).readmitStudent(sid,stuId);
-    }
-}
+function lsPrev() { if(curQIdx>0 && (typeof google!=='undefined'&&google.script&&google.script.run)){ google.script.run.goToQuestion(aSid, curQIdx-1); } }
+function lsNext() { if((typeof google!=='undefined'&&google.script&&google.script.run)){ google.script.run.goToQuestion(aSid, curQIdx+1); } }
+function lsReveal() { const d = window.__liveD; if(d && (typeof google!=='undefined'&&google.script&&google.script.run)){ google.script.run.revealAnswer(aSid, d.qStats[curQIdx].id); } }
 
-// Fixed AI Grading UX
+function readmitS(sid,stuId){ if ((typeof google!=='undefined'&&google.script&&google.script.run)) google.script.run.withSuccessHandler(()=>{toast('Student Re-admitted.','ok');startLive();}).readmitStudent(sid,stuId); }
+
 function runGrade(sid){
   const el=document.getElementById('gradeStatus');
-  if(el) el.innerHTML='<div style="color:var(--amb);font-size:13px;display:flex;align-items:center;gap:8px; margin-bottom:16px"><div class="spinner"></div>Grading in progress... this may take up to 2-3 minutes. Please wait.</div>';
-  
-  if (typeof google !== 'undefined' && google.script && google.script.run) {
-      google.script.run.withSuccessHandler(r=>{
-          if(el) el.innerHTML=`<div style="color:var(--teal);font-size:14px; font-weight:700; margin-bottom:16px">✓ ${r.message}</div>`;
-          startLive(); // Auto refresh live monitor to inject new scores!
-      }).withFailureHandler(e=>{
-          if(el) el.innerHTML=`<div style="color:var(--red);font-size:13px; margin-bottom:16px">⚠ Failed: ${e.message}</div>`;
-      }).runAIGrading(sid);
-  } else {
-      if(el) el.innerHTML=`<div style="color:var(--red);font-size:13px; margin-bottom:16px">⚠ Google Apps Script API not available.</div>`;
+  if(el) el.innerHTML='<div style="color:var(--amb);font-size:13px;display:flex;align-items:center;gap:8px; margin-bottom:16px"><div class="spinner"></div>Grading in progress...</div>';
+  if ((typeof google!=='undefined'&&google.script&&google.script.run)) {
+    google.script.run.withSuccessHandler(r=>{ if(el) el.innerHTML=`<div style="color:var(--teal);font-size:14px; font-weight:700; margin-bottom:16px">✓ ${r.message}</div>`; startLive(); }).withFailureHandler(e=>{ if(el) el.innerHTML=`<div style="color:var(--red);font-size:13px; margin-bottom:16px">⚠ Failed: ${e.message}</div>`; }).runAIGrading(sid);
   }
 }
 

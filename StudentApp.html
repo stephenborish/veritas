@@ -310,7 +310,7 @@ function renderQ() {
       </div>
     `).join('')}</div>`;
   } else {
-    html += `<div class="sa"><textarea id="saIn" oninput="trackSA('${q.id}')" onblur="saveSA('${q.id}')" onpaste="e.preventDefault(); toast('Pasting is disabled.')" placeholder="Type your detailed response here...">${S.ans[q.id]||''}</textarea></div>`;
+    html += `<div class="sa"><textarea id="saIn" oninput="trackSA('${q.id}')" onblur="saveSA('${q.id}')" onpaste="event.preventDefault(); toast('Pasting is disabled.')" placeholder="Type your detailed response here...">${S.ans[q.id]||''}</textarea></div>`;
   }
   html += `</div>`;
   
@@ -380,14 +380,14 @@ function executeSubmit() {
   if(document.exitFullscreen) try{document.exitFullscreen()}catch(e){}
   if(S.poll) clearInterval(S.poll); if(S.timerInt) clearInterval(S.timerInt);
   
-  google.script.run.withSuccessHandler(d => {
-    let html = '';
-    if(d.showScore) html += `<div class="score-big">${d.pct}%</div><div style="font-size:24px;color:var(--tx2);font-weight:600">${d.totalPts} / ${d.totalMax} Points Earned</div>`;
-    document.getElementById('sumContent').innerHTML = html;
+  google.script.run.withSuccessHandler(() => {
+    google.script.run.withSuccessHandler(d => {
+      let html = '';
+      if(d && d.showScore) html += `<div class="score-big">${d.pct}%</div><div style="font-size:24px;color:var(--tx2);font-weight:600">${d.totalPts} / ${d.totalMax} Points Earned</div>`;
+      else html = '<div style="font-size:20px;color:var(--tx2);font-weight:600">Submission received.</div>';
+      document.getElementById('sumContent').innerHTML = html;
+    }).studentGetSummary(S.sid, S.stuId);
   }).studentFinish(S.sid, S.stuId);
-  
-  // Guarantee summary triggers even if finish delays
-  google.script.run.studentGetSummary(S.sid, S.stuId);
 }
 
 function startPoll() {
