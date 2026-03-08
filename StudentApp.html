@@ -180,6 +180,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   <div id="sumContent"></div>
 </div>
 
+<div id="bootData" data-prefilled-code="<?= prefilledCode || '' ?>" hidden></div>
+
 <script>
 
 const S = {
@@ -493,7 +495,7 @@ function toggleCalc() {
   document.addEventListener('mouseup',function(){isDrag=false;});
 })();
 
-const prefilledCode = <?!= JSON.stringify(prefilledCode || '') ?>;
+const prefilledCode = document.getElementById('bootData').dataset.prefilledCode || '';
 if(prefilledCode) document.getElementById('jCode').value = prefilledCode;
 </script>
 </body>
