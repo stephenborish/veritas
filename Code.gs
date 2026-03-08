@@ -43,6 +43,7 @@ function initSystem() { return DB.init(); }
 function createCourse(name, blocks) { return DB.createCourse(name, blocks); }
 function getCourses() { return DB.getCourses(); }
 function updateCourse(id, name, blocks) { return DB.updateCourse(id, name, blocks); }
+function updateCourseBlocks(id, blocks) { return DB.updateCourseBlocks(id, blocks); }
 function deleteCourse(id) { return DB.deleteCourse(id); }
 
 // ── Question Sets ──

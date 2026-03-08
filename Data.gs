@@ -73,6 +73,9 @@ const DB = {
     for(let i=1;i<d.length;i++) if(d[i][0]===id){if(name!==undefined&&name!==null&&String(name).trim()!=='')s.getRange(i+1,2).setValue(name);if(blocks!==undefined)s.getRange(i+1,3).setValue(JSON.stringify(blocks));return true;}
     return false;
   },
+  updateCourseBlocks(id, blocks) {
+    return this.updateCourse(id, undefined, blocks);
+  },
   deleteCourse(id) {
     const s=this.sh('Courses'); const d=s.getDataRange().getValues();
     for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);return true;}

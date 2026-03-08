@@ -467,7 +467,7 @@ function addBlockToCourse(id, existingStr) {
         if(val && typeof google !== 'undefined' && google.script) {
             let blocks = existingStr ? existingStr.split(',') : [];
             blocks.push(val.trim());
-            google.script.run.withSuccessHandler(courses=>{const c=(courses||[]).find(x=>x.id===id); const nm=c?c.name:''; google.script.run.withSuccessHandler(()=>{toast('Block added','ok');loadCourses()}).updateCourse(id, nm, blocks);}).getCourses();
+            google.script.run.withSuccessHandler(()=>{toast('Block added','ok');loadCourses()}).updateCourseBlocks(id, blocks);
         }
     });
 }
