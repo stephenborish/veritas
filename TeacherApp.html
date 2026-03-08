@@ -756,6 +756,12 @@ function renderLive(d) {
   if (liveTab === 'students') {
     const q = (d.qStats||[])[curQIdx] || null;
     const filter = window.__tileFilter || 'all';
+    const unresolvedViolations = (d.violations || []).filter(v => !v.resolved);
+    const readmitByStudent = {};
+    unresolvedViolations.forEach(v => {
+      if (!v.studentId) return;
+      if (!readmitByStudent[v.studentId]) readmitByStudent[v.studentId] = v;
+    });
     const withState = (d.students||[]).map(s=>{
       if(!q) return {...s,tileState:'all'};
       const r=(q.studentResponses||[]).find(x=>x.studentId===s.studentId);
@@ -765,10 +771,13 @@ function renderLive(d) {
     }).filter(s=>filter==='all'||s.tileState===filter);
 
     let html='';
+    if(unresolvedViolations.length){
+      html += `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong>Students locked out (${unresolvedViolations.length})</strong><span class="muted" style="font-size:12px">Resolve by re-admitting student</span></div><div style="margin-top:10px;display:grid;gap:8px">${Object.values(readmitByStudent).map(v=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${v.studentName||v.studentId}</div><div class="muted" style="font-size:12px">${v.type||'violation'} · ${v.timestamp||''}</div></div><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${v.studentId}')">Re-admit</button></div>`).join('')}</div></div>`;
+    }
     if(isLS && q){
       html += `<div class="card"><div class="frow"><strong>Q${q.idx+1} filter:</strong><span class="fchip ${filter==='all'?'active':''}" onclick="setTileFilter('all')">All</span><span class="fchip ${filter==='correct'?'active':''}" onclick="setTileFilter('correct')">Correct</span><span class="fchip ${filter==='incorrect'?'active':''}" onclick="setTileFilter('incorrect')">Incorrect</span><span class="fchip ${filter==='none'?'active':''}" onclick="setTileFilter('none')">No Response</span></div></div>`;
     }
-    html += `<div class="student-grid">${withState.map(s=>`<div class="student-tile ${s.tileState==='correct'?'tile-ok':s.tileState==='incorrect'?'tile-bad':'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId||''}')"><div class="nm">${s.name}</div><div class="meta"><span>${s.status||'not-joined'}</span><span>${s.answered||0}/${s.total||0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp&&s.qResp.confidence)?s.qResp.confidence:(s.avgConf||'/')}</span><span>${s.activeNow?'🟢 now':'⚪ idle'}</span></div></div>`).join('')}</div>`;
+    html += `<div class="student-grid">${withState.map(s=>`<div class="student-tile ${s.tileState==='correct'?'tile-ok':s.tileState==='incorrect'?'tile-bad':'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId||''}')"><div class="nm">${s.name}</div><div class="meta"><span>${s.status||'not-joined'}</span><span>${s.answered||0}/${s.total||0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp&&s.qResp.confidence)?s.qResp.confidence:(s.avgConf||'/')}</span><span>${s.activeNow?'🟢 now':'⚪ idle'}</span></div>${readmitByStudent[s.studentId] ? `<div style="margin-top:8px"><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${s.studentId}')">Re-admit student</button></div>` : ''}</div>`).join('')}</div>`;
     document.getElementById('tab-students').innerHTML = html;
   }
 
