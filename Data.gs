@@ -121,6 +121,37 @@ const DB = {
     return r;
   },
   getRoster(block) { const d=this.sh('Rosters').getDataRange().getValues(); for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block)) return JSON.parse(d[i][2]||'[]'); return []; },
+  getRostersByCourse(courseId) {
+    const out = this.getRosters();
+    return Object.values(out).filter(r => String(r.courseId || '') === String(courseId || ''));
+  },
+  addStudent(block, student) {
+    return this.withLock(() => {
+      const roster = this.getRoster(block);
+      const incomingName = String((student && student.name) || '').trim();
+      if (!incomingName) return { error: 'Student name is required' };
+      const normalized = this.normalizeStudentName(incomingName);
+      const exists = roster.some(s => this.normalizeStudentName((s && s.name) || '') === normalized);
+      if (exists) return { ok: true, added: false, count: roster.length };
+      roster.push(student);
+      const rosters = this.getRosters();
+      const existing = rosters[String(block)] || { courseId: '' };
+      this.saveRoster(block, existing.courseId || '', roster);
+      return { ok: true, added: true, count: roster.length };
+    });
+  },
+  removeStudent(block, name) {
+    return this.withLock(() => {
+      const roster = this.getRoster(block);
+      const normalized = this.normalizeStudentName(name || '');
+      const next = roster.filter(s => this.normalizeStudentName((s && s.name) || '') !== normalized);
+      const removed = next.length !== roster.length;
+      const rosters = this.getRosters();
+      const existing = rosters[String(block)] || { courseId: '' };
+      this.saveRoster(block, existing.courseId || '', next);
+      return { ok: true, removed, count: next.length };
+    });
+  },
   
   // ── SESSIONS ──
   activateSession(config) {

@@ -76,6 +76,7 @@ function revealAllAnswers(id) { return DB.revealAllAnswers(id); }
 function setTimer(id, config) { return DB.setTimer(id, config); }
 function updateSessionConfig(id, key, val) { return DB.updateSessionConfig(id, key, val); }
 function updateSummaryConfig(id, cfg) { return DB.updateSummaryConfig(id, cfg); }
+function archiveSession(id) { return DB.archiveSession(id); }
 
 // ── Live ──
 function getLiveResults(id) { return DB.getLiveResults(id); }
@@ -100,7 +101,8 @@ function getMetacognitionData(id) { return DB.getMetacognitionData(id); }
 
 // ── AI Grading ──
 function runAIGrading(sessId) { return Grader.gradeSession(sessId); }
-function getGradingStatus(sessId) { return Grader.getStatus(sessId); }
+function getStatus(sessId) { return Grader.getStatus(sessId); }
+function getGradingStatus(sessId) { return getStatus(sessId); }
 function overrideScore(sessId, stuId, qId, score, fb) { return Grader.overrideScore(sessId, stuId, qId, score, fb); }
 function regradeWithContext(sessId, qId, ctx) { return Grader.regradeWithContext(sessId, qId, ctx); }
 
@@ -175,6 +177,68 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
   }
   return { sent, skipped, total: roster.length, errors: errors.slice(0, 3) };
 }
+
+
+
+/*
+API CONTRACT — SINGLE SOURCE OF TRUTH (Code.gs wrappers -> backend owner)
+
+Each function below is guaranteed to be server-callable and forwards to the listed backend implementation.
+
+DB wrappers
+- initSystem() -> DB.init() => { url }
+- createCourse(name, blocks) -> DB.createCourse() => { id, name, blocks }
+- getCourses() -> DB.getCourses() => Course[]
+- updateCourse(id, name, blocks) -> DB.updateCourse() => boolean
+- deleteCourse(id) -> DB.deleteCourse() => boolean
+- createQuestionSet(name, courseId, questions, stimuli) -> DB.createQSet() => { id, name, questionCount }
+- getQuestionSets(courseId) -> DB.getQSets() => QuestionSetSummary[]
+- getQuestionSet(id) -> DB.getQSet() => QuestionSet|null
+- updateQuestionSet(id, name, courseId, questions, stimuli) -> DB.updateQSet() => boolean
+- deleteQuestionSet(id) -> DB.deleteQSet() => boolean
+- saveRoster(block, courseId, students) -> DB.saveRoster() => { block, count }
+- getRosters() -> DB.getRosters() => Record<string, Roster>
+- getRoster(block) -> DB.getRoster() => Student[]
+- getRostersByCourse(courseId) -> DB.getRostersByCourse() => Roster[]
+- addStudentToRoster(block, student) -> DB.addStudent() => boolean
+- removeStudentFromRoster(block, name) -> DB.removeStudent() => boolean
+- activateSession(config) -> DB.activateSession() => Session
+- getActiveSession() -> DB.getActiveSession() => Session|null
+- endSession(id) -> DB.endSession() => boolean
+- getSessionHistory() -> DB.getSessionHistory() => ArchiveSummary[]
+- regenerateCode(id) -> DB.regenerateCode() => { sessionId, code }|{ error }
+- setSessionCode(id, code) -> DB.setSessionCode() => { sessionId, code }|{ error }
+- advanceQuestion(id) -> DB.advanceQuestion() => { ok, session }|{ error }
+- goToQuestion(id, qIndex) -> DB.goToQuestion() => { ok, session }|{ error }
+- revealAnswer(id, qId) -> DB.revealAnswer() => { ok, session }|{ error }
+- revealAllAnswers(id) -> DB.revealAllAnswers() => { ok, session }|{ error }
+- setTimer(id, config) -> DB.setTimer() => { ok, timer }|{ error }
+- updateSessionConfig(id, key, val) -> DB.updateSessionConfig() => { ok, config }|{ error }
+- updateSummaryConfig(id, cfg) -> DB.updateSummaryConfig() => { ok, summaryConfig }|{ error }
+- archiveSession(id) -> DB.archiveSession() => boolean
+- getLiveResults(id) -> DB.getLiveResults() => LiveResults
+- getLiveQuestionDetail(sessId, qId) -> DB.getLiveQuestionDetail() => LiveQuestionDetail|null
+- readmitStudent(sessId, stuId) -> DB.readmitStudent() => { ok }|{ error }
+- studentJoin(code, first, last, clientToken) -> DB.studentJoin() => JoinResult|{ error }
+- studentGetQuestions(sessId, stuId) -> DB.studentGetQuestions() => StudentQuestionPayload|{ error }
+- studentSubmitAnswer(sessId, stuId, qId, answer) -> DB.studentSubmitAnswer() => SaveResult|{ error }
+- studentSubmitMeta(sessId, stuId, qId, confidence) -> DB.studentSubmitMeta() => boolean|{ error }
+- studentReportViolation(sessId, stuId, type) -> DB.studentReportViolation() => { ok }|{ error }
+- studentCheckStatus(sessId, stuId) -> DB.studentCheckStatus() => StatusPayload|{ error }
+- studentFinish(sessId, stuId) -> DB.studentFinish() => { done, summary }|{ error }
+- studentGetSummary(sessId, stuId) -> DB.studentGetSummary() => StudentSummary
+- getStudentDetail(sessId, stuId) -> DB.getStudentDetail() => StudentDetail|{ error }
+- getItemAnalysis(id) -> DB.getItemAnalysis() => LiveQuestionDetail[]
+- getStudentAnalysis(id) -> DB.getStudentAnalysis() => LiveStudent[]
+- getMetacognitionData(id) -> DB.getMetacognitionData() => MetaResponse[]
+
+Grader wrappers
+- runAIGrading(sessId) -> Grader.gradeSession() => { gradedCount?, errors?, message? }|{ error }
+- getStatus(sessId) -> Grader.getStatus() => { state, sessionId, ... }
+- getGradingStatus(sessId) -> getStatus(sessId) (backward-compatible alias)
+- overrideScore(sessId, stuId, qId, score, fb) -> Grader.overrideScore() => { ok }|{ error }
+- regradeWithContext(sessId, qId, ctx) -> Grader.regradeWithContext() => { ok, updated, message }|{ error }
+*/
 
 function buildAssessmentEmail(name, url, email, assessName) {
   return `<!DOCTYPE html>
