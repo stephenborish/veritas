@@ -377,35 +377,59 @@ const DB = {
   getLiveResults(sessId) {
     const sess=this.getSessionById(sessId);if(!sess)return null;
     const qSet=this.getQSet(sess.setId);const questions=qSet?qSet.questions:[];
-    const stuSess=this.getStudentSessions(sessId);const resps=this.getAllResponses(sessId);
-    const viols=this.getActiveViolations(sessId);const meta=this.getAllMeta(sessId);const roster=this.getRoster(sess.block);
-    const grades = this.getAIGrades(sessId);
+    const snapshot={};
+    const stuSess=this.getStudentSessions(sessId,snapshot);const resps=this.getAllResponses(sessId,snapshot);
+    const viols=this.getActiveViolations(sessId,snapshot);const meta=this.getAllMeta(sessId,snapshot);const roster=this.getRoster(sess.block);
+    const grades=this.getAIGrades(sessId,snapshot);
+
+    const questionById={};
+    questions.forEach(q=>{questionById[q.id]=q;});
+    const responsesByStudent={};
+    const responsesByQuestion={};
+    resps.forEach(r=>{
+      if(!responsesByStudent[r.studentId]) responsesByStudent[r.studentId]=[];
+      responsesByStudent[r.studentId].push(r);
+      if(!responsesByQuestion[r.questionId]) responsesByQuestion[r.questionId]=[];
+      responsesByQuestion[r.questionId].push(r);
+    });
+    const metaByStudent={};
+    const metaByQuestion={};
+    const metaByStudentQuestion={};
+    meta.forEach(m=>{
+      if(!metaByStudent[m.studentId]) metaByStudent[m.studentId]=[];
+      metaByStudent[m.studentId].push(m);
+      if(!metaByQuestion[m.questionId]) metaByQuestion[m.questionId]=[];
+      metaByQuestion[m.questionId].push(m);
+      metaByStudentQuestion[m.studentId+'|'+m.questionId]=m;
+    });
+    const gradeByStudentQuestion={};
+    grades.forEach(g=>{gradeByStudentQuestion[g.studentId+'|'+g.questionId]=g;});
     
     const nowMs=Date.now();
     const students=stuSess.map(ss=>{
-      const sr=resps.filter(r=>r.studentId===ss.studentId);
-      const sm=meta.filter(m=>m.studentId===ss.studentId);
+      const sr=responsesByStudent[ss.studentId]||[];
+      const sm=metaByStudent[ss.studentId]||[];
       let mcC=0,mcT=0;
-      sr.forEach(r=>{const q=questions.find(qq=>qq.id===r.questionId);if(q&&q.type==='mc'){mcT++;if(r.isCorrect===true||r.isCorrect==='TRUE')mcC++;}});
+      sr.forEach(r=>{const q=questionById[r.questionId];if(q&&q.type==='mc'){mcT++;if(r.isCorrect===true||r.isCorrect==='TRUE')mcC++;}});
       const lastTs=[ss.joinedAt,ss.finishedAt].concat(sr.map(x=>x.submittedAt)).concat(sm.map(x=>x.submittedAt)).filter(Boolean).map(x=>new Date(x).getTime()).sort((a,b)=>b-a)[0]||0;
       const activeNow=ss.status==='active' && !ss.lockedOut && (nowMs-lastTs)<(2*60*1000);
       return {studentId:ss.studentId,name:ss.studentName,status:ss.status,activeNow,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr};
     });
     
     const qStats=questions.map((q,idx)=>{
-      const qr=resps.filter(r=>r.questionId===q.id);
-      const qm=meta.filter(m=>m.questionId===q.id);
+      const qr=responsesByQuestion[q.id]||[];
+      const qm=metaByQuestion[q.id]||[];
       if(q.type==='mc'){
         const correct=qr.filter(r=>r.isCorrect===true||r.isCorrect==='TRUE').length;
         const dist={};(q.choices||[]).forEach(c=>dist[c]=0);
         qr.forEach(r=>{try{const a=JSON.parse(r.answer);if(Array.isArray(a))a.forEach(x=>{if(dist[x]!==undefined)dist[x]++});else if(dist[r.answer]!==undefined)dist[r.answer]++}catch(e){if(dist[r.answer]!==undefined)dist[r.answer]++}});
         return {id:q.id,idx,text:q.text,type:'mc',total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
-          studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect,confidence:(meta.find(m=>m.studentId===r.studentId&&m.questionId===q.id)||{}).confidence||null}))};
+          studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect,confidence:(metaByStudentQuestion[r.studentId+'|'+q.id]||{}).confidence||null}))};
       }else{
         return {id:q.id,idx,text:q.text,type:'sa',total:qr.length,
           studentResponses:qr.map(r=>{
-            const g = grades.find(gg=>gg.studentId===r.studentId && gg.questionId===q.id);
-            const m=meta.find(mm=>mm.studentId===r.studentId&&mm.questionId===q.id);
+            const g=gradeByStudentQuestion[r.studentId+'|'+q.id];
+            const m=metaByStudentQuestion[r.studentId+'|'+q.id];
             return {studentId:r.studentId,name:r.studentName,answer:r.answer, score: r.points, feedback: g ? g.feedback : null, confidence:m?m.confidence:null};
           })};
       }
@@ -598,10 +622,20 @@ const DB = {
 
   // Helpers
   getStudentName(sessId,stuId){const d=this.sh('StudentSessions').getDataRange().getValues();for(let i=1;i<d.length;i++)if(d[i][0]===sessId&&d[i][1]===stuId)return d[i][2];return 'Unknown';},
-  getStudentSessions(sessId){const d=this.sh('StudentSessions').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11],normalizedName:r[12]||this.normalizeStudentName(r[2]||''),identityKey:r[13]||''}));},
-  getAllResponses(sessId){const d=this.sh('Responses').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:r[5],isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
-  getAllMeta(sessId){const d=this.sh('Metacognition').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
-  getActiveViolations(sessId){const d=this.sh('Violations').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},
-  getAIGrades(sessId){const d=this.sh('AIGrades').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12]}));},
+  _getSheetValues(sheetName,snapshot){
+    if(snapshot&&snapshot[sheetName]) return snapshot[sheetName];
+    const values=this.sh(sheetName).getDataRange().getValues();
+    if(snapshot) snapshot[sheetName]=values;
+    return values;
+  },
+  _getSessionRows(sheetName,sessId,snapshot){
+    const d=this._getSheetValues(sheetName,snapshot);
+    return d.slice(1).filter(r=>r[0]===sessId);
+  },
+  getStudentSessions(sessId,snapshot){const rows=this._getSessionRows('StudentSessions',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11],normalizedName:r[12]||this.normalizeStudentName(r[2]||''),identityKey:r[13]||''}));},
+  getAllResponses(sessId,snapshot){const rows=this._getSessionRows('Responses',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:r[5],isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
+  getAllMeta(sessId,snapshot){const rows=this._getSessionRows('Metacognition',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
+  getActiveViolations(sessId,snapshot){const rows=this._getSessionRows('Violations',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},
+  getAIGrades(sessId,snapshot){const rows=this._getSessionRows('AIGrades',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12]}));},
   normalizeStudentName(name){return String(name||'').toLowerCase().replace(/\s+/g,' ').trim();}
 };
