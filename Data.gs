@@ -307,9 +307,15 @@ const DB = {
 
   studentFinish(sessId,stuId) {
     return this.withLock(() => {
+      const sess=this.getSessionById(sessId);
       const s=this.sh('StudentSessions');const d=s.getDataRange().getValues();
-      for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){s.getRange(i+1,5).setValue('finished');s.getRange(i+1,7).setValue(new Date().toISOString());return this.studentGetSummary(sessId,stuId);}
-      return { error:'Student session not found' };
+      for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){
+        s.getRange(i+1,5).setValue('finished');
+        s.getRange(i+1,7).setValue(new Date().toISOString());
+        const responses=this.getAllResponses(sessId).filter(r=>r.studentId===stuId);
+        return this.buildStudentSummary(sess, responses);
+      }
+      return this.buildStudentSummary(sess, []);
     });
   },
 
@@ -438,13 +444,24 @@ const DB = {
     });
   },
   studentGetSummary(sessId, stuId) {
-    const sess=this.getSessionById(sessId); if(!sess) return {showScore:false};
-    const cfg=sess.summaryConfig||{showScore:true};
-    const responses=this.getAllResponses(sessId).filter(r=>r.studentId===stuId);
-    const totalPts=responses.reduce((sum,r)=>sum+(Number(r.points)||0),0);
-    const totalMax=responses.reduce((sum,r)=>sum+(Number(r.maxPoints)||0),0);
+    const sess=this.getSessionById(sessId);
+    const responses=sess?this.getAllResponses(sessId).filter(r=>r.studentId===stuId):[];
+    return this.buildStudentSummary(sess, responses);
+  },
+  buildStudentSummary(sess, responses) {
+    const cfg=(sess&&sess.summaryConfig)||{showScore:true};
+    const safeResponses=Array.isArray(responses)?responses:[];
+    const totalPts=safeResponses.reduce((sum,r)=>sum+(Number(r.points)||0),0);
+    const totalMax=safeResponses.reduce((sum,r)=>sum+(Number(r.maxPoints)||0),0);
     const pct=totalMax>0?Math.round((totalPts/totalMax)*100):0;
-    return {showScore:cfg.showScore!==false,totalPts,totalMax,pct,responses:responses.length};
+    return {
+      showScore:cfg.showScore!==false,
+      pct,
+      totalPts,
+      totalMax,
+      responses:safeResponses.length,
+      revealMode:(sess&&sess.revealMode)||'end'
+    };
   },
   getLiveQuestionDetail(sessId, qId) {
     const live=this.getLiveResults(sessId); if(!live) return null;
