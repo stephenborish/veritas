@@ -23,7 +23,8 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
       
     if (code) {
-      const c = html.getContent().replace('/*@@CODE@@*/', 'window.__code="' + code + '";');
+      const safeCode = JSON.stringify(String(code));
+      const c = html.getContent().replace('/*@@CODE@@*/', 'window.__code=' + safeCode + ';');
       return HtmlService.createHtmlOutput(c).setTitle('Veritas Assess')
         .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
         .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
@@ -88,6 +89,7 @@ function studentReportViolation(sessId, stuId, type) { return DB.studentReportVi
 function studentCheckStatus(sessId, stuId) { return DB.studentCheckStatus(sessId, stuId); }
 function studentFinish(sessId, stuId) { return DB.studentFinish(sessId, stuId); }
 function studentGetSummary(sessId, stuId) { return DB.studentGetSummary(sessId, stuId); }
+function getStudentDetail(sessId, stuId) { return DB.getStudentDetail(sessId, stuId); }
 
 // ── Analytics ──
 function getItemAnalysis(id) { return DB.getItemAnalysis(id); }
@@ -137,7 +139,7 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
   
   // Ensure the URL is clean before appending query params
   baseUrl = baseUrl.split('?')[0];
-  const studentUrl = baseUrl + '?code=' + sess.code;
+  const studentUrl = baseUrl + '?page=student&code=' + encodeURIComponent(sess.code);
   
   let sent = 0, skipped = 0, errors = [];
   

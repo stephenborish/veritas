@@ -70,7 +70,7 @@ const DB = {
   },
   updateCourse(id, name, blocks) {
     const s=this.sh('Courses'); const d=s.getDataRange().getValues();
-    for(let i=1;i<d.length;i++) if(d[i][0]===id){s.getRange(i+1,2).setValue(name);s.getRange(i+1,3).setValue(JSON.stringify(blocks));return true;}
+    for(let i=1;i<d.length;i++) if(d[i][0]===id){if(name!==undefined&&name!==null&&String(name).trim()!=='')s.getRange(i+1,2).setValue(name);if(blocks!==undefined)s.getRange(i+1,3).setValue(JSON.stringify(blocks));return true;}
     return false;
   },
   deleteCourse(id) {
@@ -162,9 +162,14 @@ const DB = {
       if(sess.code!==code.toUpperCase().trim()) return {error:'Invalid code.'};
       
       const name=(first.trim()+' '+last.trim()).trim();
-      const stuId='stu_'+name.toLowerCase().replace(/[^a-z0-9]/g,'_')+'_'+sess.sessionId.slice(-4);
+      const base='stu_'+name.toLowerCase().replace(/[^a-z0-9]/g,'_')+'_'+sess.sessionId.slice(-4);
+      let stuId=base;
       
       const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues();
+      const existingIds = new Set(sd.slice(1).filter(r=>r[0]===sess.sessionId).map(r=>r[1]));
+      if (!existingIds.has(stuId)) {
+        // keep generated id
+      }
       
       for(let i=1;i<sd.length;i++) {
         if(sd[i][0]===sess.sessionId && sd[i][1]===stuId) {
@@ -173,8 +178,15 @@ const DB = {
           
           const needsFS = sd[i][10]===true||sd[i][10]==='TRUE';
           const qSet=this.getQSet(sess.setId);
-          return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:true,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:needsFS};
+          return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:true,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:needsFS,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
         }
+      }
+
+      // Ensure unique ID for duplicate names within same session
+      if (existingIds.has(stuId)) {
+        let n = 2;
+        while (existingIds.has(base + '_' + n)) n++;
+        stuId = base + '_' + n;
       }
       
       // New Join
@@ -189,7 +201,7 @@ const DB = {
       }
       ssSheet.appendRow([sess.sessionId, stuId, name, '', 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken]);
       const qSet=this.getQSet(sess.setId);
-      return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false};
+      return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
     });
   },
 
@@ -296,8 +308,8 @@ const DB = {
   studentFinish(sessId,stuId) {
     return this.withLock(() => {
       const s=this.sh('StudentSessions');const d=s.getDataRange().getValues();
-      for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){s.getRange(i+1,5).setValue('finished');s.getRange(i+1,7).setValue(new Date().toISOString());return true;}
-      return false;
+      for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){s.getRange(i+1,5).setValue('finished');s.getRange(i+1,7).setValue(new Date().toISOString());return this.studentGetSummary(sessId,stuId);}
+      return { error:'Student session not found' };
     });
   },
 
@@ -309,12 +321,15 @@ const DB = {
     const viols=this.getActiveViolations(sessId);const meta=this.getAllMeta(sessId);const roster=this.getRoster(sess.block);
     const grades = this.getAIGrades(sessId);
     
+    const nowMs=Date.now();
     const students=stuSess.map(ss=>{
       const sr=resps.filter(r=>r.studentId===ss.studentId);
       const sm=meta.filter(m=>m.studentId===ss.studentId);
       let mcC=0,mcT=0;
       sr.forEach(r=>{const q=questions.find(qq=>qq.id===r.questionId);if(q&&q.type==='mc'){mcT++;if(r.isCorrect===true||r.isCorrect==='TRUE')mcC++;}});
-      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr};
+      const lastTs=[ss.joinedAt,ss.finishedAt].concat(sr.map(x=>x.submittedAt)).concat(sm.map(x=>x.submittedAt)).filter(Boolean).map(x=>new Date(x).getTime()).sort((a,b)=>b-a)[0]||0;
+      const activeNow=ss.status==='active' && !ss.lockedOut && (nowMs-lastTs)<(2*60*1000);
+      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,activeNow,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr};
     });
     
     const qStats=questions.map((q,idx)=>{
@@ -325,12 +340,13 @@ const DB = {
         const dist={};(q.choices||[]).forEach(c=>dist[c]=0);
         qr.forEach(r=>{try{const a=JSON.parse(r.answer);if(Array.isArray(a))a.forEach(x=>{if(dist[x]!==undefined)dist[x]++});else if(dist[r.answer]!==undefined)dist[r.answer]++}catch(e){if(dist[r.answer]!==undefined)dist[r.answer]++}});
         return {id:q.id,idx,text:q.text,type:'mc',total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
-          studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect}))};
+          studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect,confidence:(meta.find(m=>m.studentId===r.studentId&&m.questionId===q.id)||{}).confidence||null}))};
       }else{
         return {id:q.id,idx,text:q.text,type:'sa',total:qr.length,
           studentResponses:qr.map(r=>{
             const g = grades.find(gg=>gg.studentId===r.studentId && gg.questionId===q.id);
-            return {studentId:r.studentId,name:r.studentName,answer:r.answer, score: r.points, feedback: g ? g.feedback : null};
+            const m=meta.find(mm=>mm.studentId===r.studentId&&mm.questionId===q.id);
+            return {studentId:r.studentId,name:r.studentName,answer:r.answer, score: r.points, feedback: g ? g.feedback : null, confidence:m?m.confidence:null};
           })};
       }
     });
@@ -342,7 +358,139 @@ const DB = {
       lockedOut: false, violationCount: 0, avgConf: null, responses: []
     }));
     
-    return {session:{...sess,questionCount:questions.length},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,rosterSize:roster.length,missingCount:missing.length};
+    return {session:{...sess,questionCount:questions.length},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length};
+  },
+
+
+  getSessionHistory() {
+    const d=this.sh('Archive').getDataRange().getValues();
+    return d.slice(1).map(r=>({sessionId:r[0],code:r[1],setName:r[2],block:r[3],startedAt:r[4],endedAt:r[5],studentCount:r[6],avgPct:r[7]})).reverse();
+  },
+  regenerateCode(id) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      const code=this.makeCode();
+      this.sh('Sessions').getRange(sess.row,2).setValue(code);
+      return {sessionId:id,code};
+    });
+  },
+  setSessionCode(id, code) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      const c=String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,20);
+      if(!c) return {error:'Invalid code'};
+      this.sh('Sessions').getRange(sess.row,2).setValue(c);
+      return {sessionId:id,code:c};
+    });
+  },
+  goToQuestion(id, qIndex) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
+      const q=Math.max(0,Math.min(Number(qIndex)||0,qSet.questions.length-1));
+      this.sh('Sessions').getRange(sess.row,10).setValue(q);
+      return {ok:true,currentQ:q};
+    });
+  },
+  advanceQuestion(id) {
+    const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+    return this.goToQuestion(id,(sess.currentQ||0)+1);
+  },
+  revealAnswer(id, qId) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      const cur = Array.isArray(sess.revealedQs) ? sess.revealedQs.slice() : [];
+      if (!cur.includes(qId)) cur.push(qId);
+      this.sh('Sessions').getRange(sess.row,17).setValue(JSON.stringify(cur));
+      return {ok:true,revealedQs:cur};
+    });
+  },
+  revealAllAnswers(id) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
+      const all=(qSet.questions||[]).map(q=>q.id);
+      this.sh('Sessions').getRange(sess.row,17).setValue(JSON.stringify(all));
+      return {ok:true,revealedQs:all};
+    });
+  },
+  setTimer(id, config) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      this.sh('Sessions').getRange(sess.row,14).setValue(JSON.stringify(config||{type:'none'}));
+      return {ok:true,timer:config||{type:'none'}};
+    });
+  },
+  updateSessionConfig(id, key, val) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      const cfg=sess.config||{}; cfg[key]=val;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      return {ok:true,config:cfg};
+    });
+  },
+  updateSummaryConfig(id, cfg) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      const merged=Object.assign({},sess.summaryConfig||{},cfg||{});
+      this.sh('Sessions').getRange(sess.row,16).setValue(JSON.stringify(merged));
+      return {ok:true,summaryConfig:merged};
+    });
+  },
+  studentGetSummary(sessId, stuId) {
+    const sess=this.getSessionById(sessId); if(!sess) return {showScore:false};
+    const cfg=sess.summaryConfig||{showScore:true};
+    const responses=this.getAllResponses(sessId).filter(r=>r.studentId===stuId);
+    const totalPts=responses.reduce((sum,r)=>sum+(Number(r.points)||0),0);
+    const totalMax=responses.reduce((sum,r)=>sum+(Number(r.maxPoints)||0),0);
+    const pct=totalMax>0?Math.round((totalPts/totalMax)*100):0;
+    return {showScore:cfg.showScore!==false,totalPts,totalMax,pct,responses:responses.length};
+  },
+  getLiveQuestionDetail(sessId, qId) {
+    const live=this.getLiveResults(sessId); if(!live) return null;
+    return (live.qStats||[]).find(q=>q.id===qId)||null;
+  },
+  getItemAnalysis(id) {
+    const live=this.getLiveResults(id); if(!live) return [];
+    return live.qStats||[];
+  },
+  getStudentAnalysis(id) {
+    const live=this.getLiveResults(id); if(!live) return [];
+    return live.students||[];
+  },
+  getMetacognitionData(id) {
+    return this.getAllMeta(id);
+  },
+  getStudentDetail(sessId, stuId) {
+    const sess=this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+    const qSet=this.getQSet(sess.setId)||{questions:[]};
+    const responses=this.getAllResponses(sessId).filter(r=>r.studentId===stuId);
+    const meta=this.getAllMeta(sessId).filter(m=>m.studentId===stuId);
+    const grades=this.getAIGrades(sessId).filter(g=>g.studentId===stuId);
+    const student=this.getStudentSessions(sessId).find(s=>s.studentId===stuId);
+    const details=(qSet.questions||[]).map((q,idx)=>{
+      const r=responses.find(x=>x.questionId===q.id)||null;
+      const m=meta.find(x=>x.questionId===q.id)||null;
+      const g=grades.find(x=>x.questionId===q.id)||null;
+      return {questionId:q.id,qIndex:idx,questionText:q.text,type:q.type,answer:r?r.answer:'',isCorrect:r?r.isCorrect:null,points:r?Number(r.points)||0:0,maxPoints:q.points||1,confidence:m?m.confidence:null,aiScore:g?g.score:null,aiFeedback:g?g.feedback:null};
+    });
+    const totalPts=details.reduce((a,b)=>a+(Number(b.points)||0),0);
+    const totalMax=details.reduce((a,b)=>a+(Number(b.maxPoints)||0),0);
+    return {student,session:{sessionId:sessId,setName:sess.setName,code:sess.code},totalPts,totalMax,pct:totalMax?Math.round((totalPts/totalMax)*100):0,details};
+  },
+  archiveSession(id) {
+    const sess=this.getSessionById(id); if(!sess) return false;
+    const archive=this.sh('Archive');
+    const existing=archive.getDataRange().getValues().slice(1).find(r=>r[0]===id);
+    if(existing) return true;
+    const students=this.getStudentSessions(id);
+    const responses=this.getAllResponses(id);
+    const totalByStudent={};
+    students.forEach(st=>{const sr=responses.filter(r=>r.studentId===st.studentId); const pts=sr.reduce((a,r)=>a+(Number(r.points)||0),0); const max=sr.reduce((a,r)=>a+(Number(r.maxPoints)||0),0); totalByStudent[st.studentId]=max?Math.round((pts/max)*100):0;});
+    const pcts=Object.values(totalByStudent);
+    const avgPct=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
+    archive.appendRow([id,sess.code,sess.setName,sess.block,sess.startedAt,sess.endedAt||new Date().toISOString(),students.length,avgPct,JSON.stringify({session:sess,students,responses,meta:this.getAllMeta(id),grades:this.getAIGrades(id),violations:this.getActiveViolations(id)})]);
+    return true;
   },
 
   // Helpers
