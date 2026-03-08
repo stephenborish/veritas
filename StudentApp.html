@@ -180,15 +180,120 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   <div id="sumContent"></div>
 </div>
 
-<div id="bootData" data-prefilled-code="<?= prefilledCode || '' ?>" hidden></div>
+<div
+  id="bootData"
+  data-prefilled-code=""
+  data-student-token=""
+  data-prefilled-first=""
+  data-prefilled-last=""
+  hidden
+></div>
 
 <script>
 
 const S = {
   sid:null, stuId:null, qs:[], cur:0, ans:{}, conf:{}, correct:{},
   locked:false, done:false, poll:null, timerInt:null, endTime:0,
-  mode:'self-paced', metaEnabled:true, needsFS:false
+  mode:'self-paced', metaEnabled:true, needsFS:false, accessToken:''
 };
+
+function normalizeClientCode(rawCode) {
+  return String(rawCode || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20);
+}
+
+function parseQueryParams(rawValue) {
+  const out = {};
+  const value = String(rawValue || '').trim();
+  if (!value) return out;
+  const query = value.indexOf('?') > -1 ? value.slice(value.indexOf('?') + 1) : value.replace(/^#/, '');
+  const cleanQuery = query.split('#')[0];
+  const searchParams = new URLSearchParams(cleanQuery);
+  searchParams.forEach(function(v, k) { out[k] = v; });
+  return out;
+}
+
+function decodeBase64UrlUtf8(seg) {
+  if (!seg) return '';
+  const normalized = String(seg).replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '==='.slice((normalized.length + 3) % 4);
+  try {
+    return decodeURIComponent(Array.prototype.map.call(atob(padded), function(ch) {
+      return '%' + ('00' + ch.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+  } catch (e) {
+    return '';
+  }
+}
+
+function decodeStudentTokenPayload(rawToken) {
+  const token = String(rawToken || '').trim();
+  if (!token) return null;
+  const payloadSegment = token.split('.')[0];
+  if (!payloadSegment) return null;
+  try {
+    return JSON.parse(decodeBase64UrlUtf8(payloadSegment));
+  } catch (e) {
+    return null;
+  }
+}
+
+function applyJoinPrefill(prefill) {
+  if (!prefill) return;
+
+  const codeInput = document.getElementById('jCode');
+  const firstInput = document.getElementById('jFirst');
+  const lastInput = document.getElementById('jLast');
+  const normalizedCode = normalizeClientCode(prefill.code);
+
+  if (normalizedCode) codeInput.value = normalizedCode;
+  if (prefill.studentToken) S.accessToken = String(prefill.studentToken).trim();
+  if (prefill.firstName && !firstInput.value.trim()) firstInput.value = String(prefill.firstName).trim();
+  if (prefill.lastName && !lastInput.value.trim()) lastInput.value = String(prefill.lastName).trim();
+}
+
+function hydrateJoinPrefill() {
+  const bootData = document.getElementById('bootData');
+  applyJoinPrefill({
+    code: bootData.dataset.prefilledCode || '',
+    studentToken: bootData.dataset.studentToken || '',
+    firstName: bootData.dataset.prefilledFirst || '',
+    lastName: bootData.dataset.prefilledLast || ''
+  });
+
+  applyJoinPrefill(parseQueryParams(window.location.search || ''));
+  applyJoinPrefill(parseQueryParams(window.location.hash || ''));
+  applyJoinPrefill(parseQueryParams(document.referrer || ''));
+
+  const tokenPayload = decodeStudentTokenPayload(S.accessToken);
+  if (tokenPayload) {
+    applyJoinPrefill({
+      code: tokenPayload.code || '',
+      firstName: tokenPayload.firstName || '',
+      lastName: tokenPayload.lastName || ''
+    });
+  }
+
+  if (typeof google !== 'undefined' && google.script && google.script.url && google.script.url.getLocation) {
+    google.script.url.getLocation(function(loc) {
+      const params = (loc && loc.parameter) || {};
+      applyJoinPrefill({
+        code: params.code || '',
+        studentToken: params.studentToken || params.stk || '',
+        firstName: params.firstName || '',
+        lastName: params.lastName || ''
+      });
+
+      const gsTokenPayload = decodeStudentTokenPayload(params.studentToken || params.stk || '');
+      if (gsTokenPayload) {
+        applyJoinPrefill({
+          code: gsTokenPayload.code || '',
+          firstName: gsTokenPayload.firstName || '',
+          lastName: gsTokenPayload.lastName || ''
+        });
+      }
+    });
+  }
+}
 
 function getClientToken() {
   let t = localStorage.getItem('veritas_token');
@@ -203,22 +308,29 @@ function doJoin() {
   
   document.getElementById('jBtn').disabled = true; document.getElementById('jBtn').textContent = 'Joining...';
   
-  google.script.run.withSuccessHandler(function(r) {
-    if(r.error) { showE(r.error); document.getElementById('jBtn').disabled = false; document.getElementById('jBtn').textContent = 'Join Session'; return; }
-    
-    S.sid = r.sessionId; S.stuId = r.studentId; S.mode = r.mode;
-    S.metaEnabled = r.metacognitionEnabled !== false;
-    document.getElementById('stuBadge').textContent = r.studentName;
-    
-    if(r.calcEnabled) document.getElementById('calcBtn').style.display = 'block';
-    if(r.timer && r.timer.type !== 'none') S.endTime = Date.now() + (r.timer.seconds * 1000);
-    
-    document.getElementById('joinScreen').style.display = 'none';
-    
-    // Always force fullscreen prompt on initial join or if explicitly required
-    document.getElementById('fsPrompt').classList.add('show');
-    
-  }).studentJoin(code, f, l, getClientToken());
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if(r.error) { showE(r.error); document.getElementById('jBtn').disabled = false; document.getElementById('jBtn').textContent = 'Join Session'; return; }
+      
+      S.sid = r.sessionId; S.stuId = r.studentId; S.mode = r.mode;
+      S.metaEnabled = r.metacognitionEnabled !== false;
+      document.getElementById('stuBadge').textContent = r.studentName;
+      
+      if(r.calcEnabled) document.getElementById('calcBtn').style.display = 'block';
+      if(r.timer && r.timer.type !== 'none') S.endTime = Date.now() + (r.timer.seconds * 1000);
+      
+      document.getElementById('joinScreen').style.display = 'none';
+      
+      // Always force fullscreen prompt on initial join or if explicitly required
+      document.getElementById('fsPrompt').classList.add('show');
+      
+    })
+    .withFailureHandler(function(err) {
+      showE((err && err.message) ? err.message : 'Unable to join right now. Please reopen the secure link from your email and try again.');
+      document.getElementById('jBtn').disabled = false;
+      document.getElementById('jBtn').textContent = 'Join Session';
+    })
+    .studentJoin(code, f, l, getClientToken(), S.accessToken);
 }
 
 function showE(msg) {
@@ -275,12 +387,25 @@ function beginAssess() {
   document.getElementById('assessUI').style.display = 'block';
   S.locked = false; S.needsFS = false;
   
-  google.script.run.withSuccessHandler(function(d) {
-    S.qs = d.questions;
-    if(d.existing) Object.assign(S.ans, d.existing);
-    if(d.existingMeta) Object.assign(S.conf, d.existingMeta);
-    renderQ(); startTimer(); startPoll();
-  }).studentGetQuestions(S.sid, S.stuId);
+  google.script.run
+    .withSuccessHandler(function(d) {
+      if (d && d.error) {
+        toast(d.error);
+        document.getElementById('assessUI').style.display = 'none';
+        document.getElementById('joinScreen').style.display = 'flex';
+        return;
+      }
+      S.qs = d.questions;
+      if(d.existing) Object.assign(S.ans, d.existing);
+      if(d.existingMeta) Object.assign(S.conf, d.existingMeta);
+      renderQ(); startTimer(); startPoll();
+    })
+    .withFailureHandler(function(err) {
+      toast((err && err.message) ? err.message : 'Unable to load the assessment. Please reopen the secure link from your email.');
+      document.getElementById('assessUI').style.display = 'none';
+      document.getElementById('joinScreen').style.display = 'flex';
+    })
+    .studentGetQuestions(S.sid, S.stuId);
 }
 
 function startTimer() {
@@ -325,8 +450,8 @@ function renderQ() {
     html += `<div class="meta ${hasAns ? 'show' : ''}" id="metaPanel">
       <div class="meta-title">How confident are you in your answer?</div>
       <div class="conf-row">
-        ${[{n:1,l:'Guessing'},{n:2,l:'Low'},{n:3,l:'Medium'},{n:4,l:'High'}].map(function(x) { return 
-          `<div class="conf-opt ${cVal===x.n ? 'active' : ''}" data-qid="${q.id}" data-conf="${x.n}">${x.n}<span class="cl">${x.l}</span></div>`
+        ${[{n:1,l:'Guessing'},{n:2,l:'Low'},{n:3,l:'Medium'},{n:4,l:'High'}].map(function(x) {
+          return `<div class="conf-opt ${cVal===x.n ? 'active' : ''}" data-qid="${q.id}" data-conf="${x.n}">${x.n}<span class="cl">${x.l}</span></div>`;
         }).join('')}
       </div>
     </div>`;
@@ -495,8 +620,7 @@ function toggleCalc() {
   document.addEventListener('mouseup',function(){isDrag=false;});
 })();
 
-const prefilledCode = document.getElementById('bootData').dataset.prefilledCode || '';
-if(prefilledCode) document.getElementById('jCode').value = prefilledCode;
+hydrateJoinPrefill();
 </script>
 </body>
 </html>
