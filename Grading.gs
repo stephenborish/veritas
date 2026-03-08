@@ -19,12 +19,24 @@ const Grader = {
     try { this.testKey(key); } catch(e) { const out={ error: 'API key test failed: ' + e.message }; this.setStatus(sessId,{state:'error',sessionId:sessId,message:out.error}); return out; }
     
     const sess = DB.getSessionById(sessId);
-    if (!sess) return { error: 'Session not found' };
+    if (!sess) {
+      const out = { error: 'Session not found' };
+      this.setStatus(sessId,{state:'error',sessionId:sessId,gradedCount:0,errors:0,message:out.error});
+      return out;
+    }
     const qSet = DB.getQSet(sess.setId);
-    if (!qSet) return { error: 'Question set not found' };
+    if (!qSet) {
+      const out = { error: 'Question set not found' };
+      this.setStatus(sessId,{state:'error',sessionId:sessId,gradedCount:0,errors:0,message:out.error});
+      return out;
+    }
     
     const saQs = qSet.questions.filter(q => q.type === 'sa');
-    if (!saQs.length) return { message: 'No short-answer questions to grade.' };
+    if (!saQs.length) {
+      const out = { gradedCount: 0, errors: 0, message: 'No short-answer questions to grade.' };
+      this.setStatus(sessId,Object.assign({state:'done',sessionId:sessId},out));
+      return out;
+    }
     
     const resps = DB.getAllResponses(sessId);
     const existing = DB.getAIGrades(sessId);

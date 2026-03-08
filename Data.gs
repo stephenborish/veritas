@@ -226,6 +226,12 @@ const DB = {
       
       const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues();
       const sessionRows=sd.slice(1).filter(r=>r[0]===sess.sessionId);
+      const deriveIdentityKey=(row)=>{
+        const existing=String(row[13]||'');
+        if(existing) return existing;
+        const rowNorm=this.normalizeStudentName(row[12]||row[2]||'');
+        return 'sess:'+row[0]+'|name:'+rowNorm+'#1';
+      };
 
       let identityKey='';
       if(rosterKey){
@@ -237,14 +243,14 @@ const DB = {
         });
         let suffix=1;
         const usedSuffixes=new Set(sameNameRows.map(r=>{
-          const key=String(r[13]||'');
+          const key=deriveIdentityKey(r);
           const m=key.match(/\|name:.*#(\d+)$/);
           return m?Number(m[1]):null;
         }).filter(v=>v!==null));
         if(clientToken){
           const tokenMatch=sameNameRows.find(r=>r[11]&&r[11]===clientToken);
           if(tokenMatch){
-            const existingKey=String(tokenMatch[13]||'');
+            const existingKey=deriveIdentityKey(tokenMatch);
             if(existingKey){
               identityKey=existingKey;
             }else{
@@ -261,8 +267,7 @@ const DB = {
       }
       
       for(let i=1;i<sd.length;i++) {
-        const rowNorm=(sd[i][12]||this.normalizeStudentName(sd[i][2]||''));
-        const rowIdentity=sd[i][13]||('sess:'+sd[i][0]+'|name:'+rowNorm+'#1');
+        const rowIdentity=deriveIdentityKey(sd[i]);
         if(sd[i][0]===sess.sessionId && rowIdentity===identityKey) {
           if(sd[i][11] && clientToken !== sd[i][11]) return {error:'This name is already in use by another device.'};
           if(sd[i][8]===true||sd[i][8]==='TRUE') return {error:'Locked out. Wait for teacher.'};
