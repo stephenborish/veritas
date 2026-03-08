@@ -142,6 +142,27 @@ const DB = {
   _parseSess(r,row) {
     return {sessionId:r[0],code:r[1],setId:r[2],setName:r[3],block:r[4],mode:r[5],randQ:r[6],randC:r[7],status:r[8],currentQ:r[9]||0,startedAt:r[10],endedAt:r[11],config:JSON.parse(r[12]||'{}'),timer:JSON.parse(r[13]||'{}'),revealMode:r[14]||'end',summaryConfig:JSON.parse(r[15]||'{}'),revealedQs:JSON.parse(r[16]||'[]'),calcEnabled:r[17]===true||r[17]==='TRUE',row};
   },
+  _normalizeSessionState(sess, questionIds) {
+    const ids = Array.isArray(questionIds) ? questionIds : [];
+    const maxQ = Math.max(0, ids.length - 1);
+    const requestedQ = Number(sess.currentQ);
+    const currentQ = Number.isFinite(requestedQ) ? Math.max(0, Math.min(requestedQ, maxQ)) : 0;
+    const revealMode = sess.revealMode || 'end';
+    let revealedQs = Array.isArray(sess.revealedQs) ? sess.revealedQs.filter(qId => ids.indexOf(qId) !== -1) : [];
+    if (revealMode === 'never') revealedQs = [];
+    if (revealMode === 'end' && sess.status === 'ended') revealedQs = ids.slice();
+    return {
+      sessionId: sess.sessionId,
+      sessionStatus: sess.status,
+      mode: sess.mode,
+      currentQ,
+      timer: sess.timer,
+      revealMode,
+      revealedQs,
+      calcEnabled: sess.calcEnabled,
+      metacognitionEnabled: (sess.config || {}).metacognitionEnabled !== false
+    };
+  },
   endSession(id) {
     return this.withLock(() => {
       const s=this.sh('Sessions'); const d=s.getDataRange().getValues();
@@ -218,7 +239,8 @@ const DB = {
     const existing={};resps.forEach(r=>{existing[r.questionId]=r.answer;});
     const metaResps=this.getAllMeta(sessId).filter(m=>m.studentId===stuId);
     const existingMeta={};metaResps.forEach(m=>{existingMeta[m.questionId]=m.confidence;});
-    return {questions:studentQs,stimuli,mode:sess.mode,currentQ:sess.currentQ||0,existing,existingMeta,timer:sess.timer,revealMode:sess.revealMode,revealedQs:sess.revealedQs||[],calcEnabled:sess.calcEnabled,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
+    const sessionState = this._normalizeSessionState(sess, studentQs.map(q=>q.id));
+    return {questions:studentQs,stimuli,existing,existingMeta,...sessionState};
   },
   
   // ── CONCURRENT SECURE SUBMISSION ──
@@ -296,11 +318,12 @@ const DB = {
 
   studentCheckStatus(sessId,stuId) {
     const sess=this.getSessionById(sessId); if(!sess) return {sessionStatus:'ended'};
+    const qSet=this.getQSet(sess.setId);
+    const sessionState = this._normalizeSessionState(sess, qSet ? qSet.questions.map(q=>q.id) : []);
     const d=this.sh('StudentSessions').getDataRange().getValues();
     for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){
-      return {sessionStatus:sess.status,lockedOut:d[i][8]===true||d[i][8]==='TRUE',
-        needsFullscreen:d[i][10]===true||d[i][10]==='TRUE',
-        currentQ:sess.currentQ||0,mode:sess.mode,timer:sess.timer,revealedQs:sess.revealedQs||[]};
+      return {...sessionState,lockedOut:d[i][8]===true||d[i][8]==='TRUE',
+        needsFullscreen:d[i][10]===true||d[i][10]==='TRUE'};
     }
     return {sessionStatus:'not-found'};
   },
@@ -387,22 +410,35 @@ const DB = {
     return this.withLock(() => {
       const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
       const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
-      const q=Math.max(0,Math.min(Number(qIndex)||0,qSet.questions.length-1));
+      const maxQ = Math.max(0, qSet.questions.length - 1);
+      const q=Math.max(0,Math.min(Number(qIndex)||0,maxQ));
       this.sh('Sessions').getRange(sess.row,10).setValue(q);
-      return {ok:true,currentQ:q};
+      const updatedSess = this.getSessionById(id);
+      return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(qq=>qq.id))};
     });
   },
   advanceQuestion(id) {
-    const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
-    return this.goToQuestion(id,(sess.currentQ||0)+1);
+    return this.withLock(() => {
+      const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
+      const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
+      const maxQ = Math.max(0, qSet.questions.length - 1);
+      const nextQ = Math.max(0, Math.min((Number(sess.currentQ)||0) + 1, maxQ));
+      this.sh('Sessions').getRange(sess.row,10).setValue(nextQ);
+      const updatedSess = this.getSessionById(id);
+      return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(q=>q.id))};
+    });
   },
   revealAnswer(id, qId) {
     return this.withLock(() => {
       const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
-      const cur = Array.isArray(sess.revealedQs) ? sess.revealedQs.slice() : [];
+      const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
+      const validIds = (qSet.questions||[]).map(q=>q.id);
+      if (validIds.indexOf(qId) === -1) return {error:'Question not found'};
+      const cur = Array.isArray(sess.revealedQs) ? sess.revealedQs.filter(id2 => validIds.indexOf(id2) !== -1) : [];
       if (!cur.includes(qId)) cur.push(qId);
       this.sh('Sessions').getRange(sess.row,17).setValue(JSON.stringify(cur));
-      return {ok:true,revealedQs:cur};
+      const updatedSess = this.getSessionById(id);
+      return {ok:true,session:this._normalizeSessionState(updatedSess,validIds)};
     });
   },
   revealAllAnswers(id) {
@@ -411,7 +447,8 @@ const DB = {
       const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
       const all=(qSet.questions||[]).map(q=>q.id);
       this.sh('Sessions').getRange(sess.row,17).setValue(JSON.stringify(all));
-      return {ok:true,revealedQs:all};
+      const updatedSess = this.getSessionById(id);
+      return {ok:true,session:this._normalizeSessionState(updatedSess,all)};
     });
   },
   setTimer(id, config) {
