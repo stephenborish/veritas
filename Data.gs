@@ -1,0 +1,355 @@
+// ═══════════════════════════════════════════════════════════════════
+//  Data.gs v5.2 — Features LockService to prevent concurrency data loss
+// ═══════════════════════════════════════════════════════════════════
+
+const DB = {
+  SS_NAME: 'Veritas Assess — Data',
+  
+  withLock(callback) {
+    const lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(10000); 
+      return callback();
+    } catch (e) {
+      Logger.log("Lock exception: " + e.toString());
+      return { error: 'System is busy processing other students. Please try again in a moment.' };
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  ss() {
+    const id = PropertiesService.getScriptProperties().getProperty('VA_SHEET_ID');
+    if (id) try { return SpreadsheetApp.openById(id); } catch(e) {}
+    const f = DriveApp.getFilesByName(this.SS_NAME);
+    if (f.hasNext()) { const s = SpreadsheetApp.open(f.next()); PropertiesService.getScriptProperties().setProperty('VA_SHEET_ID',s.getId()); return s; }
+    throw new Error('Run initSystem() first.');
+  },
+  sh(n) { return this.ss().getSheetByName(n); },
+  
+  init() {
+    let ss; const f = DriveApp.getFilesByName(this.SS_NAME);
+    ss = f.hasNext() ? SpreadsheetApp.open(f.next()) : SpreadsheetApp.create(this.SS_NAME);
+    PropertiesService.getScriptProperties().setProperty('VA_SHEET_ID', ss.getId());
+    const sheets = {
+      'Courses':['ID','Name','Blocks','CreatedAt'],
+      'QSets':['ID','Name','CourseID','CreatedAt','UpdatedAt','QuestionsJSON','StimuliJSON'],
+      'Rosters':['Block','CourseID','StudentsJSON','UpdatedAt'],
+      'Sessions':['ID','Code','SetID','SetName','Block','Mode','RandQ','RandC','Status','CurrentQ','StartedAt','EndedAt','ConfigJSON','TimerJSON','RevealMode','SummaryConfigJSON','RevealedQs','CalcEnabled'],
+      'Responses':['SessionID','StudentID','StudentName','QuestionID','QIndex','Answer','IsCorrect','Points','MaxPoints','SubmittedAt','PartialCredit'],
+      'Metacognition':['SessionID','StudentID','StudentName','QuestionID','Confidence','SubmittedAt'],
+      'StudentSessions':['SessionID','StudentID','StudentName','Email','Status','JoinedAt','FinishedAt','ViolationCount','LockedOut','QOrder','NeedsFullscreen', 'ClientToken'],
+      'Violations':['SessionID','StudentID','StudentName','Type','Timestamp','Resolved'],
+      'AIGrades':['SessionID','StudentID','StudentName','QuestionID','Score','MaxScore','Feedback','Answer','GradedAt','Overridden','OverrideScore','OverrideFeedback','Context'],
+      'Archive':['SessionID','Code','SetName','Block','StartedAt','EndedAt','StudentCount','AvgPct','DataJSON']
+    };
+    for (const [name, headers] of Object.entries(sheets)) {
+      let s = ss.getSheetByName(name);
+      if (!s) s = ss.insertSheet(name);
+      s.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold').setBackground('#0d7377').setFontColor('#fff');
+      s.setFrozenRows(1);
+    }
+    const d = ss.getSheetByName('Sheet1'); if (d && ss.getSheets().length>1) try{ss.deleteSheet(d)}catch(e){}
+    return {url:ss.getUrl()};
+  },
+  
+  makeCode() {
+    const w = ['PHOTON','NEURON','PROTON','ENZYME','GENOME','PLASMA','QUASAR','MITOSIS','ATOMIC','BORON','CARBON','HELIUM','KELVIN','NEUTRO','ORBITAL','REDOX','SOLUTE','TENSOR','VECTOR','VOLTAGE'];
+    return w[Math.floor(Math.random()*w.length)] + String(Math.floor(Math.random()*90)+10);
+  },
+  
+  // ── COURSES, QSETS, ROSTERS (Standard CRUD) ──
+  createCourse(name, blocks) {
+    const s = this.sh('Courses'); const id = 'crs_'+Utilities.getUuid().slice(0,8);
+    s.appendRow([id, name, JSON.stringify(blocks||[]), new Date().toISOString()]);
+    return {id, name, blocks};
+  },
+  getCourses() {
+    const d = this.sh('Courses').getDataRange().getValues();
+    return d.slice(1).map(r => ({id:r[0], name:r[1], blocks:JSON.parse(r[2]||'[]'), createdAt:r[3]}));
+  },
+  updateCourse(id, name, blocks) {
+    const s=this.sh('Courses'); const d=s.getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][0]===id){s.getRange(i+1,2).setValue(name);s.getRange(i+1,3).setValue(JSON.stringify(blocks));return true;}
+    return false;
+  },
+  deleteCourse(id) {
+    const s=this.sh('Courses'); const d=s.getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);return true;}
+    return false;
+  },
+  createQSet(name, courseId, questions, stimuli) {
+    const s=this.sh('QSets'); const id='qs_'+Utilities.getUuid().slice(0,8); const now=new Date().toISOString();
+    questions.forEach((q,i)=>{if(!q.id)q.id='q'+(i+1)+'_'+Date.now().toString(36)});
+    s.appendRow([id,name,courseId||'',now,now,JSON.stringify(questions),JSON.stringify(stimuli||[])]);
+    return {id,name,questionCount:questions.length};
+  },
+  getQSets(courseId) {
+    const d=this.sh('QSets').getDataRange().getValues();
+    return d.slice(1).filter(r=>!courseId||r[2]===courseId||!r[2]).map(r=>{
+      const qs=JSON.parse(r[5]||'[]');
+      return {id:r[0],name:r[1],courseId:r[2],createdAt:r[3],updatedAt:r[4],questionCount:qs.length,mcCount:qs.filter(q=>q.type==='mc').length,saCount:qs.filter(q=>q.type==='sa').length};
+    });
+  },
+  getQSet(id) {
+    const d=this.sh('QSets').getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][0]===id) return {id:d[i][0],name:d[i][1],courseId:d[i][2],questions:JSON.parse(d[i][5]||'[]'),stimuli:JSON.parse(d[i][6]||'[]')};
+    return null;
+  },
+  updateQSet(id,name,courseId,questions,stimuli) {
+    const s=this.sh('QSets'); const d=s.getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][0]===id){
+      s.getRange(i+1,2).setValue(name); s.getRange(i+1,3).setValue(courseId||'');
+      s.getRange(i+1,5).setValue(new Date().toISOString());
+      s.getRange(i+1,6).setValue(JSON.stringify(questions)); s.getRange(i+1,7).setValue(JSON.stringify(stimuli||[]));
+      return {id,name};
+    }
+    return null;
+  },
+  deleteQSet(id) { const s=this.sh('QSets'); const d=s.getDataRange().getValues(); for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);return true;} return false; },
+  saveRoster(block, courseId, students) {
+    const s=this.sh('Rosters'); const d=s.getDataRange().getValues(); const now=new Date().toISOString();
+    for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block)){s.getRange(i+1,2).setValue(courseId||'');s.getRange(i+1,3).setValue(JSON.stringify(students));s.getRange(i+1,4).setValue(now);return {block,count:students.length};}
+    s.appendRow([block,courseId||'',JSON.stringify(students),now]); return {block,count:students.length};
+  },
+  getRosters() {
+    const d=this.sh('Rosters').getDataRange().getValues(); const r={};
+    for(let i=1;i<d.length;i++){const stu=JSON.parse(d[i][2]||'[]');r[d[i][0]]={block:d[i][0],courseId:d[i][1],students:stu,count:stu.length,updatedAt:d[i][3]};}
+    return r;
+  },
+  getRoster(block) { const d=this.sh('Rosters').getDataRange().getValues(); for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block)) return JSON.parse(d[i][2]||'[]'); return []; },
+  
+  // ── SESSIONS ──
+  activateSession(config) {
+    const s=this.sh('Sessions');
+    const d=s.getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][8]==='active'){s.getRange(i+1,9).setValue('ended');s.getRange(i+1,12).setValue(new Date().toISOString());}
+    const qSet=this.getQSet(config.setId); if(!qSet) throw new Error('Question set not found');
+    const id='sess_'+Utilities.getUuid().slice(0,8); const code=this.makeCode(); const now=new Date().toISOString();
+    s.appendRow([id,code,config.setId,qSet.name,config.block,config.mode||'self-paced',config.randomizeQuestions||false,config.randomizeChoices||false,'active',0,now,'',JSON.stringify(config),JSON.stringify(config.timer||{type:'none'}),config.revealMode||'end',JSON.stringify(config.summaryConfig||{showScore:true}),'[]',config.calculatorEnabled||false]);
+    return {sessionId:id,code,setName:qSet.name,block:config.block,mode:config.mode,questionCount:qSet.questions.length};
+  },
+  getActiveSession() {
+    const d=this.sh('Sessions').getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][8]==='active') return this._parseSess(d[i],i+1);
+    return null;
+  },
+  getSessionById(id) {
+    const d=this.sh('Sessions').getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][0]===id) return this._parseSess(d[i],i+1);
+    return null;
+  },
+  _parseSess(r,row) {
+    return {sessionId:r[0],code:r[1],setId:r[2],setName:r[3],block:r[4],mode:r[5],randQ:r[6],randC:r[7],status:r[8],currentQ:r[9]||0,startedAt:r[10],endedAt:r[11],config:JSON.parse(r[12]||'{}'),timer:JSON.parse(r[13]||'{}'),revealMode:r[14]||'end',summaryConfig:JSON.parse(r[15]||'{}'),revealedQs:JSON.parse(r[16]||'[]'),calcEnabled:r[17]===true||r[17]==='TRUE',row};
+  },
+  endSession(id) {
+    return this.withLock(() => {
+      const s=this.sh('Sessions'); const d=s.getDataRange().getValues();
+      for(let i=1;i<d.length;i++) if(d[i][0]===id){
+        s.getRange(i+1,9).setValue('ended');s.getRange(i+1,12).setValue(new Date().toISOString());this.archiveSession(id);
+        const ss=this.sh('StudentSessions'); const sd=ss.getDataRange().getValues();
+        for(let j=1;j<sd.length;j++) if(sd[j][0]===id&&(sd[j][8]===true||sd[j][8]==='TRUE')){ss.getRange(j+1,9).setValue(false);}
+        return true;
+      }
+      return false;
+    });
+  },
+  
+  // ── CONCURRENT SECURE STUDENT JOIN ──
+  studentJoin(code, first, last, clientToken) {
+    return this.withLock(() => {
+      const sess=this.getActiveSession(); if(!sess) return {error:'No active session.'};
+      if(sess.code!==code.toUpperCase().trim()) return {error:'Invalid code.'};
+      
+      const name=(first.trim()+' '+last.trim()).trim();
+      const stuId='stu_'+name.toLowerCase().replace(/[^a-z0-9]/g,'_')+'_'+sess.sessionId.slice(-4);
+      
+      const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues();
+      
+      for(let i=1;i<sd.length;i++) {
+        if(sd[i][0]===sess.sessionId && sd[i][1]===stuId) {
+          if(sd[i][11] && clientToken !== sd[i][11]) return {error:'This name is already in use by another device.'};
+          if(sd[i][8]===true||sd[i][8]==='TRUE') return {error:'Locked out. Wait for teacher.'};
+          
+          const needsFS = sd[i][10]===true||sd[i][10]==='TRUE';
+          const qSet=this.getQSet(sess.setId);
+          return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:true,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:needsFS};
+        }
+      }
+      
+      // New Join
+      let qOrder='';
+      if(sess.randQ||sess.mode==='randomized'){
+        const qSet=this.getQSet(sess.setId);
+        if(qSet){
+          const idx=qSet.questions.map((_,i)=>i);
+          for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+          qOrder=JSON.stringify(idx);
+        }
+      }
+      ssSheet.appendRow([sess.sessionId, stuId, name, '', 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken]);
+      const qSet=this.getQSet(sess.setId);
+      return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false};
+    });
+  },
+
+  studentGetQuestions(sessId,stuId) {
+    const sess=this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+    const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Questions not found'};
+    let questions=JSON.parse(JSON.stringify(qSet.questions)); const stimuli=qSet.stimuli||[];
+    const sd=this.sh('StudentSessions').getDataRange().getValues(); let qOrder=null;
+    for(let i=1;i<sd.length;i++) if(sd[i][0]===sessId&&sd[i][1]===stuId&&sd[i][9]){try{qOrder=JSON.parse(sd[i][9])}catch(e){} break;}
+    if(qOrder&&qOrder.length) questions=qOrder.map(idx=>questions[idx]);
+    if(sess.randC) questions.forEach(q=>{if(q.type==='mc'&&q.choices){const ci=q.correctIndices||[q.correctIndex];const ca=ci.map(x=>q.choices[x]);for(let i=q.choices.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[q.choices[i],q.choices[j]]=[q.choices[j],q.choices[i]];}q.correctIndices=ca.map(c=>q.choices.indexOf(c));if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
+    const studentQs=questions.map(q=>{const sq={...q};delete sq.correctIndex;delete sq.correctIndices;delete sq.correctAnswer;delete sq.rubric;delete sq.sampleAnswer;return sq;});
+    const resps=this.getAllResponses(sessId).filter(r=>r.studentId===stuId);
+    const existing={};resps.forEach(r=>{existing[r.questionId]=r.answer;});
+    const metaResps=this.getAllMeta(sessId).filter(m=>m.studentId===stuId);
+    const existingMeta={};metaResps.forEach(m=>{existingMeta[m.questionId]=m.confidence;});
+    return {questions:studentQs,stimuli,mode:sess.mode,currentQ:sess.currentQ||0,existing,existingMeta,timer:sess.timer,revealMode:sess.revealMode,revealedQs:sess.revealedQs||[],calcEnabled:sess.calcEnabled,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
+  },
+  
+  // ── CONCURRENT SECURE SUBMISSION ──
+  studentSubmitAnswer(sessId, stuId, qId, answer) {
+    return this.withLock(() => {
+      const sess=this.getSessionById(sessId); if(!sess||sess.status!=='active') return {error:'Session ended'};
+      const qSet=this.getQSet(sess.setId); const q=qSet.questions.find(qq=>qq.id===qId); if(!q) return {error:'Q not found'};
+      const stuName=this.getStudentName(sessId,stuId); const maxPts=q.points||1;
+      let isCorrect=null,points=0,partialCredit=false;
+      if(q.type==='mc'){
+        const ci=q.correctIndices||[q.correctIndex]; const ca=ci.map(x=>q.choices[x]);
+        if(ca.length===1){isCorrect=(answer===ca[0]);points=isCorrect?maxPts:0;}
+        else{const sel=Array.isArray(answer)?answer:[answer];const cc=sel.filter(a=>ca.includes(a)).length;const ic=sel.filter(a=>!ca.includes(a)).length;points=Math.max(0,Math.round(((cc-ic)/ca.length)*maxPts*10)/10);isCorrect=(cc===ca.length&&ic===0);partialCredit=points>0&&!isCorrect;}
+      }
+      const qIdx=qSet.questions.findIndex(qq=>qq.id===qId);
+      const ansStr=Array.isArray(answer)?JSON.stringify(answer):answer;
+      
+      const rSheet=this.sh('Responses');
+      const rd=rSheet.getDataRange().getValues();
+      
+      for(let i=1;i<rd.length;i++) {
+        if(rd[i][0]===sessId && rd[i][1]===stuId && rd[i][3]===qId){
+          rSheet.getRange(i+1,6).setValue(ansStr);rSheet.getRange(i+1,7).setValue(isCorrect);rSheet.getRange(i+1,8).setValue(points);rSheet.getRange(i+1,10).setValue(new Date().toISOString());rSheet.getRange(i+1,11).setValue(partialCredit);
+          let ci2=null;if(sess.revealMode==='immediate')ci2=this._correctInfo(q);
+          return {saved:true,isCorrect,points,maxPts,partialCredit,correctInfo:ci2};
+        }
+      }
+      rSheet.appendRow([sessId,stuId,stuName,qId,qIdx,ansStr,isCorrect,points,maxPts,new Date().toISOString(),partialCredit]);
+      let ci3=null;if(sess.revealMode==='immediate')ci3=this._correctInfo(q);
+      return {saved:true,isCorrect,points,maxPts,partialCredit,correctInfo:ci3};
+    });
+  },
+  _correctInfo(q){if(q.type==='mc'){const ci=q.correctIndices||[q.correctIndex];return {correctAnswers:ci.map(i=>q.choices[i]),correctIndices:ci};}return null;},
+  
+  studentSubmitMeta(sessId,stuId,qId,conf) {
+    return this.withLock(() => {
+      const name=this.getStudentName(sessId,stuId);
+      const s=this.sh('Metacognition');const d=s.getDataRange().getValues();
+      for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId&&d[i][3]===qId){s.getRange(i+1,5).setValue(conf);s.getRange(i+1,6).setValue(new Date().toISOString());return true;}
+      s.appendRow([sessId,stuId,name,qId,conf,new Date().toISOString()]);return true;
+    });
+  },
+  
+  studentReportViolation(sessId,stuId,type) {
+    return this.withLock(() => {
+      const name=this.getStudentName(sessId,stuId);
+      this.sh('Violations').appendRow([sessId,stuId,name,type,new Date().toISOString(),false]);
+      const s=this.sh('StudentSessions');const d=s.getDataRange().getValues();
+      for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){
+        s.getRange(i+1,8).setValue((d[i][7]||0)+1);
+        s.getRange(i+1,9).setValue(true); // Lock out
+        s.getRange(i+1,11).setValue(true); // Needs fullscreen on re-admit
+        break;
+      }
+      return {lockedOut:true};
+    });
+  },
+  
+  readmitStudent(sessId, stuId) {
+    return this.withLock(() => {
+      const s=this.sh('StudentSessions');const d=s.getDataRange().getValues();
+      for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){
+        s.getRange(i+1,9).setValue(false); // Unlock
+        s.getRange(i+1,11).setValue(true); // Require fullscreen re-entry
+        break;
+      }
+      // Resolve ALL violations for this student
+      const v=this.sh('Violations');const vd=v.getDataRange().getValues();
+      for(let i=1;i<vd.length;i++) if(vd[i][0]===sessId&&vd[i][1]===stuId&&!vd[i][5]){
+        v.getRange(i+1,6).setValue(true);
+      }
+      return {readmitted:true};
+    });
+  },
+
+  studentCheckStatus(sessId,stuId) {
+    const sess=this.getSessionById(sessId); if(!sess) return {sessionStatus:'ended'};
+    const d=this.sh('StudentSessions').getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){
+      return {sessionStatus:sess.status,lockedOut:d[i][8]===true||d[i][8]==='TRUE',
+        needsFullscreen:d[i][10]===true||d[i][10]==='TRUE',
+        currentQ:sess.currentQ||0,mode:sess.mode,timer:sess.timer,revealedQs:sess.revealedQs||[]};
+    }
+    return {sessionStatus:'not-found'};
+  },
+
+  studentFinish(sessId,stuId) {
+    return this.withLock(() => {
+      const s=this.sh('StudentSessions');const d=s.getDataRange().getValues();
+      for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){s.getRange(i+1,5).setValue('finished');s.getRange(i+1,7).setValue(new Date().toISOString());return true;}
+      return false;
+    });
+  },
+
+  // Read functions do not strictly require locks for performance reasons.
+  getLiveResults(sessId) {
+    const sess=this.getSessionById(sessId);if(!sess)return null;
+    const qSet=this.getQSet(sess.setId);const questions=qSet?qSet.questions:[];
+    const stuSess=this.getStudentSessions(sessId);const resps=this.getAllResponses(sessId);
+    const viols=this.getActiveViolations(sessId);const meta=this.getAllMeta(sessId);const roster=this.getRoster(sess.block);
+    const grades = this.getAIGrades(sessId);
+    
+    const students=stuSess.map(ss=>{
+      const sr=resps.filter(r=>r.studentId===ss.studentId);
+      const sm=meta.filter(m=>m.studentId===ss.studentId);
+      let mcC=0,mcT=0;
+      sr.forEach(r=>{const q=questions.find(qq=>qq.id===r.questionId);if(q&&q.type==='mc'){mcT++;if(r.isCorrect===true||r.isCorrect==='TRUE')mcC++;}});
+      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr};
+    });
+    
+    const qStats=questions.map((q,idx)=>{
+      const qr=resps.filter(r=>r.questionId===q.id);
+      const qm=meta.filter(m=>m.questionId===q.id);
+      if(q.type==='mc'){
+        const correct=qr.filter(r=>r.isCorrect===true||r.isCorrect==='TRUE').length;
+        const dist={};(q.choices||[]).forEach(c=>dist[c]=0);
+        qr.forEach(r=>{try{const a=JSON.parse(r.answer);if(Array.isArray(a))a.forEach(x=>{if(dist[x]!==undefined)dist[x]++});else if(dist[r.answer]!==undefined)dist[r.answer]++}catch(e){if(dist[r.answer]!==undefined)dist[r.answer]++}});
+        return {id:q.id,idx,text:q.text,type:'mc',total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
+          studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect}))};
+      }else{
+        return {id:q.id,idx,text:q.text,type:'sa',total:qr.length,
+          studentResponses:qr.map(r=>{
+            const g = grades.find(gg=>gg.studentId===r.studentId && gg.questionId===q.id);
+            return {studentId:r.studentId,name:r.studentName,answer:r.answer, score: r.points, feedback: g ? g.feedback : null};
+          })};
+      }
+    });
+    
+    const joinedNames = new Set(students.map(s => s.name.toLowerCase()));
+    const missing = roster.filter(r => !joinedNames.has(r.name.toLowerCase())).map(r => ({
+      studentId: null, name: r.name, email: r.email || '', status: 'not-joined',
+      answered: 0, total: questions.length, mcCorrect: 0, mcTotal: 0,
+      lockedOut: false, violationCount: 0, avgConf: null, responses: []
+    }));
+    
+    return {session:{...sess,questionCount:questions.length},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,rosterSize:roster.length,missingCount:missing.length};
+  },
+
+  // Helpers
+  getStudentName(sessId,stuId){const d=this.sh('StudentSessions').getDataRange().getValues();for(let i=1;i<d.length;i++)if(d[i][0]===sessId&&d[i][1]===stuId)return d[i][2];return 'Unknown';},
+  getStudentSessions(sessId){const d=this.sh('StudentSessions').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11]}));},
+  getAllResponses(sessId){const d=this.sh('Responses').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:r[5],isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
+  getAllMeta(sessId){const d=this.sh('Metacognition').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
+  getActiveViolations(sessId){const d=this.sh('Violations').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},
+  getAIGrades(sessId){const d=this.sh('AIGrades').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12]}));}
+};
