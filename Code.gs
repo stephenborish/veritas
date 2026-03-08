@@ -40,11 +40,9 @@ function AUTHORIZE_SYSTEM() {
 function doGet(e) {
   const p = (e.parameter.page || '').toLowerCase();
   const code = e.parameter.code || '';
-  if (p === 'student' || code) {
-    const template = HtmlService.createTemplateFromFile('StudentApp');
-    template.prefilledCode = normalizeStudentCode(code);
-
-    return template.evaluate()
+  const studentToken = normalizeStudentToken(e.parameter.studentToken || e.parameter.stk || '');
+  if (p === 'student' || code || studentToken) {
+    return HtmlService.createHtmlOutputFromFile('StudentApp')
       .setTitle('Veritas Assess')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
@@ -57,9 +55,133 @@ function doGet(e) {
 
 function normalizeStudentCode(rawCode) {
   if (!rawCode) return '';
-  const normalized = String(rawCode).trim().toUpperCase();
-  const codePattern = /^[A-Z]+[0-9]+$/;
+  const normalized = String(rawCode).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const codePattern = /^[A-Z0-9]{2,20}$/;
   return codePattern.test(normalized) ? normalized : '';
+}
+
+function normalizeStudentToken(rawToken) {
+  return String(rawToken || '').trim().replace(/\s+/g, '').slice(0, 2000);
+}
+
+function normalizeStudentIdentityName_(name) {
+  return String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function normalizeStudentEmail_(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function getStudentNameParts_(student) {
+  const firstName = String((student && student.firstName) || '').trim();
+  const lastName = String((student && student.lastName) || '').trim();
+  if (firstName || lastName) {
+    return { firstName, lastName, fullName: [firstName, lastName].join(' ').trim() };
+  }
+
+  const fullName = String((student && student.name) || '').trim();
+  const parts = fullName ? fullName.split(/\s+/) : [];
+  return {
+    firstName: parts[0] || '',
+    lastName: parts.length > 1 ? parts.slice(1).join(' ') : '',
+    fullName
+  };
+}
+
+function base64UrlEncode_(value) {
+  const encoded = typeof value === 'string'
+    ? Utilities.base64EncodeWebSafe(value, Utilities.Charset.UTF_8)
+    : Utilities.base64EncodeWebSafe(value);
+  return encoded.replace(/=+$/g, '');
+}
+
+function base64UrlDecodeToString_(value) {
+  const normalized = String(value || '');
+  if (!normalized) return '';
+  const padded = normalized + '==='.slice((normalized.length + 3) % 4);
+  const bytes = Utilities.base64DecodeWebSafe(padded);
+  return Utilities.newBlob(bytes).getDataAsString('UTF-8');
+}
+
+function constantTimeEquals_(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+function getStudentLinkSecret_() {
+  const props = PropertiesService.getScriptProperties();
+  let secret = props.getProperty('STUDENT_LINK_SECRET');
+  if (secret) return secret;
+
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    secret = props.getProperty('STUDENT_LINK_SECRET');
+    if (secret) return secret;
+    secret = Utilities.getUuid() + '.' + new Date().getTime().toString(36);
+    props.setProperty('STUDENT_LINK_SECRET', secret);
+    return secret;
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
+function signStudentAccessPayload_(payloadSegment) {
+  const sigBytes = Utilities.computeHmacSha256Signature(payloadSegment, getStudentLinkSecret_());
+  return base64UrlEncode_(sigBytes);
+}
+
+function createStudentAccessToken(session, student) {
+  const email = normalizeStudentEmail_((student && student.email) || '');
+  const nameParts = getStudentNameParts_(student);
+  const fullName = nameParts.fullName || String((student && student.name) || '').trim();
+  const payload = {
+    v: 1,
+    sid: String((session && session.sessionId) || ''),
+    code: normalizeStudentCode((session && session.code) || ''),
+    block: String((session && session.block) || ''),
+    email: email,
+    name: fullName,
+    firstName: nameParts.firstName,
+    lastName: nameParts.lastName,
+    normalizedName: normalizeStudentIdentityName_(fullName),
+    issuedAt: new Date().toISOString()
+  };
+  const payloadSegment = base64UrlEncode_(JSON.stringify(payload));
+  return payloadSegment + '.' + signStudentAccessPayload_(payloadSegment);
+}
+
+function verifyStudentAccessToken(token) {
+  const normalizedToken = normalizeStudentToken(token);
+  if (!normalizedToken) return null;
+
+  const parts = normalizedToken.split('.');
+  if (parts.length !== 2) return null;
+
+  const payloadSegment = parts[0];
+  const providedSig = parts[1];
+  const expectedSig = signStudentAccessPayload_(payloadSegment);
+  if (!constantTimeEquals_(providedSig, expectedSig)) return null;
+
+  try {
+    const payload = JSON.parse(base64UrlDecodeToString_(payloadSegment));
+    if (!payload || Number(payload.v) !== 1 || !payload.sid) return null;
+    payload.code = normalizeStudentCode(payload.code || '');
+    payload.email = normalizeStudentEmail_(payload.email || '');
+    payload.name = String(payload.name || '').trim();
+    payload.firstName = String(payload.firstName || '').trim();
+    payload.lastName = String(payload.lastName || '').trim();
+    payload.normalizedName = normalizeStudentIdentityName_(payload.normalizedName || payload.name || [payload.firstName, payload.lastName].join(' '));
+    return payload;
+  } catch (e) {
+    return null;
+  }
 }
 
 function initSystem() { return DB.init(); }
@@ -108,7 +230,7 @@ function getLiveQuestionDetail(sessId, qId) { return DB.getLiveQuestionDetail(se
 function readmitStudent(sessId, stuId) { return DB.readmitStudent(sessId, stuId); }
 
 // ── Student ──
-function studentJoin(code, first, last, clientToken) { return DB.studentJoin(code, first, last, clientToken); }
+function studentJoin(code, first, last, clientToken, studentToken) { return DB.studentJoin(code, first, last, clientToken, studentToken); }
 function studentGetQuestions(sessId, stuId) { return DB.studentGetQuestions(sessId, stuId); }
 function studentSubmitAnswer(sessId, stuId, qId, answer) { return DB.studentSubmitAnswer(sessId, stuId, qId, answer); }
 function studentSubmitMeta(sessId, stuId, qId, confidence) { return DB.studentSubmitMeta(sessId, stuId, qId, confidence); }
@@ -175,7 +297,8 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
     }
     try {
       const fname = student.firstName || student.name.split(' ')[0] || 'Student';
-      const joinUrl = buildStudentJoinUrl(studentUrl, sess.code);
+      const studentToken = createStudentAccessToken(sess, student);
+      const joinUrl = buildStudentJoinUrl(studentUrl, sess.code, studentToken);
       const html = buildAssessmentEmail(fname, joinUrl, student.email, sess.setName, sess.code);
       const subject = 'Your VERITAS Assess Link – ' + new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
       
@@ -247,9 +370,10 @@ function resolveStudentLandingUrl(fallbackBaseUrl) {
   return '';
 }
 
-function buildStudentJoinUrl(baseUrl, sessionCode) {
+function buildStudentJoinUrl(baseUrl, sessionCode, studentToken) {
   const normalizedBase = String(baseUrl || '').trim();
   const normalizedCode = normalizeStudentCode(sessionCode);
+  const normalizedToken = normalizeStudentToken(studentToken);
   if (!normalizedBase) return '';
 
   const params = [];
@@ -260,6 +384,9 @@ function buildStudentJoinUrl(baseUrl, sessionCode) {
   }
   if (normalizedCode) {
     params.push('code=' + encodeURIComponent(normalizedCode));
+  }
+  if (normalizedToken) {
+    params.push('studentToken=' + encodeURIComponent(normalizedToken));
   }
 
   if (!params.length) {
@@ -320,7 +447,7 @@ DB wrappers
 - getLiveResults(id) -> DB.getLiveResults() => LiveResults
 - getLiveQuestionDetail(sessId, qId) -> DB.getLiveQuestionDetail() => LiveQuestionDetail|null
 - readmitStudent(sessId, stuId) -> DB.readmitStudent() => { ok }|{ error }
-- studentJoin(code, first, last, clientToken) -> DB.studentJoin() => JoinResult|{ error }
+- studentJoin(code, first, last, clientToken, studentToken) -> DB.studentJoin() => JoinResult|{ error }
 - studentGetQuestions(sessId, stuId) -> DB.studentGetQuestions() => StudentQuestionPayload|{ error }
 - studentSubmitAnswer(sessId, stuId, qId, answer) -> DB.studentSubmitAnswer() => SaveResult|{ error }
 - studentSubmitMeta(sessId, stuId, qId, confidence) -> DB.studentSubmitMeta() => boolean|{ error }
@@ -378,14 +505,14 @@ function buildAssessmentEmail(name, url, email, assessName, sessionCode) {
         </div>
         <div class="content-padding">
             <p>Hello <strong>${name}</strong>,</p>
-            <p>Your personalized link for <strong>${assessName}</strong> is ready. Please click the button below, then enter your session code.</p>
+            <p>Your secure link for <strong>${assessName}</strong> is ready. Open it below and your session details should load automatically.</p>
             <div style="text-align: center;">
                 <a href="${url}" class="btn">Open Veritas</a>
             </div>
             <div style="background:#f8fafc;border:1px solid #d1d5db;border-radius:6px;padding:16px;text-align:center;margin:16px 0;">
                 <p style="margin:0 0 8px 0;font-size:12px;letter-spacing:.7px;text-transform:uppercase;color:#6b7280;font-weight:700;">Session Code</p>
                 <p style="margin:0;font-size:30px;letter-spacing:2px;font-weight:800;color:#111827;font-family:ui-monospace, SFMono-Regular, Menlo, monospace;">${sessionCode}</p>
-                <p style="margin:8px 0 0 0;font-size:13px;color:#6b7280;">Copy this code and paste it after opening Veritas.</p>
+                <p style="margin:8px 0 0 0;font-size:13px;color:#6b7280;">If the code box is blank after opening the link, use this backup code.</p>
             </div>
             <hr class="divider">
             <div style="background-color: #ffdcdc; padding: 20px; border-radius: 6px; border: 1px solid #fed7d7;">
