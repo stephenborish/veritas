@@ -38,7 +38,7 @@ const DB = {
       'Sessions':['ID','Code','SetID','SetName','Block','Mode','RandQ','RandC','Status','CurrentQ','StartedAt','EndedAt','ConfigJSON','TimerJSON','RevealMode','SummaryConfigJSON','RevealedQs','CalcEnabled'],
       'Responses':['SessionID','StudentID','StudentName','QuestionID','QIndex','Answer','IsCorrect','Points','MaxPoints','SubmittedAt','PartialCredit'],
       'Metacognition':['SessionID','StudentID','StudentName','QuestionID','Confidence','SubmittedAt'],
-      'StudentSessions':['SessionID','StudentID','StudentName','Email','Status','JoinedAt','FinishedAt','ViolationCount','LockedOut','QOrder','NeedsFullscreen', 'ClientToken'],
+      'StudentSessions':['SessionID','StudentID','StudentName','Email','Status','JoinedAt','FinishedAt','ViolationCount','LockedOut','QOrder','NeedsFullscreen', 'ClientToken', 'NormalizedName', 'IdentityKey'],
       'Violations':['SessionID','StudentID','StudentName','Type','Timestamp','Resolved'],
       'AIGrades':['SessionID','StudentID','StudentName','QuestionID','Score','MaxScore','Feedback','Answer','GradedAt','Overridden','OverrideScore','OverrideFeedback','Context'],
       'Archive':['SessionID','Code','SetName','Block','StartedAt','EndedAt','StudentCount','AvgPct','DataJSON']
@@ -183,32 +183,63 @@ const DB = {
       if(sess.code!==code.toUpperCase().trim()) return {error:'Invalid code.'};
       
       const name=(first.trim()+' '+last.trim()).trim();
-      const base='stu_'+name.toLowerCase().replace(/[^a-z0-9]/g,'_')+'_'+sess.sessionId.slice(-4);
-      let stuId=base;
+      const normalizedName=this.normalizeStudentName(name);
+      const roster=this.getRoster(sess.block);
+      const matchedRoster=(roster||[]).filter(r=>this.normalizeStudentName((r&&r.name)||'')===normalizedName);
+      const matchedWithEmail=matchedRoster.filter(r=>r&&r.email);
+      const rosterEmail=matchedWithEmail.length===1?String(matchedWithEmail[0].email).trim():'';
+      const rosterKey=rosterEmail?('email:'+rosterEmail.toLowerCase()):'';
       
       const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues();
-      const existingIds = new Set(sd.slice(1).filter(r=>r[0]===sess.sessionId).map(r=>r[1]));
-      if (!existingIds.has(stuId)) {
-        // keep generated id
+      const sessionRows=sd.slice(1).filter(r=>r[0]===sess.sessionId);
+
+      let identityKey='';
+      if(rosterKey){
+        identityKey='sess:'+sess.sessionId+'|'+rosterKey;
+      }else{
+        const sameNameRows=sessionRows.filter(r=>{
+          const rowNorm=(r[12]||this.normalizeStudentName(r[2]||''));
+          return rowNorm===normalizedName;
+        });
+        let suffix=1;
+        const usedSuffixes=new Set(sameNameRows.map(r=>{
+          const key=String(r[13]||'');
+          const m=key.match(/\|name:.*#(\d+)$/);
+          return m?Number(m[1]):null;
+        }).filter(v=>v!==null));
+        if(clientToken){
+          const tokenMatch=sameNameRows.find(r=>r[11]&&r[11]===clientToken);
+          if(tokenMatch){
+            const existingKey=String(tokenMatch[13]||'');
+            if(existingKey){
+              identityKey=existingKey;
+            }else{
+              suffix=1;
+              while(usedSuffixes.has(suffix)) suffix++;
+              identityKey='sess:'+sess.sessionId+'|name:'+normalizedName+'#'+suffix;
+            }
+          }
+        }
+        if(!identityKey){
+          while(usedSuffixes.has(suffix)) suffix++;
+          identityKey='sess:'+sess.sessionId+'|name:'+normalizedName+'#'+suffix;
+        }
       }
       
       for(let i=1;i<sd.length;i++) {
-        if(sd[i][0]===sess.sessionId && sd[i][1]===stuId) {
+        const rowNorm=(sd[i][12]||this.normalizeStudentName(sd[i][2]||''));
+        const rowIdentity=sd[i][13]||('sess:'+sd[i][0]+'|name:'+rowNorm+'#1');
+        if(sd[i][0]===sess.sessionId && rowIdentity===identityKey) {
           if(sd[i][11] && clientToken !== sd[i][11]) return {error:'This name is already in use by another device.'};
           if(sd[i][8]===true||sd[i][8]==='TRUE') return {error:'Locked out. Wait for teacher.'};
           
           const needsFS = sd[i][10]===true||sd[i][10]==='TRUE';
           const qSet=this.getQSet(sess.setId);
-          return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:true,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:needsFS,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
+          return {sessionId:sess.sessionId,studentId:sd[i][1],studentName:sd[i][2],mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:true,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:needsFS,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
         }
       }
 
-      // Ensure unique ID for duplicate names within same session
-      if (existingIds.has(stuId)) {
-        let n = 2;
-        while (existingIds.has(base + '_' + n)) n++;
-        stuId = base + '_' + n;
-      }
+      const stuId='stu_'+Utilities.getUuid().replace(/-/g,'').slice(0,12);
       
       // New Join
       let qOrder='';
@@ -220,7 +251,7 @@ const DB = {
           qOrder=JSON.stringify(idx);
         }
       }
-      ssSheet.appendRow([sess.sessionId, stuId, name, '', 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken]);
+      ssSheet.appendRow([sess.sessionId, stuId, name, rosterEmail, 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken, normalizedName, identityKey]);
       const qSet=this.getQSet(sess.setId);
       return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
     });
@@ -374,12 +405,30 @@ const DB = {
       }
     });
     
-    const joinedNames = new Set(students.map(s => s.name.toLowerCase()));
-    const missing = roster.filter(r => !joinedNames.has(r.name.toLowerCase())).map(r => ({
-      studentId: null, name: r.name, email: r.email || '', status: 'not-joined',
-      answered: 0, total: questions.length, mcCorrect: 0, mcTotal: 0,
-      lockedOut: false, violationCount: 0, avgConf: null, responses: []
-    }));
+    const joinedRosterKeys=new Set(stuSess.filter(s=>s.identityKey&&String(s.identityKey).indexOf('|email:')>-1).map(s=>s.identityKey));
+    const joinedNameCounts={};
+    stuSess.filter(s=>!s.identityKey||String(s.identityKey).indexOf('|email:')===-1).forEach(s=>{
+      const n=s.normalizedName||this.normalizeStudentName(s.studentName||'');
+      joinedNameCounts[n]=(joinedNameCounts[n]||0)+1;
+    });
+    const missing=[];
+    const seenNameCounts={};
+    (roster||[]).forEach(r=>{
+      const rn=this.normalizeStudentName((r&&r.name)||'');
+      const email=(r&&r.email)?String(r.email).trim().toLowerCase():'';
+      if(email){
+        const rosterIdentity='sess:'+sess.sessionId+'|email:'+email;
+        if(joinedRosterKeys.has(rosterIdentity)) return;
+      }else{
+        seenNameCounts[rn]=(seenNameCounts[rn]||0)+1;
+        if((joinedNameCounts[rn]||0)>=seenNameCounts[rn]) return;
+      }
+      missing.push({
+        studentId: null, name: (r&&r.name)||'', email: (r&&r.email)||'', status: 'not-joined',
+        answered: 0, total: questions.length, mcCorrect: 0, mcTotal: 0,
+        lockedOut: false, violationCount: 0, avgConf: null, responses: []
+      });
+    });
     
     return {session:{...sess,questionCount:questions.length},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length};
   },
@@ -532,9 +581,10 @@ const DB = {
 
   // Helpers
   getStudentName(sessId,stuId){const d=this.sh('StudentSessions').getDataRange().getValues();for(let i=1;i<d.length;i++)if(d[i][0]===sessId&&d[i][1]===stuId)return d[i][2];return 'Unknown';},
-  getStudentSessions(sessId){const d=this.sh('StudentSessions').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11]}));},
+  getStudentSessions(sessId){const d=this.sh('StudentSessions').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11],normalizedName:r[12]||this.normalizeStudentName(r[2]||''),identityKey:r[13]||''}));},
   getAllResponses(sessId){const d=this.sh('Responses').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:r[5],isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
   getAllMeta(sessId){const d=this.sh('Metacognition').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
   getActiveViolations(sessId){const d=this.sh('Violations').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},
-  getAIGrades(sessId){const d=this.sh('AIGrades').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12]}));}
+  getAIGrades(sessId){const d=this.sh('AIGrades').getDataRange().getValues();return d.slice(1).filter(r=>r[0]===sessId).map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12]}));},
+  normalizeStudentName(name){return String(name||'').toLowerCase().replace(/\s+/g,' ').trim();}
 };
