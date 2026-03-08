@@ -178,7 +178,6 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 </div>
 
 <script>
-/*@@CODE@@*/
 
 const S = {
   sid:null, stuId:null, qs:[], cur:0, ans:{}, conf:{}, correct:{},
@@ -434,7 +433,8 @@ function toggleCalc() {
   document.addEventListener('mouseup',()=>{isDrag=false;});
 })();
 
-if(window.__code) document.getElementById('jCode').value = window.__code;
+const prefilledCode = <?!= JSON.stringify(prefilledCode || '') ?>;
+if(prefilledCode) document.getElementById('jCode').value = prefilledCode;
 </script>
 </body>
 </html>

@@ -17,24 +17,25 @@ function doGet(e) {
   const p = (e.parameter.page || '').toLowerCase();
   const code = e.parameter.code || '';
   if (p === 'student' || code) {
-    let html = HtmlService.createHtmlOutputFromFile('StudentApp')
+    const template = HtmlService.createTemplateFromFile('StudentApp');
+    template.prefilledCode = normalizeStudentCode(code);
+
+    return template.evaluate()
       .setTitle('Veritas Assess')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
-      
-    if (code) {
-      const safeCode = JSON.stringify(String(code));
-      const c = html.getContent().replace('/*@@CODE@@*/', 'window.__code=' + safeCode + ';');
-      return HtmlService.createHtmlOutput(c).setTitle('Veritas Assess')
-        .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
-        .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
-    }
-    return html;
   }
   return HtmlService.createHtmlOutputFromFile('TeacherApp')
     .setTitle('Veritas Assess — Dashboard')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
+}
+
+function normalizeStudentCode(rawCode) {
+  if (!rawCode) return '';
+  const normalized = String(rawCode).trim().toUpperCase();
+  const codePattern = /^[A-Z]+[0-9]+$/;
+  return codePattern.test(normalized) ? normalized : '';
 }
 
 function initSystem() { return DB.init(); }
