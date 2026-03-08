@@ -18,7 +18,7 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;-webkit-user-select:none;user-select:none;overflow-x:hidden}
 
-/* ── JOIN ── */
+/* -- JOIN -- */
 .join{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px;background:var(--bg)}
 .join-card{background:var(--s);border-radius:24px;box-shadow:0 12px 48px rgba(0,0,0,.08);padding:56px 48px;max-width:460px;width:100%;text-align:center}
 .join-card h1{font-size:28px;font-weight:700;margin-bottom:6px;letter-spacing:-.6px}
@@ -31,7 +31,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .jbtn:hover{background:var(--teal2)}.jbtn:disabled{background:#9ca3af;cursor:not-allowed}
 .jerr{font-size:14px;color:var(--red);margin-top:16px;display:none; font-weight:600}.jerr.show{display:block}
 
-/* ── SCREEN STATES (SOLID BACKGROUNDS TO FIX OVERLAPS) ── */
+/* -- SCREEN STATES (SOLID BACKGROUNDS TO FIX OVERLAPS) -- */
 .fsp, .lock, .modal-bg{display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:40px;color:var(--tx)}
 .fsp.show, .lock.show, .modal-bg.show{display:flex}
 .lock{background:#d32f2f; color:#fff;} 
@@ -46,7 +46,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .modal-card h2 { color:var(--tx); font-size:28px; margin-bottom:16px; }
 .modal-card p { color:var(--tx2); font-size:16px; margin-bottom:32px; }
 
-/* ── ASSESSMENT LAYOUT ── */
+/* -- ASSESSMENT LAYOUT -- */
 .assess{display:none;min-height:100vh}
 .a-hdr{background:var(--s);border-bottom:1px solid var(--bd);padding:16px 40px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50}
 .a-hdr .brand{font-weight:800;font-size:18px;color:var(--teal); letter-spacing:-0.5px}
@@ -119,7 +119,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
     <h1>Join Assessment</h1>
     <p class="sub">Enter the session code from your teacher</p>
     <label>Session Code</label>
-    <input type="text" id="jCode" class="code-in" maxlength="14" autocomplete="off" placeholder="———">
+    <input type="text" id="jCode" class="code-in" maxlength="14" autocomplete="off" placeholder="&mdash;&mdash;&mdash;">
     <label>First Name</label>
     <input type="text" id="jFirst" autocomplete="off" placeholder="First name">
     <label>Last Name</label>
@@ -136,7 +136,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 </div>
 
 <div class="lock" id="lockOverlay">
-  <h2>⚠ Session Locked</h2>
+  <h2>&#x26A0; Session Locked</h2>
   <p>You exited fullscreen or switched tabs. This action has been recorded. Please wait for your teacher to review and re-admit you.</p>
 </div>
 
@@ -162,19 +162,19 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   </div>
   <div class="q-area" id="qArea"></div>
   <div class="a-ft" id="aFt">
-    <button class="nbtn nbtn-back" id="prevBtn">← Previous</button>
-    <button class="nbtn nbtn-next" id="nextBtn">Next Question →</button>
+    <button class="nbtn nbtn-back" id="prevBtn">&larr; Previous</button>
+    <button class="nbtn nbtn-next" id="nextBtn">Next Question &rarr;</button>
   </div>
 </div>
 
-<button class="calc-btn" id="calcBtn">🔢 Calculator</button>
+<button class="calc-btn" id="calcBtn">&#x1F522; Calculator</button>
 <div class="calc-win" id="calcWin">
-  <div class="calc-bar" id="calcBar"><span>TI-84 Emulator</span><button id="closeCalcBtn">✕</button></div>
+  <div class="calc-bar" id="calcBar"><span>TI-84 Emulator</span><button id="closeCalcBtn">&#x2715;</button></div>
   <iframe src="about:blank" id="calcIframe"></iframe>
 </div>
 
 <div class="done" id="doneScreen">
-  <div class="ic">✅</div>
+  <div class="ic">&#x2705;</div>
   <h2>Assessment Complete</h2>
   <div style="font-size:20px; color:var(--tx2); margin-bottom:40px">Your responses have been securely submitted.</div>
   <div id="sumContent"></div>
@@ -301,7 +301,7 @@ function renderQ() {
   // Lockstep Logic: Hide Next/Prev buttons entirely so students cannot advance on their own
   document.getElementById('prevBtn').style.visibility = (S.cur > 0 && S.mode !== 'lockstep') ? 'visible' : 'hidden';
   document.getElementById('nextBtn').style.visibility = (S.mode !== 'lockstep') ? 'visible' : 'hidden';
-  document.getElementById('nextBtn').textContent = S.cur === total - 1 ? 'Submit Assessment' : 'Next Question →';
+  document.getElementById('nextBtn').innerHTML = S.cur === total - 1 ? 'Submit Assessment' : 'Next Question &rarr;';
   
   const hasAns = !!S.ans[q.id];
   
