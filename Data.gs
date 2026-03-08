@@ -593,7 +593,7 @@ const DB = {
     return this.buildStudentSummary(sess, responses);
   },
   buildStudentSummary(sess, responses) {
-    const cfg=(sess&&sess.summaryConfig)||{showScore:true};
+    const cfg=(sess&&sess.summaryConfig)||{showScore:false};
     const safeResponses=Array.isArray(responses)?responses:[];
     const totalPts=safeResponses.reduce((sum,r)=>sum+(Number(r.points)||0),0);
     const totalMax=safeResponses.reduce((sum,r)=>sum+(Number(r.maxPoints)||0),0);
