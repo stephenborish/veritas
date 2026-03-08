@@ -124,7 +124,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
     <input type="text" id="jFirst" autocomplete="off" placeholder="First name">
     <label>Last Name</label>
     <input type="text" id="jLast" autocomplete="off" placeholder="Last name">
-    <button class="jbtn" id="jBtn" onclick="doJoin()">Join Session</button>
+    <button class="jbtn" id="jBtn">Join Session</button>
     <div class="jerr" id="jErr"></div>
   </div>
 </div>
@@ -132,7 +132,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 <div class="fsp" id="fsPrompt">
   <h2>Fullscreen Required</h2>
   <p>This assessment utilizes the full desktop view and must be taken in fullscreen mode.</p>
-  <button class="fsbtn" onclick="enterFS()">Enter Fullscreen & Begin</button>
+  <button class="fsbtn" id="enterFsBtn">Enter Fullscreen & Begin</button>
 </div>
 
 <div class="lock" id="lockOverlay">
@@ -146,8 +146,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
     <h2>Submit Assessment?</h2>
     <p>You will not be able to return to change your answers after submitting.</p>
     <div style="display:flex; gap:16px; justify-content:center">
-      <button class="nbtn nbtn-back" onclick="document.getElementById('submitModal').classList.remove('show')">Return to Test</button>
-      <button class="nbtn nbtn-next" onclick="executeSubmit()">Final Submit</button>
+      <button class="nbtn nbtn-back" id="cancelSubmitBtn">Return to Test</button>
+      <button class="nbtn nbtn-next" id="confirmSubmitBtn">Final Submit</button>
     </div>
   </div>
 </div>
@@ -162,14 +162,14 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   </div>
   <div class="q-area" id="qArea"></div>
   <div class="a-ft" id="aFt">
-    <button class="nbtn nbtn-back" id="prevBtn" onclick="goPrev()">← Previous</button>
-    <button class="nbtn nbtn-next" id="nextBtn" onclick="goNext()">Next Question →</button>
+    <button class="nbtn nbtn-back" id="prevBtn">← Previous</button>
+    <button class="nbtn nbtn-next" id="nextBtn">Next Question →</button>
   </div>
 </div>
 
-<button class="calc-btn" id="calcBtn" onclick="toggleCalc()">🔢 Calculator</button>
+<button class="calc-btn" id="calcBtn">🔢 Calculator</button>
 <div class="calc-win" id="calcWin">
-  <div class="calc-bar" id="calcBar"><span>TI-84 Emulator</span><button onclick="toggleCalc()">✕</button></div>
+  <div class="calc-bar" id="calcBar"><span>TI-84 Emulator</span><button id="closeCalcBtn">✕</button></div>
   <iframe src="about:blank" id="calcIframe"></iframe>
 </div>
 
@@ -313,7 +313,7 @@ function renderQ() {
       </div>
     `; }).join('')}</div>`;
   } else {
-    html += `<div class="sa"><textarea id="saIn" data-qid="${q.id}" oninput="trackSA('${q.id}')" onblur="saveSA('${q.id}')" placeholder="Type your detailed response here...">${S.ans[q.id]||''}</textarea></div>`;
+    html += `<div class="sa"><textarea id="saIn" data-qid="${q.id}" placeholder="Type your detailed response here...">${S.ans[q.id]||''}</textarea></div>`;
   }
   html += `</div>`;
   
@@ -324,7 +324,7 @@ function renderQ() {
       <div class="meta-title">How confident are you in your answer?</div>
       <div class="conf-row">
         ${[{n:1,l:'Guessing'},{n:2,l:'Low'},{n:3,l:'Medium'},{n:4,l:'High'}].map(function(x) { return 
-          `<div class="conf-opt ${cVal===x.n ? 'active' : ''}" onclick="setConf('${q.id}', ${x.n})">${x.n}<span class="cl">${x.l}</span></div>`
+          `<div class="conf-opt ${cVal===x.n ? 'active' : ''}" data-qid="${q.id}" data-conf="${x.n}">${x.n}<span class="cl">${x.l}</span></div>`
         }).join('')}
       </div>
     </div>`;
@@ -333,6 +333,12 @@ function renderQ() {
   document.getElementById('qArea').innerHTML = html;
   const shortAnswerInput = document.getElementById('saIn');
   if (shortAnswerInput) {
+    shortAnswerInput.addEventListener('input', function() {
+      trackSA(shortAnswerInput.dataset.qid);
+    });
+    shortAnswerInput.addEventListener('blur', function() {
+      saveSA(shortAnswerInput.dataset.qid);
+    });
     shortAnswerInput.addEventListener('paste', function(evt) {
       evt.preventDefault();
       toast('Pasting is disabled.');
@@ -343,6 +349,14 @@ function renderQ() {
 }
 
 document.getElementById('qArea').addEventListener('click', function(evt) {
+  const confOpt = evt.target.closest('.conf-opt');
+  if (confOpt) {
+    const qId = confOpt.dataset.qid;
+    const confVal = Number(confOpt.dataset.conf);
+    if (qId && confVal) setConf(qId, confVal);
+    return;
+  }
+
   const opt = evt.target.closest('.mc-opt');
   if (!opt) return;
 
@@ -456,6 +470,17 @@ function toggleCalc() {
   }
 }
 (function(){
+  document.getElementById('jBtn').addEventListener('click', doJoin);
+  document.getElementById('enterFsBtn').addEventListener('click', enterFS);
+  document.getElementById('cancelSubmitBtn').addEventListener('click', function() {
+    document.getElementById('submitModal').classList.remove('show');
+  });
+  document.getElementById('confirmSubmitBtn').addEventListener('click', executeSubmit);
+  document.getElementById('prevBtn').addEventListener('click', goPrev);
+  document.getElementById('nextBtn').addEventListener('click', goNext);
+  document.getElementById('calcBtn').addEventListener('click', toggleCalc);
+  document.getElementById('closeCalcBtn').addEventListener('click', toggleCalc);
+
   let isDrag=false, offX, offY;
   document.addEventListener('mousedown',function(e){
     if(e.target.closest('#calcBar')&&!e.target.closest('button')){
