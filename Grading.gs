@@ -30,6 +30,12 @@ const Grader = {
     const existing = DB.getAIGrades(sessId);
     const gradeSheet = DB.sh('AIGrades');
     const respSheet = DB.sh('Responses');
+    const respData = respSheet.getDataRange().getValues();
+    const responseRowByKey = {};
+    for (let i = 1; i < respData.length; i++) {
+      if (respData[i][0] !== sessId) continue;
+      responseRowByKey[respData[i][0] + '|' + respData[i][1] + '|' + respData[i][3]] = i + 1;
+    }
     
     const done = new Set(existing.map(g => g.studentId + '|' + g.questionId));
     let count = 0, errors = 0, errorMsgs = [];
@@ -57,13 +63,8 @@ const Grader = {
             false, '', '', ''
           ]);
           
-          const rd = respSheet.getDataRange().getValues();
-          for (let i = 1; i < rd.length; i++) {
-            if (rd[i][0] === sessId && rd[i][1] === r.studentId && rd[i][3] === q.id) {
-              respSheet.getRange(i + 1, 8).setValue(result.score);
-              break;
-            }
-          }
+          const responseRow = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
+          if (responseRow) respSheet.getRange(responseRow, 8).setValue(result.score);
           
           count++;
           done.add(k);
