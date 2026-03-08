@@ -211,7 +211,7 @@ const DB = {
   },
   
   // ── CONCURRENT SECURE STUDENT JOIN ──
-  studentJoin(code, first, last, clientToken) {
+  studentJoin(code, first, last, clientToken, studentToken) {
     return this.withLock(() => {
       const sess=this.getActiveSession(); if(!sess) return {error:'No active session.'};
       if(sess.code!==code.toUpperCase().trim()) return {error:'Invalid code.'};
@@ -219,52 +219,53 @@ const DB = {
       const name=(first.trim()+' '+last.trim()).trim();
       const normalizedName=this.normalizeStudentName(name);
       const roster=this.getRoster(sess.block);
+      const accessToken = normalizeStudentToken(studentToken);
+      const tokenData = accessToken ? verifyStudentAccessToken(accessToken) : null;
+      if (accessToken && !tokenData) return {error:'Your secure link is invalid. Please reopen the email from your teacher.'};
+      if (tokenData && String(tokenData.sid || '') !== String(sess.sessionId)) return {error:'This secure link is for a different session.'};
+      if (tokenData && tokenData.code && tokenData.code !== String(sess.code || '')) return {error:'This secure link does not match the active session code.'};
+      if (!normalizedName) return {error:'Please enter your full name.'};
+
       const matchedRoster=(roster||[]).filter(r=>this.normalizeStudentName((r&&r.name)||'')===normalizedName);
-      const matchedWithEmail=matchedRoster.filter(r=>r&&r.email);
-      const rosterEmail=matchedWithEmail.length===1?String(matchedWithEmail[0].email).trim():'';
-      const rosterKey=rosterEmail?('email:'+rosterEmail.toLowerCase()):'';
+      let rosterEntry=null;
+
+      if(tokenData){
+        const tokenEmail=this.normalizeStudentEmail(tokenData.email || '');
+        const tokenName=this.normalizeStudentName(tokenData.normalizedName || tokenData.name || [tokenData.firstName, tokenData.lastName].join(' '));
+        rosterEntry=(roster||[]).find(r=>{
+          const rosterEmail=this.normalizeStudentEmail((r&&r.email)||'');
+          const rosterName=this.normalizeStudentName((r&&r.name)||'');
+          if(tokenEmail && rosterEmail) return rosterEmail===tokenEmail;
+          return !!tokenName && rosterName===tokenName;
+        }) || null;
+        if(!rosterEntry) return {error:'This secure link no longer matches the roster for this session.'};
+        if(this.normalizeStudentName((rosterEntry&&rosterEntry.name)||'') !== normalizedName){
+          return {error:'Please enter your name exactly as it appears in your teacher\'s email link.'};
+        }
+      } else {
+        if(!matchedRoster.length) return {error:'Your name is not on the roster for this session.'};
+        if(matchedRoster.length > 1) return {error:'Multiple students share this name. Please use your personalized email link.'};
+        rosterEntry=matchedRoster[0];
+        if(this.normalizeStudentEmail((rosterEntry&&rosterEntry.email)||'')){
+          return {error:'Please use the secure assessment link from your email to join this session.'};
+        }
+      }
+
+      const rosterEmail=this.normalizeStudentEmail((rosterEntry&&rosterEntry.email)||'');
+      const storedName=String((rosterEntry&&rosterEntry.name)||name).trim();
+      const storedNormalizedName=this.normalizeStudentName(storedName);
+      const rosterKey=rosterEmail?('email:'+rosterEmail):('name:'+storedNormalizedName+'#1');
       
       const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues();
-      const sessionRows=sd.slice(1).filter(r=>r[0]===sess.sessionId);
       const deriveIdentityKey=(row)=>{
         const existing=String(row[13]||'');
         if(existing) return existing;
+        const rowEmail=this.normalizeStudentEmail(row[3]||'');
+        if(rowEmail) return 'sess:'+row[0]+'|email:'+rowEmail;
         const rowNorm=this.normalizeStudentName(row[12]||row[2]||'');
         return 'sess:'+row[0]+'|name:'+rowNorm+'#1';
       };
-
-      let identityKey='';
-      if(rosterKey){
-        identityKey='sess:'+sess.sessionId+'|'+rosterKey;
-      }else{
-        const sameNameRows=sessionRows.filter(r=>{
-          const rowNorm=(r[12]||this.normalizeStudentName(r[2]||''));
-          return rowNorm===normalizedName;
-        });
-        let suffix=1;
-        const usedSuffixes=new Set(sameNameRows.map(r=>{
-          const key=deriveIdentityKey(r);
-          const m=key.match(/\|name:.*#(\d+)$/);
-          return m?Number(m[1]):null;
-        }).filter(v=>v!==null));
-        if(clientToken){
-          const tokenMatch=sameNameRows.find(r=>r[11]&&r[11]===clientToken);
-          if(tokenMatch){
-            const existingKey=deriveIdentityKey(tokenMatch);
-            if(existingKey){
-              identityKey=existingKey;
-            }else{
-              suffix=1;
-              while(usedSuffixes.has(suffix)) suffix++;
-              identityKey='sess:'+sess.sessionId+'|name:'+normalizedName+'#'+suffix;
-            }
-          }
-        }
-        if(!identityKey){
-          while(usedSuffixes.has(suffix)) suffix++;
-          identityKey='sess:'+sess.sessionId+'|name:'+normalizedName+'#'+suffix;
-        }
-      }
+      const identityKey='sess:'+sess.sessionId+'|'+rosterKey;
       
       for(let i=1;i<sd.length;i++) {
         const rowIdentity=deriveIdentityKey(sd[i]);
@@ -290,9 +291,9 @@ const DB = {
           qOrder=JSON.stringify(idx);
         }
       }
-      ssSheet.appendRow([sess.sessionId, stuId, name, rosterEmail, 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken, normalizedName, identityKey]);
+      ssSheet.appendRow([sess.sessionId, stuId, storedName, rosterEmail, 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken, storedNormalizedName, identityKey]);
       const qSet=this.getQSet(sess.setId);
-      return {sessionId:sess.sessionId,studentId:stuId,studentName:name,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
+      return {sessionId:sess.sessionId,studentId:stuId,studentName:storedName,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
     });
   },
 
@@ -676,5 +677,6 @@ const DB = {
   getAllMeta(sessId,snapshot){const rows=this._getSessionRows('Metacognition',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
   getActiveViolations(sessId,snapshot){const rows=this._getSessionRows('Violations',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},
   getAIGrades(sessId,snapshot){const rows=this._getSessionRows('AIGrades',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12]}));},
-  normalizeStudentName(name){return String(name||'').toLowerCase().replace(/\s+/g,' ').trim();}
+  normalizeStudentName(name){return String(name||'').toLowerCase().replace(/\s+/g,' ').trim();},
+  normalizeStudentEmail(email){return String(email||'').trim().toLowerCase();}
 };
