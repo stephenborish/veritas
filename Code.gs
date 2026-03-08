@@ -135,10 +135,7 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
   const roster = DB.getRoster(sess.block);
   if (!roster.length) return { error: 'No students in roster for Block ' + sess.block };
   
-  let baseUrl = clientBaseUrl || PropertiesService.getScriptProperties().getProperty('DEPLOY_URL');
-  if (!baseUrl) {
-    try { baseUrl = ScriptApp.getService().getUrl(); } catch(e) {}
-  }
+  let baseUrl = resolveWebAppBaseUrl(clientBaseUrl);
   if (!baseUrl) return { error: 'System could not identify the Web App URL. Please deploy properly.' };
   
   // Ensure the URL is clean before appending query params
@@ -176,6 +173,43 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
     return { error: 'Failed to send. Google blocked the script. Please run AUTHORIZE_SYSTEM from the Apps Script Editor. E.g.: ' + errors[0] };
   }
   return { sent, skipped, total: roster.length, errors: errors.slice(0, 3) };
+}
+
+function resolveWebAppBaseUrl(clientBaseUrl) {
+  const configuredDeployUrl = 'https://script.google.com/a/macros/malvernprep.org/s/AKfycby9WBkucfUgkoo3LBhHZmGuAtZWx9uGeSEIhY3hqhhxMJRxft1l8IgT36pGoIYAAztY/exec';
+  const props = PropertiesService.getScriptProperties();
+
+  const candidates = [];
+  try { candidates.push(ScriptApp.getService().getUrl() || ''); } catch (e) {}
+  candidates.push(props.getProperty('DEPLOY_URL') || '');
+  candidates.push(props.getProperty('WEBAPP_EXEC_URL') || '');
+  candidates.push(clientBaseUrl || '');
+  candidates.push(configuredDeployUrl);
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = String(candidates[i] || '').trim().split('?')[0];
+    if (!candidate) continue;
+    if (isPreviewEditorUrl(candidate)) continue;
+    if (isCanonicalExecUrl(candidate)) return candidate;
+  }
+
+  for (let i = 0; i < candidates.length; i++) {
+    const candidate = String(candidates[i] || '').trim().split('?')[0];
+    if (!candidate) continue;
+    if (isPreviewEditorUrl(candidate)) continue;
+    return candidate;
+  }
+
+  return '';
+}
+
+function isPreviewEditorUrl(url) {
+  return String(url).indexOf('userCodeAppPanel') > -1 || String(url).indexOf('script.googleusercontent.com') > -1;
+}
+
+function isCanonicalExecUrl(url) {
+  const normalized = String(url || '').trim();
+  return /^https:\/\/script\.google\.com\/.+\/exec$/i.test(normalized);
 }
 
 
