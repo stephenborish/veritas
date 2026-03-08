@@ -305,12 +305,12 @@ function renderQ() {
   
   if(q.type === 'mc') {
     html += `<div class="mc-list">${q.choices.map((c, i) => `
-      <div class="mc-opt ${S.ans[q.id] === c ? 'sel' : ''}" onclick="pickMC('${q.id}', '${c.replace(/'/g, "\\'")}')">
+      <div class="mc-opt ${S.ans[q.id] === c ? 'sel' : ''}" data-choice-payload="${encodeURIComponent(JSON.stringify(c))}">
         <div class="ltr">${String.fromCharCode(65+i)}</div><div class="ctxt">${c}</div>
       </div>
     `).join('')}</div>`;
   } else {
-    html += `<div class="sa"><textarea id="saIn" oninput="trackSA('${q.id}')" onblur="saveSA('${q.id}')" onpaste="event.preventDefault(); toast('Pasting is disabled.')" placeholder="Type your detailed response here...">${S.ans[q.id]||''}</textarea></div>`;
+    html += `<div class="sa"><textarea id="saIn" data-qid="${q.id}" oninput="trackSA('${q.id}')" onblur="saveSA('${q.id}')" placeholder="Type your detailed response here...">${S.ans[q.id]||''}</textarea></div>`;
   }
   html += `</div>`;
   
@@ -328,9 +328,34 @@ function renderQ() {
   }
   
   document.getElementById('qArea').innerHTML = html;
+  const shortAnswerInput = document.getElementById('saIn');
+  if (shortAnswerInput) {
+    shortAnswerInput.addEventListener('paste', evt => {
+      evt.preventDefault();
+      toast('Pasting is disabled.');
+    });
+  }
   document.querySelectorAll('.katex-inline').forEach(el=>{try{katex.render(el.dataset.latex,el,{throwOnError:false});}catch(e){}});
   window.scrollTo(0,0);
 }
+
+document.getElementById('qArea').addEventListener('click', evt => {
+  const opt = evt.target.closest('.mc-opt');
+  if (!opt) return;
+
+  const q = S.qs[S.cur];
+  if (!q || q.type !== 'mc') return;
+
+  const payload = opt.dataset.choicePayload;
+  if (!payload) return;
+
+  try {
+    const choice = JSON.parse(decodeURIComponent(payload));
+    pickMC(q.id, choice);
+  } catch (e) {
+    console.error('Unable to parse MC choice payload', e);
+  }
+});
 
 function pickMC(qId, c) {
   S.ans[qId] = c; 
