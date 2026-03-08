@@ -404,7 +404,13 @@ function executeSubmit() {
   if(document.exitFullscreen) try{document.exitFullscreen()}catch(e){}
   if(S.poll) clearInterval(S.poll); if(S.timerInt) clearInterval(S.timerInt);
   
-  google.script.run.withSuccessHandler(renderSummary).studentFinish(S.sid, S.stuId);
+  google.script.run.withSuccessHandler(d => {
+    if (d && d.error) {
+      google.script.run.withSuccessHandler(renderSummary).studentGetSummary(S.sid, S.stuId);
+      return;
+    }
+    renderSummary(d);
+  }).studentFinish(S.sid, S.stuId);
 }
 
 function renderSummary(d) {
