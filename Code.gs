@@ -135,10 +135,7 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
   const roster = DB.getRoster(sess.block);
   if (!roster.length) return { error: 'No students in roster for Block ' + sess.block };
   
-  let baseUrl = clientBaseUrl || PropertiesService.getScriptProperties().getProperty('DEPLOY_URL');
-  if (!baseUrl) {
-    try { baseUrl = ScriptApp.getService().getUrl(); } catch(e) {}
-  }
+  let baseUrl = resolveWebAppBaseUrl(clientBaseUrl);
   if (!baseUrl) return { error: 'System could not identify the Web App URL. Please deploy properly.' };
   
   // Ensure the URL is clean before appending query params
@@ -176,6 +173,28 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
     return { error: 'Failed to send. Google blocked the script. Please run AUTHORIZE_SYSTEM from the Apps Script Editor. E.g.: ' + errors[0] };
   }
   return { sent, skipped, total: roster.length, errors: errors.slice(0, 3) };
+}
+
+function resolveWebAppBaseUrl(clientBaseUrl) {
+  let baseUrl = '';
+
+  // Always prefer canonical deployment URL first.
+  try { baseUrl = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+
+  // Fallbacks if deployment URL is unavailable in current environment.
+  if (!baseUrl) {
+    baseUrl = PropertiesService.getScriptProperties().getProperty('DEPLOY_URL') || '';
+  }
+  if (!baseUrl) {
+    baseUrl = clientBaseUrl || '';
+  }
+
+  // Guard against internal editor preview links that break for students.
+  if (baseUrl.indexOf('userCodeAppPanel') > -1) {
+    try { baseUrl = ScriptApp.getService().getUrl() || baseUrl; } catch (e) {}
+  }
+
+  return String(baseUrl).split('?')[0];
 }
 
 
