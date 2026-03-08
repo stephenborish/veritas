@@ -203,15 +203,17 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
 function resolveWebAppBaseUrl(clientBaseUrl) {
   let baseUrl = '';
 
-  // Always prefer canonical deployment URL first.
+  // 1. Canonical deployment URL from the runtime — always correct when available.
   try { baseUrl = ScriptApp.getService().getUrl() || ''; } catch (e) {}
 
-  // Fallbacks if deployment URL is unavailable in current environment.
-  if (!baseUrl) {
-    baseUrl = PropertiesService.getScriptProperties().getProperty('DEPLOY_URL') || '';
-  }
+  // 2. Caller-provided URL (window.location from the UI) — trustworthy runtime value.
   if (!baseUrl) {
     baseUrl = clientBaseUrl || '';
+  }
+
+  // 3. Stored property as last resort (may be stale after re-deploy).
+  if (!baseUrl) {
+    baseUrl = PropertiesService.getScriptProperties().getProperty('DEPLOY_URL') || '';
   }
 
   // Guard against internal editor preview links that break for students.
@@ -242,33 +244,6 @@ function resolveStudentLandingUrl(fallbackBaseUrl) {
   return '';
 }
 
-function resolveWebAppBaseUrl(clientBaseUrl) {
-  const configuredDeployUrl = 'https://script.google.com/a/macros/malvernprep.org/s/AKfycby9WBkucfUgkoo3LBhHZmGuAtZWx9uGeSEIhY3hqhhxMJRxft1l8IgT36pGoIYAAztY/exec';
-  const props = PropertiesService.getScriptProperties();
-
-  const candidates = [];
-  try { candidates.push(ScriptApp.getService().getUrl() || ''); } catch (e) {}
-  candidates.push(props.getProperty('DEPLOY_URL') || '');
-  candidates.push(props.getProperty('WEBAPP_EXEC_URL') || '');
-  candidates.push(clientBaseUrl || '');
-  candidates.push(configuredDeployUrl);
-
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = String(candidates[i] || '').trim().split('?')[0];
-    if (!candidate) continue;
-    if (isPreviewEditorUrl(candidate)) continue;
-    if (isCanonicalExecUrl(candidate)) return candidate;
-  }
-
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = String(candidates[i] || '').trim().split('?')[0];
-    if (!candidate) continue;
-    if (isPreviewEditorUrl(candidate)) continue;
-    return candidate;
-  }
-
-  return '';
-}
 
 function isPreviewEditorUrl(url) {
   return String(url).indexOf('userCodeAppPanel') > -1 || String(url).indexOf('script.googleusercontent.com') > -1;
