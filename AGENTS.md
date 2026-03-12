@@ -78,3 +78,13 @@ Apps Script blocks web apps from creating triggers (`ScriptApp.newTrigger()`).
 * **The Solution:** Write the `sessionId` to the `PropertiesService` under the key `VA_GRADE_QUEUE`. 
 * A persistent 1-minute trigger (`checkGradeQueue()`) installed manually by the teacher will automatically pick up the queued ID and execute `Grader.gradeSession(sessId)`.
 * Polling: The client UI uses `setInterval` to poll `getGradingStatus()` and updates the progress bar based on the background worker's writes.
+
+---
+
+## 8. Autonomous Deployment Workflow
+You have been granted full authorization to deploy code directly to Google Apps Script via `clasp`. 
+When you are tasked with adding a feature or fixing a bug, follow this exact workflow:
+1. Write and modify the necessary `.gs` or `.html` files.
+2. Review your changes against the architecture rules in this document.
+3. Once you are confident the code is complete, execute `npx clasp push` in the terminal to deploy the updates directly to the live Apps Script project.
+4. Notify the user that the code has been successfully pushed and is ready for them to test.
