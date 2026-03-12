@@ -448,12 +448,15 @@ const DB = {
        sessionState.revealedDetails = {};
        const responses = this.getAllResponses(sessId).filter(r => r.studentId === stuId);
        const grades = this.getAIGrades(sessId).filter(g => g.studentId === stuId);
-       
+       const respMap = responses.reduce((acc, r) => { acc[r.questionId] = r; return acc; }, {});
+       const gradeMap = grades.reduce((acc, g) => { acc[g.questionId] = g; return acc; }, {});
+       const qMap = qSet.questions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
+
        sess.revealedQs.forEach(qId => {
-          const q = qSet.questions.find(x => x.id === qId);
+          const q = qMap[qId];
           if (q) {
-             const r = responses.find(x => x.questionId === qId);
-             const g = grades.find(x => x.questionId === qId);
+             const r = respMap[qId];
+             const g = gradeMap[qId];
              const ci = q.correctIndices || [q.correctIndex];
              sessionState.revealedDetails[qId] = {
                 clientCorrectAnswer: q.type === 'mc' ? ci.map(idx => q.choices[idx]).join(', ') : null,
@@ -738,10 +741,13 @@ const DB = {
     const meta=this.getAllMeta(sessId).filter(m=>m.studentId===stuId);
     const grades=this.getAIGrades(sessId).filter(g=>g.studentId===stuId);
     const student=this.getStudentSessions(sessId).find(s=>s.studentId===stuId);
+    const respMap = responses.reduce((acc, r) => { acc[r.questionId] = r; return acc; }, {});
+    const metaMap = meta.reduce((acc, m) => { acc[m.questionId] = m; return acc; }, {});
+    const gradeMap = grades.reduce((acc, g) => { acc[g.questionId] = g; return acc; }, {});
     const details=(qSet.questions||[]).map((q,idx)=>{
-      const r=responses.find(x=>x.questionId===q.id)||null;
-      const m=meta.find(x=>x.questionId===q.id)||null;
-      const g=grades.find(x=>x.questionId===q.id)||null;
+      const r=respMap[q.id]||null;
+      const m=metaMap[q.id]||null;
+      const g=gradeMap[q.id]||null;
       return {questionId:q.id,qIndex:idx,questionText:q.text,type:q.type,answer:r?r.answer:'',isCorrect:r?r.isCorrect:null,points:r?Number(r.points)||0:0,maxPoints:q.points||1,confidence:m?m.confidence:null,aiScore:g?g.score:null,aiFeedback:g?g.feedback:null};
     });
     const totalPts=details.reduce((a,b)=>a+(Number(b.points)||0),0);
@@ -755,8 +761,18 @@ const DB = {
     if(existing) return true;
     const students=this.getStudentSessions(id);
     const responses=this.getAllResponses(id);
+    const respsByStudent = responses.reduce((acc, r) => {
+      if (!acc[r.studentId]) acc[r.studentId] = [];
+      acc[r.studentId].push(r);
+      return acc;
+    }, {});
     const totalByStudent={};
-    students.forEach(st=>{const sr=responses.filter(r=>r.studentId===st.studentId); const pts=sr.reduce((a,r)=>a+(Number(r.points)||0),0); const max=sr.reduce((a,r)=>a+(Number(r.maxPoints)||0),0); totalByStudent[st.studentId]=max?Math.round((pts/max)*100):0;});
+    students.forEach(st=>{
+      const sr=respsByStudent[st.studentId]||[];
+      const pts=sr.reduce((a,r)=>a+(Number(r.points)||0),0);
+      const max=sr.reduce((a,r)=>a+(Number(r.maxPoints)||0),0);
+      totalByStudent[st.studentId]=max?Math.round((pts/max)*100):0;
+    });
     const pcts=Object.values(totalByStudent);
     const avgPct=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
     archive.appendRow([id,sess.code,sess.setName,sess.block,sess.startedAt,sess.endedAt||new Date().toISOString(),students.length,avgPct,JSON.stringify({session:sess,students,responses,meta:this.getAllMeta(id),grades:this.getAIGrades(id),violations:this.getActiveViolations(id)})]);
@@ -965,9 +981,14 @@ const DB = {
         
         const students = data.students || [];
         const responses = data.responses || [];
+        const respsByStudent = responses.reduce((acc, r) => {
+          if (!acc[r.studentId]) acc[r.studentId] = [];
+          acc[r.studentId].push(r);
+          return acc;
+        }, {});
         const totalByStudent={};
         students.forEach(st=>{
-          const sr=responses.filter(r=>r.studentId===st.studentId);
+          const sr=respsByStudent[st.studentId]||[];
           const pts=sr.reduce((a,r)=>a+(Number(r.points)||0),0); 
           const max=sr.reduce((a,r)=>a+(Number(r.maxPoints)||0),0); 
           totalByStudent[st.studentId]=max?Math.round((pts/max)*100):0;

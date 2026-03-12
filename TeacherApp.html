@@ -3189,8 +3189,13 @@
       const qSet = (data.session.config && data.session.config.qSet) || data.session.qSet || {};
       const questions = qSet.questions || [];
 
+      const qMap = questions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
+      const respMap = resps.reduce((acc, r) => { acc[r.questionId] = r; return acc; }, {});
+      const metaMap = meta.reduce((acc, m) => { acc[m.questionId] = m; return acc; }, {});
+      const gradeMap = grades.reduce((acc, g) => { acc[g.questionId] = g; return acc; }, {});
+
       const pts = resps.reduce((a, r) => {
-        const q = questions.find(qq => qq.id === r.questionId);
+        const q = qMap[r.questionId];
         return a + reEvalMC(r, q).pts;
       }, 0);
       const max = questions.reduce((a, q) => a + (Number(q.points) || 1), 0);
@@ -3245,9 +3250,9 @@
       }
 
       questions.forEach((q, i) => {
-        const r = resps.find(x => x.questionId === q.id) || {};
-        const m = meta.find(x => x.questionId === q.id) || {};
-        const g = grades.find(x => x.questionId === q.id) || {};
+        const r = respMap[q.id] || {};
+        const m = metaMap[q.id] || {};
+        const g = gradeMap[q.id] || {};
 
         const mcEval = reEvalMC(r, q);
         const isC = mcEval.isCorrect;
@@ -3513,8 +3518,13 @@
         html += `<div style="color:var(--tx3); font-size:13px; font-style:italic">Question data not found in this archive format.</div>`;
       } else {
         // Pre-calculate stats and categorize
+        const respsByQ = resps.reduce((acc, r) => {
+          if (!acc[r.questionId]) acc[r.questionId] = [];
+          acc[r.questionId].push(r);
+          return acc;
+        }, {});
         const qStats = qList.map((q, idx) => {
-          const qResps = resps.filter(r => r.questionId === q.id);
+          const qResps = respsByQ[q.id] || [];
           const qPts = qResps.reduce((a, r) => a + reEvalMC(r, q).pts, 0);
           const qMax = (Number(q.points) || 1) * Math.max(1, students.length);
           const qPct = qMax > 0 ? Math.round((qPts / qMax) * 100) : 0;
@@ -3539,13 +3549,16 @@
               const stripHtml = (s) => String(s || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, '').toLowerCase();
 
               // Pre-calculate to grab true totalAns first
+              const mappedResps = qResps.map(r => {
+                let ansToMatch = String(r.answer || '');
+                try { const p = JSON.parse(ansToMatch); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch (e) { }
+                return { ...r, cleanAns: stripHtml(ansToMatch) };
+              });
               const counts = opts.map((optText, optIdx) => {
                 const isCorrect = correctIdxs.includes(optIdx);
                 const cleanOpt = stripHtml(optText);
-                const optResps = qResps.filter(r => {
-                  let ansToMatch = String(r.answer || '');
-                  try { const p = JSON.parse(ansToMatch); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch (e) { }
-                  const cleanAns = stripHtml(ansToMatch);
+                const optResps = mappedResps.filter(r => {
+                  const cleanAns = r.cleanAns;
                   // Direct text match
                   if (cleanAns === cleanOpt) return true;
                   // Substring match
