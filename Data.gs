@@ -130,7 +130,14 @@ const DB = {
   },
   getRosters() {
     const d=this.sh('Rosters').getDataRange().getValues(); const r={};
-    for(let i=1;i<d.length;i++){const stu=JSON.parse(d[i][2]||'[]');r[d[i][0]]={block:d[i][0],courseId:d[i][1],students:stu,count:stu.length,updatedAt:d[i][3]};}
+    for(let i=1;i<d.length;i++){
+      const block=d[i][0],courseId=d[i][1],rawJSON=d[i][2]||'[]',updatedAt=d[i][3];
+      let cached=null;
+      Object.defineProperty(r,block,{
+        get:()=>{if(!cached){const stu=JSON.parse(rawJSON);cached={block,courseId,students:stu,count:stu.length,updatedAt};}return cached;},
+        enumerable:true
+      });
+    }
     return r;
   },
   getRoster(block) { const d=this.sh('Rosters').getDataRange().getValues(); for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block)) return JSON.parse(d[i][2]||'[]'); return []; },
