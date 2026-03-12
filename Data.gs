@@ -135,7 +135,8 @@ const DB = {
       let cached=null;
       Object.defineProperty(r,block,{
         get:()=>{if(!cached){const stu=JSON.parse(rawJSON);cached={block,courseId,students:stu,count:stu.length,updatedAt};}return cached;},
-        enumerable:true
+        enumerable:true,
+        configurable:true
       });
     }
     return r;
