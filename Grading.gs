@@ -139,11 +139,16 @@ const Grader = {
 
     this.setStatus(sessId, { state: 'running', sessionId: sessId, gradedCount: 0, errors: 0, totalToGrade, message: `Grading ${totalToGrade} response(s)...` });
 
+    let newGradeRows = [];
+
     for (const q of saQs) {
       const qResps = resps.filter(r => r.questionId === q.id && r.answer && String(r.answer).length > 3);
 
       for (const r of qResps) {
         if (Date.now() - startTime > TIMEOUT_LIMIT) {
+          if (newGradeRows.length > 0) {
+            this._batchAppendRows(gradeSheet, newGradeRows);
+          }
           const out = { gradedCount: count, errors, totalToGrade, message: `Graded ${count}/${totalToGrade}. Time limit reached. Run again to finish.` };
           this.setStatus(sessId, Object.assign({ state: 'partial', sessionId: sessId }, out));
           return out;
@@ -155,7 +160,7 @@ const Grader = {
         try {
           const result = this.callGemini(key, q, r.answer, '');
 
-          gradeSheet.appendRow([
+          newGradeRows.push([
             sessId, r.studentId, r.studentName, q.id,
             result.score, q.points || 1, result.feedback,
             r.answer, new Date().toISOString(),
@@ -177,12 +182,19 @@ const Grader = {
           this.setStatus(sessId, { state: 'running', sessionId: sessId, gradedCount: count, errors, totalToGrade, message: `Error grading ${r.studentName}: ${lastError.substring(0, 150)}` });
           Utilities.sleep(500);
           if (errors > 5) {
+            if (newGradeRows.length > 0) {
+              this._batchAppendRows(gradeSheet, newGradeRows);
+            }
             const out = { gradedCount: count, errors, totalToGrade, message: 'Too many API errors. Last error: ' + lastError };
             this.setStatus(sessId, Object.assign({ state: 'error', sessionId: sessId }, out));
             return out;
           }
         }
       }
+    }
+
+    if (newGradeRows.length > 0) {
+      this._batchAppendRows(gradeSheet, newGradeRows);
     }
 
     const out = {
@@ -292,6 +304,7 @@ const Grader = {
     const resps = DB.getAllResponses(sessId).filter(r => r.questionId === qId && r.answer && String(r.answer).length > 3);
     const gradeSheet = DB.sh('AIGrades');
     let updated = 0;
+    let newGradeRows = [];
     resps.forEach(r => {
       try {
         const result = this.callGemini(key, q, r.answer, ctx || '');
@@ -306,15 +319,31 @@ const Grader = {
           }
         }
         if (!found) {
-          gradeSheet.appendRow([sessId, r.studentId, r.studentName, qId, result.score, q.points || 1, result.feedback, r.answer, new Date().toISOString(), false, '', '', ctx || '']);
+          newGradeRows.push([sessId, r.studentId, r.studentName, qId, result.score, q.points || 1, result.feedback, r.answer, new Date().toISOString(), false, '', '', ctx || '']);
         }
         this._syncResponseScore(sessId, r.studentId, qId, result.score);
         updated++;
       } catch (e) { Logger.log('Regrade error: ' + e.toString()); }
     });
+    if (newGradeRows.length > 0) {
+      this._batchAppendRows(gradeSheet, newGradeRows);
+    }
     const out = { ok: true, updated, message: 'Regraded ' + updated + ' responses.' };
     this.setStatus(sessId, Object.assign({ state: 'done', sessionId: sessId }, out));
     return out;
+  },
+
+  _batchAppendRows(sheet, rows) {
+    if (!rows || !rows.length) return;
+    return DB.withLock(() => {
+      const lastRow = sheet.getLastRow();
+      const maxRows = sheet.getMaxRows();
+      const neededRows = (lastRow + rows.length) - maxRows;
+      if (neededRows > 0) {
+        sheet.insertRowsAfter(maxRows, neededRows);
+      }
+      sheet.getRange(lastRow + 1, 1, rows.length, rows[0].length).setValues(rows);
+    });
   },
 
   _syncResponseScore(sessId, stuId, qId, score) {
