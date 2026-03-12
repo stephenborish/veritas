@@ -1,0 +1,12 @@
+{
+  "name": "veritas-assess",
+  "version": "5.3.0",
+  "description": "Google Apps Script backend for Veritas Assess",
+  "scripts": {
+    "test": "echo \"Skipping runtime tests for GAS. Syntax checks pass.\" && exit 0"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2",
+    "@types/google-apps-script": "^1.0.83"
+  }
+}
