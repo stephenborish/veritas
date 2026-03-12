@@ -160,7 +160,9 @@ const DB = {
     for(let i=1;i<d.length;i++) if(d[i][8]==='active'){s.getRange(i+1,9).setValue('ended');s.getRange(i+1,12).setValue(new Date().toISOString());}
     const qSet=this.getQSet(config.setId); if(!qSet) throw new Error('Question set not found');
     const id='sess_'+Utilities.getUuid().slice(0,8); const code=this.makeCode(); const now=new Date().toISOString();
-    s.appendRow([id,code,config.setId,qSet.name,config.block,config.mode||'self-paced',config.randomizeQuestions||false,config.randomizeChoices||false,'active',0,now,'',JSON.stringify(config),JSON.stringify(config.timer||{type:'none'}),config.revealMode||'end',JSON.stringify(config.summaryConfig||{showScore:true}),'[]',config.calculatorEnabled||false]);
+    const mode = config.mode || 'self-paced';
+    const initialQ = mode === 'lockstep' ? -1 : 0;
+    s.appendRow([id,code,config.setId,qSet.name,config.block,mode,config.randomizeQuestions||false,config.randomizeChoices||false,'active',initialQ,now,'',JSON.stringify(config),JSON.stringify(config.timer||{type:'none'}),config.revealMode||'end',JSON.stringify(config.summaryConfig||{showScore:true}),'[]',config.calculatorEnabled||false]);
     return {sessionId:id,code,setName:qSet.name,block:config.block,mode:config.mode,questionCount:qSet.questions.length};
   },
   getActiveSession() {
@@ -180,11 +182,13 @@ const DB = {
     const ids = Array.isArray(questionIds) ? questionIds : [];
     const maxQ = Math.max(0, ids.length - 1);
     const requestedQ = Number(sess.currentQ);
-    const currentQ = Number.isFinite(requestedQ) ? Math.max(0, Math.min(requestedQ, maxQ)) : 0;
+    const minBound = sess.mode === 'lockstep' ? -1 : 0;
+    const currentQ = Number.isFinite(requestedQ) ? Math.max(minBound, Math.min(requestedQ, maxQ)) : 0;
     const revealMode = sess.revealMode || 'end';
     let revealedQs = Array.isArray(sess.revealedQs) ? sess.revealedQs.filter(qId => ids.indexOf(qId) !== -1) : [];
     if (revealMode === 'never') revealedQs = [];
     if (revealMode === 'end' && sess.status === 'ended') revealedQs = ids.slice();
+    const lockedQs = Array.isArray((sess.config || {}).lockedQs) ? sess.config.lockedQs : [];
     return {
       sessionId: sess.sessionId,
       sessionStatus: sess.status,
@@ -193,6 +197,7 @@ const DB = {
       timer: sess.timer,
       revealMode,
       revealedQs,
+      lockedQs,
       calcEnabled: sess.calcEnabled,
       metacognitionEnabled: (sess.config || {}).metacognitionEnabled !== false
     };
@@ -283,7 +288,7 @@ const DB = {
       
       // New Join
       let qOrder='';
-      if(sess.randQ||sess.mode==='randomized'){
+      if((sess.randQ||sess.mode==='randomized') && sess.mode !== 'lockstep'){
         const qSet=this.getQSet(sess.setId);
         if(qSet){
           const idx=qSet.questions.map((_,i)=>i);
@@ -303,9 +308,12 @@ const DB = {
     let questions=JSON.parse(JSON.stringify(qSet.questions)); const stimuli=qSet.stimuli||[];
     const sd=this.sh('StudentSessions').getDataRange().getValues(); let qOrder=null;
     for(let i=1;i<sd.length;i++) if(sd[i][0]===sessId&&sd[i][1]===stuId&&sd[i][9]){try{qOrder=JSON.parse(sd[i][9])}catch(e){} break;}
-    if(qOrder&&qOrder.length) questions=qOrder.map(idx=>questions[idx]);
+    if(qOrder && qOrder.length && sess.mode !== 'lockstep') questions=qOrder.map(idx=>questions[idx]);
     if(sess.randC) questions.forEach(q=>{if(q.type==='mc'&&q.choices){const ci=q.correctIndices||[q.correctIndex];const ca=ci.map(x=>q.choices[x]);for(let i=q.choices.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[q.choices[i],q.choices[j]]=[q.choices[j],q.choices[i]];}q.correctIndices=ca.map(c=>q.choices.indexOf(c));if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
-    const studentQs=questions.map(q=>{const sq={...q};delete sq.correctIndex;delete sq.correctIndices;delete sq.correctAnswer;delete sq.rubric;delete sq.sampleAnswer;return sq;});
+    const studentQs=questions.map(q=>{const sq={...q};
+      // Mark multi-answer questions BEFORE stripping correctIndices
+      if(q.type==='mc'){const ci=q.correctIndices||[q.correctIndex];sq.multiSelect=Array.isArray(ci)&&ci.length>1;}
+      delete sq.correctIndex;delete sq.correctIndices;delete sq.correctAnswer;delete sq.rubric;delete sq.sampleAnswer;return sq;});
     const resps=this.getAllResponses(sessId).filter(r=>r.studentId===stuId);
     const existing={};resps.forEach(r=>{existing[r.questionId]=r.answer;});
     const metaResps=this.getAllMeta(sessId).filter(m=>m.studentId===stuId);
@@ -319,26 +327,63 @@ const DB = {
     return this.withLock(() => {
       const sess=this.getSessionById(sessId); if(!sess||sess.status!=='active') return {error:'Session ended'};
       const qSet=this.getQSet(sess.setId); const q=qSet.questions.find(qq=>qq.id===qId); if(!q) return {error:'Q not found'};
+      const lockedQs = Array.isArray((sess.config || {}).lockedQs) ? sess.config.lockedQs : [];
+      if (lockedQs.includes(qId)) return {error:'This question has been locked by the teacher.'};
       const stuName=this.getStudentName(sessId,stuId); const maxPts=q.points||1;
       let isCorrect=null,points=0,partialCredit=false;
       if(q.type==='mc'){
-        const ci=q.correctIndices||[q.correctIndex]; const ca=ci.map(x=>q.choices[x]);
-        if(ca.length===1){isCorrect=(answer===ca[0]);points=isCorrect?maxPts:0;}
-        else{const sel=Array.isArray(answer)?answer:[answer];const cc=sel.filter(a=>ca.includes(a)).length;const ic=sel.filter(a=>!ca.includes(a)).length;points=Math.max(0,Math.round(((cc-ic)/ca.length)*maxPts*10)/10);isCorrect=(cc===ca.length&&ic===0);partialCredit=points>0&&!isCorrect;}
+        const stripHtml = s => String(s || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, '').toLowerCase();
+        const ci=q.correctIndices||[q.correctIndex]; 
+        const ca=ci.map(x=>q.choices[x]);
+        const sel=Array.isArray(answer)?answer:[answer];
+        
+        let correctCount = 0;
+        let incorrectCount = 0;
+        
+        sel.forEach(ans => {
+           let cleanAns = stripHtml(ans);
+           let matched = false;
+           for (let i = 0; i < ca.length; i++) {
+              let cleanKey = stripHtml(ca[i]);
+              if (cleanAns === cleanKey || (cleanKey.length > 2 && cleanAns.includes(cleanKey)) || (cleanKey.length > 2 && cleanKey.includes(cleanAns))) {
+                 matched = true;
+                 break;
+              }
+           }
+           if (matched) correctCount++;
+           else incorrectCount++;
+        });
+        
+        if (ca.length === 1) {
+           isCorrect = (correctCount === 1 && incorrectCount === 0);
+           points = isCorrect ? maxPts : 0;
+        } else {
+           isCorrect = (correctCount === ca.length && incorrectCount === 0);
+           points = isCorrect ? maxPts : 0;
+           partialCredit = false;
+        }
+      } else if (q.type === 'sa') {
+          points = 0;
       }
       const qIdx=qSet.questions.findIndex(qq=>qq.id===qId);
-      const ansStr=Array.isArray(answer)?JSON.stringify(answer):answer;
+      let ansStr=Array.isArray(answer)?JSON.stringify(answer):String(answer);
+      // Force plain text in Sheets to prevent auto-formatting (e.g. 100% -> 1)
+      if (ansStr && !ansStr.startsWith('{') && !ansStr.startsWith('[')) {
+        ansStr = "'" + ansStr;
+      }
       
       const rSheet=this.sh('Responses');
       const rd=rSheet.getDataRange().getValues();
       
       for(let i=1;i<rd.length;i++) {
         if(rd[i][0]===sessId && rd[i][1]===stuId && rd[i][3]===qId){
-          rSheet.getRange(i+1,6).setValue(ansStr);rSheet.getRange(i+1,7).setValue(isCorrect);rSheet.getRange(i+1,8).setValue(points);rSheet.getRange(i+1,10).setValue(new Date().toISOString());rSheet.getRange(i+1,11).setValue(partialCredit);
+          rSheet.getRange(i+1,6).setNumberFormat('@').setValue(ansStr);rSheet.getRange(i+1,7).setValue(isCorrect);rSheet.getRange(i+1,8).setValue(points);rSheet.getRange(i+1,10).setValue(new Date().toISOString());rSheet.getRange(i+1,11).setValue(partialCredit);
           let ci2=null;if(sess.revealMode==='immediate')ci2=this._correctInfo(q);
           return {saved:true,isCorrect,points,maxPts,partialCredit,correctInfo:ci2};
         }
       }
+      const newRow = rSheet.getLastRow() + 1;
+      rSheet.getRange(newRow, 6).setNumberFormat('@');
       rSheet.appendRow([sessId,stuId,stuName,qId,qIdx,ansStr,isCorrect,points,maxPts,new Date().toISOString(),partialCredit]);
       let ci3=null;if(sess.revealMode==='immediate')ci3=this._correctInfo(q);
       return {saved:true,isCorrect,points,maxPts,partialCredit,correctInfo:ci3};
@@ -348,6 +393,11 @@ const DB = {
   
   studentSubmitMeta(sessId,stuId,qId,conf) {
     return this.withLock(() => {
+      const sess = this.getSessionById(sessId);
+      if (sess) {
+         const lockedQs = Array.isArray((sess.config || {}).lockedQs) ? sess.config.lockedQs : [];
+         if (lockedQs.includes(qId)) return {error: 'This question has been locked by the teacher.'};
+      }
       const name=this.getStudentName(sessId,stuId);
       const s=this.sh('Metacognition');const d=s.getDataRange().getValues();
       for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId&&d[i][3]===qId){s.getRange(i+1,5).setValue(conf);s.getRange(i+1,6).setValue(new Date().toISOString());return true;}
@@ -390,7 +440,33 @@ const DB = {
   studentCheckStatus(sessId,stuId) {
     const sess=this.getSessionById(sessId); if(!sess) return {sessionStatus:'ended'};
     const qSet=this.getQSet(sess.setId);
-    const sessionState = this._normalizeSessionState(sess, qSet ? qSet.questions.map(q=>q.id) : []);
+    const validIds = qSet ? qSet.questions.map(q=>q.id) : [];
+    const sessionState = this._normalizeSessionState(sess, validIds);
+    
+    // Attach details for revealed questions
+    if (sess.revealedQs && sess.revealedQs.length > 0 && qSet) {
+       sessionState.revealedDetails = {};
+       const responses = this.getAllResponses(sessId).filter(r => r.studentId === stuId);
+       const grades = this.getAIGrades(sessId).filter(g => g.studentId === stuId);
+       
+       sess.revealedQs.forEach(qId => {
+          const q = qSet.questions.find(x => x.id === qId);
+          if (q) {
+             const r = responses.find(x => x.questionId === qId);
+             const g = grades.find(x => x.questionId === qId);
+             const ci = q.correctIndices || [q.correctIndex];
+             sessionState.revealedDetails[qId] = {
+                clientCorrectAnswer: q.type === 'mc' ? ci.map(idx => q.choices[idx]).join(', ') : null,
+                clientRubric: q.rubric || '',
+                clientSampleAnswer: q.sampleAnswer || '',
+                aiScore: g ? g.score : null,
+                aiFeedback: g ? g.feedback : null,
+                ptsEarned: r ? (Number(r.points) || 0) : 0
+             };
+          }
+       });
+    }
+
     const d=this.sh('StudentSessions').getDataRange().getValues();
     for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){
       return {...sessionState,lockedOut:d[i][8]===true||d[i][8]==='TRUE',
@@ -463,14 +539,17 @@ const DB = {
         const correct=qr.filter(r=>r.isCorrect===true||r.isCorrect==='TRUE').length;
         const dist={};(q.choices||[]).forEach(c=>dist[c]=0);
         qr.forEach(r=>{try{const a=JSON.parse(r.answer);if(Array.isArray(a))a.forEach(x=>{if(dist[x]!==undefined)dist[x]++});else if(dist[r.answer]!==undefined)dist[r.answer]++}catch(e){if(dist[r.answer]!==undefined)dist[r.answer]++}});
-        return {id:q.id,idx,text:q.text,type:'mc',total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
+        const ci=q.correctIndices||[q.correctIndex];
+        return {id:q.id,idx,text:q.text,type:'mc',points:q.points||1,choices:q.choices||[],correctIndices:ci,total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
           studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect,confidence:(metaByStudentQuestion[r.studentId+'|'+q.id]||{}).confidence||null}))};
       }else{
-        return {id:q.id,idx,text:q.text,type:'sa',total:qr.length,
+        return {id:q.id,idx,text:q.text,type:'sa',points:q.points||1,total:qr.length,
           studentResponses:qr.map(r=>{
             const g=gradeByStudentQuestion[r.studentId+'|'+q.id];
             const m=metaByStudentQuestion[r.studentId+'|'+q.id];
-            return {studentId:r.studentId,name:r.studentName,answer:r.answer, score: r.points, feedback: g ? g.feedback : null, confidence:m?m.confidence:null};
+            // aiScore from AIGrades (g.score); r.points is written back to Responses sheet by grader
+            const aiScore = g ? (g.overridden ? g.overrideScore : g.score) : null;
+            return {studentId:r.studentId,name:r.studentName,answer:r.answer, score: aiScore, feedback: g ? g.feedback : null, overridden: g ? !!g.overridden : false, confidence:m?m.confidence:null};
           })};
       }
     });
@@ -534,6 +613,30 @@ const DB = {
       this.sh('Sessions').getRange(sess.row,10).setValue(q);
       const updatedSess = this.getSessionById(id);
       return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(qq=>qq.id))};
+    });
+  },
+
+  toggleLockQuestion(id, qId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(id); 
+      if (!sess) return {error:'Session not found'};
+      
+      const cfg = sess.config || {};
+      const lockedQs = Array.isArray(cfg.lockedQs) ? cfg.lockedQs : [];
+      
+      const idx = lockedQs.indexOf(qId);
+      if (idx > -1) {
+        lockedQs.splice(idx, 1);
+      } else {
+        lockedQs.push(qId);
+      }
+      
+      cfg.lockedQs = lockedQs;
+      this.sh('Sessions').getRange(sess.row, 13).setValue(JSON.stringify(cfg));
+      
+      const updatedSess = this.getSessionById(id);
+      const qSet = this.getQSet(sess.setId);
+      return {ok: true, session: this._normalizeSessionState(updatedSess, qSet ? qSet.questions.map(q=>q.id) : [])};
     });
   },
   advanceQuestion(id) {
@@ -658,6 +761,259 @@ const DB = {
     const avgPct=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
     archive.appendRow([id,sess.code,sess.setName,sess.block,sess.startedAt,sess.endedAt||new Date().toISOString(),students.length,avgPct,JSON.stringify({session:sess,students,responses,meta:this.getAllMeta(id),grades:this.getAIGrades(id),violations:this.getActiveViolations(id)})]);
     return true;
+  },
+
+  getArchivedSessions() {
+    const archive = this.sh('Archive');
+    if (!archive) return [];
+    const values = archive.getDataRange().getValues();
+    if (values.length <= 1) return [];
+    
+    return values.slice(1).map(r => ({
+      id: r[0],
+      code: r[1],
+      setName: r[2],
+      block: r[3],
+      startedAt: r[4],
+      endedAt: r[5],
+      studentCount: r[6],
+      avgPct: r[7]
+    })).sort((a,b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  },
+
+  getArchivedSessionData(sessionId) {
+    const archive = this.sh('Archive');
+    if (!archive) return null;
+    const values = archive.getDataRange().getValues();
+    const row = values.slice(1).find(r => r[0] === sessionId);
+    if (!row || !row[8]) return null;
+    try {
+      const data = JSON.parse(row[8]);
+      if (!data.session) data.session = {};
+      data.session.id = sessionId; // Ensure id is always present
+      if (!data.session.config) data.session.config = {};
+      
+      // Legacy support: inject missing qSet
+      if (!data.session.config.qSet && !data.session.qSet && data.session.setId) {
+        data.session.config.qSet = this.getQSet(data.session.setId) || {};
+      }
+      return data;
+    } catch(e) {
+      return null;
+    }
+  },
+
+  saveAIClassReport(sessionId, reportMarkdown) {
+    const archive = this.sh('Archive');
+    if (!archive) return false;
+    const values = archive.getDataRange().getValues();
+    const rowIdx = values.slice(1).findIndex(r => r[0] === sessionId);
+    if (rowIdx === -1) return false;
+    
+    const rowNum = rowIdx + 2; // +1 for header, +1 for 0-index
+    try {
+      const data = JSON.parse(values[rowNum - 1][8]);
+      data.aiReport = reportMarkdown;
+      archive.getRange(rowNum, 9).setValue(JSON.stringify(data));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  },
+
+  rescoreQuestionFull(sessionId, questionId, qJsonStr) {
+    return this.withLock(() => {
+      let globalUpdate = false;
+      const qNew = JSON.parse(qJsonStr);
+      qNew.points = Number(qNew.points) || 1;
+
+      // 1. UPDATE LIVE DATABASES (Sessions & Responses)
+      try {
+        const respSh = this.sh('Responses');
+        if (respSh) {
+          const respRows = respSh.getDataRange().getValues();
+          const stripHtml = s => String(s || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, '').toLowerCase();
+          
+          for (let i = 1; i < respRows.length; i++) {
+            if (respRows[i][0] === sessionId && respRows[i][3] === questionId) {
+              const rowNum = i + 1;
+              const rawAns = String(respRows[i][5]);
+              let ansToMatch = rawAns;
+              try { const p = JSON.parse(rawAns); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch(e){}
+              ansToMatch = stripHtml(ansToMatch);
+              
+              let pts = 0; let isCorrect = false;
+
+              if (qNew.type === 'mc') {
+                const correctIndices = qNew.correctIndices || [qNew.correctIndex || 0];
+                const matchedIdx = (qNew.choices || []).findIndex(ch => {
+                  const c = stripHtml(ch);
+                  return c === ansToMatch || (c.length > 2 && ansToMatch.includes(c)) || (c.length > 2 && c.includes(ansToMatch));
+                });
+                // Fallback: percentage-conversion (Sheets converts "+100%" → 1)
+                let finalIdx = matchedIdx;
+                if (finalIdx === -1) {
+                  const numAns = parseFloat(ansToMatch);
+                  if (!isNaN(numAns)) {
+                    const pctVal = Math.round(numAns * 100);
+                    const candidates = [String(pctVal)+'%',(pctVal>0?'+':'')+String(pctVal)+'%',String(pctVal),(pctVal>0?'+':'')+String(pctVal)].map(s=>stripHtml(s));
+                    finalIdx = (qNew.choices||[]).findIndex(ch => { const c=stripHtml(ch); return candidates.some(cd=>c===cd); });
+                    if (finalIdx === -1) {
+                      finalIdx = (qNew.choices||[]).findIndex(ch => { const c=stripHtml(ch); if(c.length>20) return false; const ns=c.replace(/[^0-9.\-+]/g,''); if(!ns) return false; return Math.abs(parseFloat(ns)-pctVal)<0.5; });
+                    }
+                  }
+                }
+                if (finalIdx !== -1 && correctIndices.includes(finalIdx)) {
+                  pts = qNew.points; isCorrect = true;
+                }
+              }
+              // SA rescoring requires an AI call so we wipe its grading
+              respSh.getRange(rowNum, 7, 1, 3).setValues([[isCorrect, pts, qNew.points]]);
+              globalUpdate = true;
+            }
+          }
+        }
+
+        const sessSh = this.sh('Sessions');
+        if (sessSh) {
+          const sessRows = sessSh.getDataRange().getValues();
+          for (let i = 1; i < sessRows.length; i++) {
+            if (sessRows[i][0] === sessionId) {
+              const cfg = JSON.parse(sessRows[i][12] || '{}');
+              if (cfg.qSet && cfg.qSet.questions) {
+                const qIdx = cfg.qSet.questions.findIndex(q => q.id === questionId);
+                if (qIdx !== -1) {
+                  Object.assign(cfg.qSet.questions[qIdx], qNew);
+                  sessSh.getRange(i + 1, 13).setValue(JSON.stringify(cfg));
+                  globalUpdate = true;
+                }
+              }
+            }
+          }
+        }
+      } catch(e) { /* Live update failed, continue to archive */ }
+
+      // 2. UPDATE ARCHIVE DATABASE
+      const archive = this.sh('Archive');
+      if (!archive) return globalUpdate;
+      const values = archive.getDataRange().getValues();
+      const rowIdx = values.slice(1).findIndex(r => r[0] === sessionId);
+      if (rowIdx === -1) return globalUpdate;
+      
+      const rowNum = rowIdx + 2; 
+      try {
+        const data = JSON.parse(values[rowNum - 1][8]);
+        const qSet = Object.assign({}, (data.session.config && data.session.config.qSet) ? data.session.config.qSet : data.session.qSet);
+        if (!qSet || !qSet.questions) return globalUpdate;
+        
+        const qOriginal = qSet.questions.find(qx => qx.id === questionId);
+        if (!qOriginal) return globalUpdate;
+        
+        Object.assign(qOriginal, qNew);
+        
+        if (qOriginal.type === 'mc') {
+          const stripHtml = s => String(s || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, '').toLowerCase();
+          data.responses.forEach(r => {
+             if (r.questionId === questionId) {
+                let ansToMatch = String(r.answer || '');
+                try { const p = JSON.parse(ansToMatch); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch(e){}
+                ansToMatch = stripHtml(ansToMatch);
+                
+                const correctIndices = qOriginal.correctIndices || [qOriginal.correctIndex || 0];
+                const matchedIdx = (qOriginal.choices || []).findIndex(ch => {
+                  const c = stripHtml(ch);
+                  return c === ansToMatch || (c.length > 2 && ansToMatch.includes(c)) || (c.length > 2 && c.includes(ansToMatch));
+                });
+                // Fallback: percentage-conversion (Sheets converts "+100%" → 1)
+                let finalIdx = matchedIdx;
+                if (finalIdx === -1) {
+                  const numAns = parseFloat(ansToMatch);
+                  if (!isNaN(numAns)) {
+                    const pctVal = Math.round(numAns * 100);
+                    const candidates = [String(pctVal)+'%',(pctVal>0?'+':'')+String(pctVal)+'%',String(pctVal),(pctVal>0?'+':'')+String(pctVal)].map(s=>stripHtml(s));
+                    finalIdx = (qOriginal.choices||[]).findIndex(ch => { const c=stripHtml(ch); return candidates.some(cd=>c===cd); });
+                    if (finalIdx === -1) {
+                      finalIdx = (qOriginal.choices||[]).findIndex(ch => { const c=stripHtml(ch); if(c.length>20) return false; const ns=c.replace(/[^0-9.\-+]/g,''); if(!ns) return false; return Math.abs(parseFloat(ns)-pctVal)<0.5; });
+                    }
+                  }
+                }
+                
+                if (finalIdx !== -1 && correctIndices.includes(finalIdx)) {
+                   r.points = qOriginal.points; 
+                   r.isCorrect = true;
+                } else {
+                   r.points = 0;
+                   r.isCorrect = false;
+                }
+                r.maxPoints = qOriginal.points;
+             }
+          });
+        } else {
+           data.responses.forEach(r => {
+             if (r.questionId === questionId) {
+               r.points = 0;
+               r.isCorrect = false;
+               r.maxPoints = qOriginal.points;
+               r.score = 0;
+               r.feedback = '';
+             }
+           });
+           if (data.grades) {
+             data.grades = data.grades.filter(g => g.questionId !== questionId);
+           }
+        }
+        
+        const students = data.students || [];
+        const responses = data.responses || [];
+        const totalByStudent={};
+        students.forEach(st=>{
+          const sr=responses.filter(r=>r.studentId===st.studentId);
+          const pts=sr.reduce((a,r)=>a+(Number(r.points)||0),0); 
+          const max=sr.reduce((a,r)=>a+(Number(r.maxPoints)||0),0); 
+          totalByStudent[st.studentId]=max?Math.round((pts/max)*100):0;
+        });
+        const pcts=Object.values(totalByStudent);
+        const avgPct=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
+        
+        if (data.session.config && data.session.config.qSet) data.session.config.qSet = qSet;
+        else data.session.qSet = qSet;
+        
+        archive.getRange(rowNum, 8).setValue(avgPct); 
+        archive.getRange(rowNum, 9).setValue(JSON.stringify(data)); 
+        
+        return true;
+      } catch (e) {
+        return false;
+      }
+    });
+  },
+
+  dismissViolation(sessionId, timestamp) {
+    const archive = this.sh('Archive');
+    const values = archive.getDataRange().getValues();
+    const rowIdx = values.slice(1).findIndex(r => r[0] === sessionId);
+    if (rowIdx === -1) return false;
+    
+    const rowNum = rowIdx + 2; 
+    try {
+      const data = JSON.parse(values[rowNum - 1][8]);
+      if (data.violations) {
+          data.violations = data.violations.filter(v => String(v.timestamp) !== String(timestamp));
+          archive.getRange(rowNum, 9).setValue(JSON.stringify(data));
+      }
+      
+      const violSheet = this.sh('Violations');
+      const violData = violSheet.getDataRange().getValues();
+      for (let i=1; i<violData.length; i++) {
+         if (violData[i][0] === sessionId && String(violData[i][4]) === String(timestamp)) {
+             violSheet.deleteRow(i+1);
+             break;
+         }
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
   },
 
   // Helpers
