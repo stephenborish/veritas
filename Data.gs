@@ -448,9 +448,9 @@ const DB = {
        sessionState.revealedDetails = {};
        const responses = this.getAllResponses(sessId).filter(r => r.studentId === stuId);
        const grades = this.getAIGrades(sessId).filter(g => g.studentId === stuId);
-       const respMap = responses.reduce((acc, r) => { acc[r.questionId] = r; return acc; }, {});
-       const gradeMap = grades.reduce((acc, g) => { acc[g.questionId] = g; return acc; }, {});
-       const qMap = qSet.questions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
+       const respMap = (responses || []).reduce((acc, r) => { acc[r.questionId] = r; return acc; }, {});
+       const gradeMap = (grades || []).reduce((acc, g) => { acc[g.questionId] = g; return acc; }, {});
+       const qMap = (qSet.questions || []).reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
 
        sess.revealedQs.forEach(qId => {
           const q = qMap[qId];
@@ -741,9 +741,9 @@ const DB = {
     const meta=this.getAllMeta(sessId).filter(m=>m.studentId===stuId);
     const grades=this.getAIGrades(sessId).filter(g=>g.studentId===stuId);
     const student=this.getStudentSessions(sessId).find(s=>s.studentId===stuId);
-    const respMap = responses.reduce((acc, r) => { acc[r.questionId] = r; return acc; }, {});
-    const metaMap = meta.reduce((acc, m) => { acc[m.questionId] = m; return acc; }, {});
-    const gradeMap = grades.reduce((acc, g) => { acc[g.questionId] = g; return acc; }, {});
+    const respMap = (responses || []).reduce((acc, r) => { acc[r.questionId] = r; return acc; }, {});
+    const metaMap = (meta || []).reduce((acc, m) => { acc[m.questionId] = m; return acc; }, {});
+    const gradeMap = (grades || []).reduce((acc, g) => { acc[g.questionId] = g; return acc; }, {});
     const details=(qSet.questions||[]).map((q,idx)=>{
       const r=respMap[q.id]||null;
       const m=metaMap[q.id]||null;
@@ -761,7 +761,7 @@ const DB = {
     if(existing) return true;
     const students=this.getStudentSessions(id);
     const responses=this.getAllResponses(id);
-    const respsByStudent = responses.reduce((acc, r) => {
+    const respsByStudent = (responses || []).reduce((acc, r) => {
       if (!acc[r.studentId]) acc[r.studentId] = [];
       acc[r.studentId].push(r);
       return acc;
@@ -981,7 +981,7 @@ const DB = {
         
         const students = data.students || [];
         const responses = data.responses || [];
-        const respsByStudent = responses.reduce((acc, r) => {
+        const respsByStudent = (responses || []).reduce((acc, r) => {
           if (!acc[r.studentId]) acc[r.studentId] = [];
           acc[r.studentId].push(r);
           return acc;

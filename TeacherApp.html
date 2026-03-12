@@ -3447,14 +3447,17 @@
             <div style="padding:16px; font-size:13px; color:var(--tx2); line-height:1.5">
               <p style="margin-bottom:12px">This matrix compares student accuracy against their reported confidence. Ideally, most answers should fall into "Sure & Right" or "Unsure & Wrong".</p>
               `;
+      const qMapMatrix = questions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
+      const metaMapMatrix = meta.reduce((acc, m) => { acc[m.studentId + '|' + m.questionId] = m; return acc; }, {});
+
       const profiles = { sr: [], sw: [], ur: [], uw: [] };
       Object.keys(studentMap).forEach(sId => {
         const s = studentMap[sId];
         let c_sr = 0, c_sw = 0, c_ur = 0, c_uw = 0;
         s.resps.forEach(r => {
-          const q = questions.find(qq => qq.id === r.questionId);
+          const q = qMapMatrix[r.questionId];
           const eval_ = reEvalMC(r, q);
-          const confMeta = meta.find(m => m.studentId === r.studentId && m.questionId === r.questionId);
+          const confMeta = metaMapMatrix[r.studentId + '|' + r.questionId];
           const confVal = confMeta ? Number(confMeta.confidence) : 0;
           const isC = eval_.isCorrect;
           if (confVal >= 3) {
@@ -3518,13 +3521,8 @@
         html += `<div style="color:var(--tx3); font-size:13px; font-style:italic">Question data not found in this archive format.</div>`;
       } else {
         // Pre-calculate stats and categorize
-        const respsByQ = resps.reduce((acc, r) => {
-          if (!acc[r.questionId]) acc[r.questionId] = [];
-          acc[r.questionId].push(r);
-          return acc;
-        }, {});
         const qStats = qList.map((q, idx) => {
-          const qResps = respsByQ[q.id] || [];
+          const qResps = resps.filter(r => r.questionId === q.id);
           const qPts = qResps.reduce((a, r) => a + reEvalMC(r, q).pts, 0);
           const qMax = (Number(q.points) || 1) * Math.max(1, students.length);
           const qPct = qMax > 0 ? Math.round((qPts / qMax) * 100) : 0;
@@ -3534,6 +3532,8 @@
         const mastered = qStats.filter(s => s.qPct >= 80);
         const review = qStats.filter(s => s.qPct >= 40 && s.qPct < 80);
         const critical = qStats.filter(s => s.qPct < 40);
+
+        const metaMapArchive = meta.reduce((acc, m) => { acc[m.studentId + '|' + m.questionId] = m; return acc; }, {});
 
         const renderGroup = (title, arr, color) => {
           if (arr.length === 0) return '';
@@ -3549,16 +3549,13 @@
               const stripHtml = (s) => String(s || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, '').toLowerCase();
 
               // Pre-calculate to grab true totalAns first
-              const mappedResps = qResps.map(r => {
-                let ansToMatch = String(r.answer || '');
-                try { const p = JSON.parse(ansToMatch); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch (e) { }
-                return { ...r, cleanAns: stripHtml(ansToMatch) };
-              });
               const counts = opts.map((optText, optIdx) => {
                 const isCorrect = correctIdxs.includes(optIdx);
                 const cleanOpt = stripHtml(optText);
-                const optResps = mappedResps.filter(r => {
-                  const cleanAns = r.cleanAns;
+                const optResps = qResps.filter(r => {
+                  let ansToMatch = String(r.answer || '');
+                  try { const p = JSON.parse(ansToMatch); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch (e) { }
+                  const cleanAns = stripHtml(ansToMatch);
                   // Direct text match
                   if (cleanAns === cleanOpt) return true;
                   // Substring match
@@ -3584,7 +3581,7 @@
 
                 // Get students who picked this
                 const stuList = optResps.map(r => {
-                  const m = meta.find(mx => mx.studentId === r.studentId && mx.questionId === q.id);
+                  const m = metaMapArchive[r.studentId + '|' + q.id];
                   const conf = m ? Number(m.confidence) : 0;
                   const confCol = conf >= 3 ? (isCorrect ? 'var(--grn)' : 'var(--red)') : (conf > 0 ? (isCorrect ? 'var(--amb)' : 'var(--tx2)') : 'var(--tx3)');
                   return `<span title="Confidence: ${conf}" style="color:${confCol}">${r.studentName}</span>`;
@@ -3635,7 +3632,7 @@
                 const cPct = totalAns > 0 ? Math.round((c.count / totalAns) * 100) : 0;
 
                 const stuList = c.optResps.map(r => {
-                  const m = meta.find(mx => mx.studentId === r.studentId && mx.questionId === q.id);
+                  const m = metaMapArchive[r.studentId + '|' + q.id];
                   const conf = m ? Number(m.confidence) : 0;
                   const confCol = conf >= 3 ? (c.isCorrect ? 'var(--grn)' : 'var(--red)') : (conf > 0 ? (c.isCorrect ? 'var(--amb)' : 'var(--tx2)') : 'var(--tx3)');
                   return `<span title="Confidence: ${conf}" style="color:${confCol}">${r.studentName}</span>`;
