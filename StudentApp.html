@@ -16,6 +16,7 @@
     rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
   <style>
     :root {
       /* Soft gradient background */
@@ -1350,7 +1351,7 @@
         // Anti-ss Side 1: The Question
         html += '<div class="anti-ss-side" style="padding:24px; background:var(--s); border:2px solid var(--bd); border-radius:var(--rs);">';
         html += '<div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:12px; letter-spacing:1px">Hover to view Question</div>';
-        html += '<div class="q-text" style="font-size:18px; margin-bottom:0">' + q.text + '</div>';
+        html += '<div class="q-text" style="font-size:18px; margin-bottom:0">' + DOMPurify.sanitize(q.text) + '</div>';
         html += '</div>';
 
         // Anti-ss Side 2: The Answer & Feedback
@@ -1358,7 +1359,7 @@
         html += '<div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:12px; letter-spacing:1px">Hover to view Answer</div>';
 
         const ptStr = (q.ptsEarned !== undefined && q.ptsEarned !== null) ? `<span style="float:right; color:var(--teal)">Score: ${q.ptsEarned} / ${q.points || 1}</span>` : '';
-        html += `<div style="font-size:16px; margin-bottom:16px"><strong style="color:var(--tx2)">Your Answer:</strong>${ptStr}<br/>` + (S.ans[q.id] || '<em style="color:var(--tx3)">No answer submitted</em>') + '</div>';
+        html += `<div style="font-size:16px; margin-bottom:16px"><strong style="color:var(--tx2)">Your Answer:</strong>${ptStr}<br/>` + (DOMPurify.sanitize(S.ans[q.id]) || '<em style="color:var(--tx3)">No answer submitted</em>') + '</div>';
 
         if (S.metaEnabled && S.conf[q.id]) {
           const confMap = { 1: 'Guessing', 2: 'Somewhat Sure', 3: 'Very Sure', 4: 'Absolutely Certain' };
@@ -1366,10 +1367,10 @@
         }
 
         if (isMC) {
-          html += '<div style="font-size:16px; margin-top:16px"><strong style="color:var(--tx2)">Correct Answer:</strong><br/>' + (q.clientCorrectAnswer || 'Not set') + '</div>';
+          html += '<div style="font-size:16px; margin-top:16px"><strong style="color:var(--tx2)">Correct Answer:</strong><br/>' + (DOMPurify.sanitize(q.clientCorrectAnswer) || 'Not set') + '</div>';
         } else {
           if (q.aiFeedback) {
-            html += `<div style="font-size:14px; margin-top:16px; padding:12px; background:var(--tealBg); color:var(--teal); border: 2px solid var(--teal); border-radius:6px"><strong>RESPONSE FEEDBACK:</strong><br/>${q.aiFeedback}</div>`;
+            html += `<div style="font-size:14px; margin-top:16px; padding:12px; background:var(--tealBg); color:var(--teal); border: 2px solid var(--teal); border-radius:6px"><strong>RESPONSE FEEDBACK:</strong><br/>${DOMPurify.sanitize(q.aiFeedback)}</div>`;
           }
         }
 
@@ -1427,7 +1428,7 @@
       } else {
         // STATE 1: Question Phase
         html += '<div class="q-card"><div class="q-hdr"><span class="q-num">Question ' + (S.cur + 1) + '</span><span class="q-pts">' + (q.points || 1) + ' Points</span></div>';
-        html += '<div class="q-text">' + q.text + '</div>';
+        html += '<div class="q-text">' + DOMPurify.sanitize(q.text) + '</div>';
         if (isMC) {
           // Detect multi-select: question has more than 1 correct answer
           const isMultiSelect = !!q.multiSelect;
@@ -1441,7 +1442,7 @@
               const payload = encodeURIComponent(JSON.stringify(c));
               const ltr = String.fromCharCode(65 + i);
               mcHtml += '<div class="mc-opt ' + (isChecked ? 'sel' : '') + '" data-choice-payload="' + payload + '" data-multiselect="1">';
-              mcHtml += '<div class="ltr">' + ltr + '</div><div class="ctxt">' + c + '</div>';
+              mcHtml += '<div class="ltr">' + ltr + '</div><div class="ctxt">' + DOMPurify.sanitize(c) + '</div>';
               mcHtml += '<div style="margin-left:auto;font-size:18px">' + (isChecked ? '☑' : '☐') + '</div>';
               mcHtml += '</div>';
             });
@@ -1455,7 +1456,7 @@
               const payload = encodeURIComponent(JSON.stringify(c));
               const ltr = String.fromCharCode(65 + i);
               mcHtml += '<div class="mc-opt ' + selStr + '" data-choice-payload="' + payload + '">';
-              mcHtml += '<div class="ltr">' + ltr + '</div><div class="ctxt">' + c + '</div></div>';
+              mcHtml += '<div class="ltr">' + ltr + '</div><div class="ctxt">' + DOMPurify.sanitize(c) + '</div></div>';
             });
             html += '<div class="mc-list">' + mcHtml + '</div>';
           }
@@ -1630,7 +1631,7 @@
 
       function doFinalSync() {
         if (SyncQueue.items.length > 0) {
-          document.getElementById('sumContent').innerHTML = '<div style="font-size:24px; color:var(--teal); font-weight:600; margin-bottom:12px">' + getPun() + '</div><div style="color:var(--tx2)">Syncing ' + SyncQueue.items.length + ' pending answer(s)...</div>';
+          document.getElementById('sumContent').innerHTML = '<div style="font-size:24px; color:var(--teal); font-weight:600; margin-bottom:12px">' + DOMPurify.sanitize(getPun()) + '</div><div style="color:var(--tx2)">Syncing ' + SyncQueue.items.length + ' pending answer(s)...</div>';
           setTimeout(doFinalSync, 1000);
           return;
         }

@@ -16,6 +16,7 @@
     rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
   <style>
     :root {
       /* Soft gradient background */
@@ -1798,7 +1799,7 @@
                        <div style="height: 12px; width: 12px; background: var(--amb); border-radius: 50%; animation: pulse 1s infinite"></div>
                        <div>
                           <div style="font-size: 13px; font-weight: 700; color: var(--amb); letter-spacing: 1px; text-transform:uppercase; margin-bottom:4px">Currently Live</div>
-                          <div style="font-size: 16px; font-weight: 700; color: var(--tx)">${sess.setName || 'Assessment'} (Block ${sess.block || '-'})</div>
+                          <div style="font-size: 16px; font-weight: 700; color: var(--tx)">${DOMPurify.sanitize(sess.setName || 'Assessment')} (Block ${DOMPurify.sanitize(sess.block || '-')})</div>
                        </div>
                     </div>
                     <button class="btn bp" style="background: var(--amb); border: none" onclick="document.querySelector('[data-s=live]').click()">Monitor Session →</button>
@@ -1814,7 +1815,7 @@
           el.innerHTML = recent.map(s => `
                  <div class="dash-item" onclick="document.querySelector('[data-s=questions]').click(); setTimeout(() => openQEd('${s.id}'), 50)">
                     <div>
-                       <div class="dash-item-title">${s.name}</div>
+                       <div class="dash-item-title">${DOMPurify.sanitize(s.name)}</div>
                        <div class="dash-item-meta">${s.questionCount} Questions</div>
                     </div>
                     <div style="color: var(--teal)">Edit →</div>
@@ -1833,7 +1834,7 @@
             return `
                  <div class="dash-item" onclick="document.querySelector('[data-s=analytics]').click(); setTimeout(() => loadAnaDetail('${s.id}'), 50)">
                     <div>
-                       <div class="dash-item-title">${s.setName} (Block ${s.block})</div>
+                       <div class="dash-item-title">${DOMPurify.sanitize(s.setName)} (Block ${DOMPurify.sanitize(s.block)})</div>
                        <div class="dash-item-meta">${new Date(s.startedAt).toLocaleDateString()} · ${s.studentCount} Students</div>
                     </div>
                     <div><span class="badge ${badge}">${pct}% Avg</span></div>
@@ -2156,7 +2157,7 @@
             ${filteredCourses.map(c => `
             <div class="card">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-                <h3 style="font-size:18px; color:var(--teal)">${c.name}</h3>
+                <h3 style="font-size:18px; color:var(--teal)">${DOMPurify.sanitize(c.name)}</h3>
                 <div><button class="btn bg bs" onclick="addBlockToCourse('${c.id}', '${c.blocks.join(',')}')">+ Add Block Roster</button></div>
             </div>
             ${c.blocks.length ? c.blocks.map(b => {
@@ -2231,7 +2232,7 @@
           window.__allCoursesData = courses; // keep synced
           const cf = document.getElementById('qsCourseFilter');
           if (cf) {
-            cf.innerHTML = '<option value="">All Courses</option>' + courses.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            cf.innerHTML = '<option value="">All Courses</option>' + courses.map(c => `<option value="${c.id}">${DOMPurify.sanitize(c.name)}</option>`).join('');
           }
           // Fetch Sets
           google.script.run.withFailureHandler(e => { hideLoad(); toast(e.message, 'err'); }).withSuccessHandler(sets => {
@@ -2267,7 +2268,7 @@
         const courseBadge = course ? `<span class="badge" style="background:var(--s2); color:var(--tx2); font-size:11px; margin-top:8px; display:inline-block; border:1px solid var(--bd);">📚 ${course.name}</span>` : '';
         return `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
           <div>
-            <div style="font-size:16px;font-weight:700;margin-bottom:4px;color:var(--teal)">${s.name}</div>
+            <div style="font-size:16px;font-weight:700;margin-bottom:4px;color:var(--teal)">${DOMPurify.sanitize(s.name)}</div>
             <div style="font-size:13px; color:var(--tx2)">${s.questionCount} Questions (${s.mcCount} MC, ${s.saCount} SA)</div>
             ${courseBadge}
           </div>
@@ -2328,7 +2329,7 @@
 
         if (q.type === 'mc') {
           body = `
-        <div class="fr"><label>Question Text</label><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${q.text}</div></div></div>
+        <div class="fr"><label>Question Text</label><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${DOMPurify.sanitize(q.text)}</div></div></div>
         <div class="fr"><label>Answer Choices (Select Correct Answers)</label>
           ${q.choices.map((c, ci) => `
             <div class="ch-row">
@@ -2338,7 +2339,7 @@
               </div>
               <div class="rte">
                 <div class="rte-tb">${rteTB(`rte_c_${i}_${ci}`)}</div>
-                <div class="rte-bd" style="min-height:60px" contenteditable id="rte_c_${i}_${ci}" onblur="edQ[${i}].choices[${ci}]=this.innerHTML">${c}</div>
+                <div class="rte-bd" style="min-height:60px" contenteditable id="rte_c_${i}_${ci}" onblur="edQ[${i}].choices[${ci}]=this.innerHTML">${DOMPurify.sanitize(c)}</div>
               </div>
               ${q.choices.length > 2 ? `<button class="btn bd bs" style="padding:8px 12px; margin-top:36px" onclick="rmCh(${i},${ci})">✕</button>` : ''}
             </div>
@@ -2348,7 +2349,7 @@
         <div style="width:120px" class="fr"><label>Points</label><input type="number" value="${q.points}" min="1" max="100" onchange="edQ[${i}].points=+this.value"></div>`;
         } else {
           body = `
-        <div class="fr"><label>Question Text</label><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${q.text}</div></div></div>
+        <div class="fr"><label>Question Text</label><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${DOMPurify.sanitize(q.text)}</div></div></div>
         <div class="fg">
           <div class="fr"><label>Grading Rubric (Used by AI)</label><textarea onchange="edQ[${i}].rubric=this.value" style="min-height:160px" placeholder="Explain the specific requirements the student must meet to receive full credit...">${q.rubric || ''}</textarea></div>
           <div class="fr"><label>Ideal Answer (Used by AI)</label><textarea onchange="edQ[${i}].sampleAnswer=this.value" style="min-height:160px" placeholder="Provide an exemplar response...">${q.sampleAnswer || ''}</textarea></div>
@@ -2544,8 +2545,8 @@
       const isLS = d.session.mode === 'lockstep';
       curQIdx = d.session.currentQ || 0;
       document.getElementById('liveStatusBanner').innerHTML = `<div style="display:flex;align-items:center;">
-        <div style="font-weight:700;font-size:16px;margin-right:12px;">${d.session.setName} <span style="font-weight:normal;color:var(--tx3);font-size:13px">· Block ${d.session.block}</span></div>
-        <div style="font-size:12px;font-weight:700;background:var(--s);padding:4px 8px;border-radius:4px;border:1px solid var(--bd); letter-spacing:1px">${d.session.code}</div>
+        <div style="font-weight:700;font-size:16px;margin-right:12px;">${DOMPurify.sanitize(d.session.setName)} <span style="font-weight:normal;color:var(--tx3);font-size:13px">· Block ${DOMPurify.sanitize(d.session.block)}</span></div>
+        <div style="font-size:12px;font-weight:700;background:var(--s);padding:4px 8px;border-radius:4px;border:1px solid var(--bd); letter-spacing:1px">${DOMPurify.sanitize(d.session.code)}</div>
         <button onclick="document.querySelector('.app').classList.toggle('hide-sb')" class="btn bs bd" style="padding:4px 8px; font-size:12px; margin-left:12px;">◫ Toggle Left Panel</button>
       </div>`;
       if (isLS) {
@@ -2618,7 +2619,7 @@
                <span style="font-weight:700; font-size:15px; color:var(--tx)">Current Question</span>
                <span style="font-weight:600; font-size:13px; color:var(--teal)">${q.type === 'mc' ? 'Multiple Choice' : 'Short Answer'}</span>
             </div>
-            <div style="font-size:16px; margin-bottom:20px; max-width:100%; overflow:hidden;" class="q-text rte-content">${q.text}</div>`;
+            <div style="font-size:16px; margin-bottom:20px; max-width:100%; overflow:hidden;" class="q-text rte-content">${DOMPurify.sanitize(q.text)}</div>`;
 
         if (q.type === 'mc' && q.choices) {
           const choicesCount = {};
@@ -2654,7 +2655,7 @@
 
             qFullHtml += `<div style="padding:12px 14px; border-radius:8px; font-size:14px; ${bg} ${border}">
                 <div style="display:flex; justify-content:space-between; align-items: flex-start; gap: 12px;">
-                    <div style="font-weight:600; color:var(--tx); flex:1; max-width:100%; overflow:hidden;" class="rte-content">${c}</div>
+                    <div style="font-weight:600; color:var(--tx); flex:1; max-width:100%; overflow:hidden;" class="rte-content">${DOMPurify.sanitize(c)}</div>
                     <div style="display:flex; flex-direction:column; align-items:flex-end; white-space:nowrap; font-size:12px;">
                         <span style="font-weight:700; color:var(--tx2);">${st.count} selected (${pct}%)</span>
                         <span style="color:var(--tx3)">Avg Conf: <strong>${avgConf}</strong></span>
@@ -2737,7 +2738,7 @@
         let rightHtml = '';
 
         if (unresolvedViolations.length) {
-          rightHtml += `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong>Students locked out (${unresolvedViolations.length})</strong><span class="muted" style="font-size:12px">Resolve by re-admitting student</span></div><div style="margin-top:10px;display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${v.studentName || v.studentId}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${v.studentId}')">Re-admit</button></div>`).join('')}</div></div>`;
+        rightHtml += `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong>Students locked out (${unresolvedViolations.length})</strong><span class="muted" style="font-size:12px">Resolve by re-admitting student</span></div><div style="margin-top:10px;display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${v.studentId}')">Re-admit</button></div>`).join('')}</div></div>`;
         }
         rightHtml += `<div class="student-grid">${withFilteredState.map(s => {
           let ansSnippet = '';
@@ -2754,7 +2755,7 @@
             ansSnippet = `<div style="margin-top:8px; padding:6px; background:var(--bd); border-radius:4px; font-size:12px; text-align:center; color:var(--tx3); font-style:italic;">No response</div>`;
           }
           let reAd = readmitByStudent[s.studentId] ? `<div style="margin-top:8px"><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${s.studentId}')">Re-admit student</button></div>` : '';
-          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${s.name}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${ansSnippet}${reAd}</div>`;
+          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${DOMPurify.sanitize(s.name)}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${ansSnippet}${reAd}</div>`;
         }).join('')}</div>`;
 
         document.getElementById('tab-students').innerHTML = rightHtml;
@@ -2764,7 +2765,7 @@
         let detHtml = '';
         d.qStats.forEach((q, i) => {
           if (isLS && i !== curQIdx) return;
-          detHtml += `<div class="card"><div class="card-title"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}">Q${q.idx + 1}</span> <span style="margin-left:8px;font-size:12px;color:var(--tx3)">Avg confidence: ${q.avgConf || '-'}</span></div><div style="font-size:15px; margin-bottom:16px">${q.text}</div><div style="background:var(--s2); border-radius:6px; padding:16px;">${(q.studentResponses || []).map(r => `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--bd);"><div style="width:170px; font-weight:600">${r.name}</div><div style="flex:1; color:var(--tx2)">${r.answer || '<span style="color:var(--tx3)">No answer</span>'}</div><div style="width:64px; text-align:right">${r.confidence ? `C${r.confidence}` : ''}</div>${r.isCorrect !== undefined ? `<div style="width:35px; text-align:right; color:${r.isCorrect === true || r.isCorrect === 'TRUE' ? 'var(--grn)' : 'var(--red)'}">${r.isCorrect === true || r.isCorrect === 'TRUE' ? '✓' : '✗'}</div>` : ''}</div>${r.feedback ? `<div style="padding:8px 0 12px 170px;color:var(--tx2);font-size:12px"><strong>AI:</strong> ${r.score} pt · ${r.feedback}</div>` : ''}`).join('')}</div></div>`;
+          detHtml += `<div class="card"><div class="card-title"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}">Q${q.idx + 1}</span> <span style="margin-left:8px;font-size:12px;color:var(--tx3)">Avg confidence: ${q.avgConf || '-'}</span></div><div style="font-size:15px; margin-bottom:16px">${DOMPurify.sanitize(q.text)}</div><div style="background:var(--s2); border-radius:6px; padding:16px;">${(q.studentResponses || []).map(r => `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--bd);"><div style="width:170px; font-weight:600">${DOMPurify.sanitize(r.name)}</div><div style="flex:1; color:var(--tx2)">${DOMPurify.sanitize(r.answer) || '<span style="color:var(--tx3)">No answer</span>'}</div><div style="width:64px; text-align:right">${r.confidence ? `C${r.confidence}` : ''}</div>${r.isCorrect !== undefined ? `<div style="width:35px; text-align:right; color:${r.isCorrect === true || r.isCorrect === 'TRUE' ? 'var(--grn)' : 'var(--red)'}">${r.isCorrect === true || r.isCorrect === 'TRUE' ? '✓' : '✗'}</div>` : ''}</div>${r.feedback ? `<div style="padding:8px 0 12px 170px;color:var(--tx2);font-size:12px"><strong>AI:</strong> ${r.score} pt · ${DOMPurify.sanitize(r.feedback)}</div>` : ''}`).join('')}</div></div>`;
         });
         document.getElementById('tab-details').innerHTML = detHtml || '<div class="card">No responses yet.</div>';
       }
@@ -2840,7 +2841,7 @@
             <div style="position:relative;height:6px;background:var(--bd);border-radius:4px;overflow:hidden;margin-bottom:16px">
               <div style="height:100%;background:${barColor};width:${pct}%;transition:width 0.5s"></div>
             </div>
-            <div style="font-size:14px;color:var(--tx2);margin-bottom:12px;border-left:3px solid var(--bd);padding-left:10px">${q.text}</div>`;
+            <div style="font-size:14px;color:var(--tx2);margin-bottom:12px;border-left:3px solid var(--bd);padding-left:10px">${DOMPurify.sanitize(q.text)}</div>`;
 
           if (!allResps.length) {
             html += `<div style="color:var(--tx3);font-size:13px;padding:8px 0">No student responses yet.</div>`;
@@ -2857,9 +2858,9 @@
               html += `<div style="border:1px solid var(--bd);border-radius:8px;padding:12px;background:var(--s2)" id="grade-row-${r.studentId}-${q.id}">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
                   <div style="flex:1">
-                    <div style="font-weight:700;font-size:13px;margin-bottom:4px">${r.name}${overrideBadge}</div>
-                    <div style="font-size:13px;color:var(--tx2);margin-bottom:${graded ? '8' : '0'}px;word-break:break-word">${r.answer || '<em style="color:var(--tx3)">No response</em>'}</div>
-                    ${graded ? `<div style="font-size:12px;padding:8px 10px;background:var(--s);border-radius:6px;border-left:3px solid ${scoreColor};color:var(--tx2)">${r.feedback}</div>` : `<div style="font-size:12px;color:var(--tx3);font-style:italic">Not yet graded</div>`}
+                    <div style="font-weight:700;font-size:13px;margin-bottom:4px">${DOMPurify.sanitize(r.name)}${overrideBadge}</div>
+                    <div style="font-size:13px;color:var(--tx2);margin-bottom:${graded ? '8' : '0'}px;word-break:break-word">${DOMPurify.sanitize(r.answer) || '<em style="color:var(--tx3)">No response</em>'}</div>
+                    ${graded ? `<div style="font-size:12px;padding:8px 10px;background:var(--s);border-radius:6px;border-left:3px solid ${scoreColor};color:var(--tx2)">${DOMPurify.sanitize(r.feedback)}</div>` : `<div style="font-size:12px;color:var(--tx3);font-style:italic">Not yet graded</div>`}
                   </div>
                   <div style="flex-shrink:0;text-align:right;min-width:90px">
                     ${graded ? `
@@ -2901,9 +2902,9 @@
       if (!stuId) return;
       google.script.run.withSuccessHandler(d => {
         if (d.error) return toast(d.error, 'err');
-        document.getElementById('stuDetailTitle').innerHTML = `${d.student ? d.student.studentName : 'Student Report'} <button class="btn bg" style="font-size:12px; padding:4px 8px; margin-left:12px" onclick="sendSingleEmail('${sessId}', '${stuId}')">📧 Send Link</button>`;
+        document.getElementById('stuDetailTitle').innerHTML = `${DOMPurify.sanitize(d.student ? d.student.studentName : 'Student Report')} <button class="btn bg" style="font-size:12px; padding:4px 8px; margin-left:12px" onclick="sendSingleEmail('${sessId}', '${stuId}')">📧 Send Link</button>`;
         document.getElementById('stuDetailSummary').textContent = `${d.session.setName} · ${d.totalPts}/${d.totalMax} points (${d.pct}%)`;
-        document.getElementById('stuDetailBody').innerHTML = `<div class="detail-list">${(d.details || []).map(x => `<div class="detail-row"><div style="font-weight:700;margin-bottom:4px">Q${x.qIndex + 1} (${x.type.toUpperCase()})</div><div style="color:var(--tx2);margin-bottom:4px">${x.questionText}</div><div><strong>Answer:</strong> ${x.answer || '<em>No response</em>'}</div><div style="margin-top:3px"><strong>Score:</strong> ${x.points}/${x.maxPoints} ${x.isCorrect === true || x.isCorrect === 'TRUE' ? '✓' : x.isCorrect === false || x.isCorrect === 'FALSE' ? '✗' : ''} · <strong>Confidence:</strong> ${x.confidence || '-'}</div>${x.aiFeedback ? `<div style="margin-top:4px;color:var(--tx2)"><strong>AI (${x.aiScore}):</strong> ${x.aiFeedback}</div>` : ''}</div>`).join('')}</div>`;
+        document.getElementById('stuDetailBody').innerHTML = `<div class="detail-list">${(d.details || []).map(x => `<div class="detail-row"><div style="font-weight:700;margin-bottom:4px">Q${x.qIndex + 1} (${x.type.toUpperCase()})</div><div style="color:var(--tx2);margin-bottom:4px">${DOMPurify.sanitize(x.questionText)}</div><div><strong>Answer:</strong> ${DOMPurify.sanitize(x.answer) || '<em>No response</em>'}</div><div style="margin-top:3px"><strong>Score:</strong> ${x.points}/${x.maxPoints} ${x.isCorrect === true || x.isCorrect === 'TRUE' ? '✓' : x.isCorrect === false || x.isCorrect === 'FALSE' ? '✗' : ''} · <strong>Confidence:</strong> ${x.confidence || '-'}</div>${x.aiFeedback ? `<div style="margin-top:4px;color:var(--tx2)"><strong>AI (${x.aiScore}):</strong> ${DOMPurify.sanitize(x.aiFeedback)}</div>` : ''}</div>`).join('')}</div>`;
         document.getElementById('stuDetailModal').classList.add('show');
       }).getStudentDetail(sessId, stuId);
     }
@@ -3269,7 +3270,7 @@
             <div style="display:flex; gap:16px; align-items:flex-start; margin-bottom:12px; overflow:hidden;">
               <div style="flex:1; min-width:0;">
                 <div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:8px">Q${i + 1} · ${q.type === 'mc' ? 'Multiple Choice' : 'Short Answer'}</div>
-                <div class="rte-content" style="font-size:14px; font-weight:400; color:var(--tx); line-height:1.5">${q.text}</div>
+                <div class="rte-content" style="font-size:14px; font-weight:400; color:var(--tx); line-height:1.5">${DOMPurify.sanitize(q.text)}</div>
               </div>
               <div style="text-align:right; margin-left:16px; flex-shrink:0">
                 ${answered ? `<div style="font-size:16px; font-weight:800; color:${ptsNodeColor}">${rPts}/${q.points || 1} ${isC ? '✓' : '✗'}</div>` : `<div style="font-size:12px; font-weight:600; color:var(--tx3)">NO RESPONSE</div>`}
@@ -3284,8 +3285,8 @@
                   <span style="font-weight:700; color:var(--tx2); margin-right:8px; display:block; margin-bottom:4px; text-transform:uppercase; font-size:11px;">
                     Student Answer ${mcEval.matchedIdx !== -1 ? `· Choice ${String.fromCharCode(65 + mcEval.matchedIdx)}` : ''}
                   </span>
-                  <div style="line-height:1.5; white-space:pre-wrap; font-family:inherit;">${mcEval.matchedIdx !== -1 ? q.choices[mcEval.matchedIdx] : displayAns}</div>
-                  ${mcEval.matchedIdx !== -1 && _strip(displayAns) !== _strip(q.choices[mcEval.matchedIdx]) ? `<div style="font-size:10px; opacity:0.6; margin-top:4px">Raw submission: ${displayAns}</div>` : ''}
+                  <div style="line-height:1.5; white-space:pre-wrap; font-family:inherit;">${DOMPurify.sanitize(mcEval.matchedIdx !== -1 ? q.choices[mcEval.matchedIdx] : displayAns)}</div>
+                  ${mcEval.matchedIdx !== -1 && _strip(displayAns) !== _strip(q.choices[mcEval.matchedIdx]) ? `<div style="font-size:10px; opacity:0.6; margin-top:4px">Raw submission: ${DOMPurify.sanitize(displayAns)}</div>` : ''}
                 </div>
               </div>
             ` : ''}
@@ -3304,7 +3305,7 @@
                   <div style="position:absolute; left:-16px; top:12px; width:12px; height:2px; background:var(--teal); opacity:0.3"></div>
                   <div style="padding:12px 16px; background:var(--tBg); border:1px solid rgba(13, 148, 136, 0.2); border-left:4px solid var(--teal); border-radius:8px; font-size:13px; color:var(--tx2); line-height:1.5">
                     <div style="font-weight:800; color:var(--teal); text-transform:uppercase; font-size:11px; margin-bottom:6px; letter-spacing:0.5px">🤖 AI Feedback</div>
-                    ${g.feedback}
+                    ${DOMPurify.sanitize(g.feedback)}
                   </div>
                 </div>
               ` : ''}
@@ -3426,7 +3427,7 @@
         const avgC = s.confCount > 0 ? (s.confSum / s.confCount).toFixed(1) : '-';
         const pctBadge = pct === null ? `<span class="badge" style="background:var(--bg); color:var(--tx3); font-style:italic">Missing</span>` : `<span class="badge ${pct >= 80 ? 'b-a' : pct >= 60 ? 'b-w' : 'b-l'}">${pct}%</span>`;
         return `<tr onclick="if(window.renderAnaStudentDetail) renderAnaStudentDetail('${s.id}')" style="cursor:pointer; border-bottom:1px solid var(--bd);" onmouseover="this.style.backgroundColor='var(--s)'" onmouseout="this.style.backgroundColor=''">
-                    <td style="font-weight:600; color:var(--teal)">${s.name}</td>
+                    <td style="font-weight:600; color:var(--teal)">${DOMPurify.sanitize(s.name)}</td>
                     <td>${pctBadge}</td>
                     <td>${avgC}</td>
                     <td>${s.viols > 0 ? `<span class="badge b-l">${s.viols}</span>` : '-'}</td>
@@ -3574,7 +3575,7 @@
                   const m = meta.find(mx => mx.studentId === r.studentId && mx.questionId === q.id);
                   const conf = m ? Number(m.confidence) : 0;
                   const confCol = conf >= 3 ? (isCorrect ? 'var(--grn)' : 'var(--red)') : (conf > 0 ? (isCorrect ? 'var(--amb)' : 'var(--tx2)') : 'var(--tx3)');
-                  return `<span title="Confidence: ${conf}" style="color:${confCol}">${r.studentName}</span>`;
+                  return `<span title="Confidence: ${conf}" style="color:${confCol}">${DOMPurify.sanitize(r.studentName)}</span>`;
                 }).join(', ');
 
                 return { text: optText, isCorrect, count: optResps.length, stuList };
@@ -3596,7 +3597,7 @@
                           <div style="font-weight:700; color:${tx}; width:20px">${letter} ${c.isCorrect ? '✓' : ''}</div>
                           <div style="font-size:14px; font-weight:800; color:${vTx}; width:40px">${cPct}%</div>
                           <div style="flex:1; color:var(--tx2); line-height:1.4; overflow:hidden;">
-                            <div style="color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis" title="${c.text.replace(/"/g, '&quot;')}">${c.text} <span style="opacity:0.6; font-size:11px">(${c.count})</span></div>
+                          <div style="color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis" title="${c.text.replace(/"/g, '&quot;')}">${DOMPurify.sanitize(c.text)} <span style="opacity:0.6; font-size:11px">(${c.count})</span></div>
                             <div style="font-size:11px; margin-top:4px">${c.stuList || '<span style="opacity:0.5; font-style:italic">Nobody</span>'}</div>
                           </div>
                         </div>
@@ -3625,7 +3626,7 @@
                   const m = meta.find(mx => mx.studentId === r.studentId && mx.questionId === q.id);
                   const conf = m ? Number(m.confidence) : 0;
                   const confCol = conf >= 3 ? (c.isCorrect ? 'var(--grn)' : 'var(--red)') : (conf > 0 ? (c.isCorrect ? 'var(--amb)' : 'var(--tx2)') : 'var(--tx3)');
-                  return `<span title="Confidence: ${conf}" style="color:${confCol}">${r.studentName}</span>`;
+                  return `<span title="Confidence: ${conf}" style="color:${confCol}">${DOMPurify.sanitize(r.studentName)}</span>`;
                 }).join(', ');
 
                 let bg = c.isCorrect ? 'var(--gBg)' : 'var(--s3)';
@@ -3636,7 +3637,7 @@
                         <div style="padding:8px 12px; border-radius:6px; background:${bg}; border:1px solid ${bd}; display:flex; gap:16px; align-items:center;">
                           <div style="font-size:14px; font-weight:800; color:${vTx}; width:40px">${cPct}%</div>
                           <div style="flex:1; color:var(--tx2); line-height:1.4; overflow:hidden">
-                            <div style="color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis" title="${c.text.replace(/"/g, '&quot;')}">${c.text} <span style="opacity:0.6; font-size:11px">(${c.count})</span></div>
+                            <div style="color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis" title="${c.text.replace(/"/g, '&quot;')}">${DOMPurify.sanitize(c.text)} <span style="opacity:0.6; font-size:11px">(${c.count})</span></div>
                             <div style="font-size:11px; margin-top:4px">${stuList}</div>
                           </div>
                         </div>
@@ -3650,7 +3651,7 @@
                       <div style="display:flex; gap:24px; align-items:flex-start">
                         <div style="flex:1; overflow-x:auto;">
                           <div style="font-size:13px; font-weight:700; color:var(--tx3); margin-bottom:8px; text-transform:uppercase">Q${idx + 1} · ${q.type === 'mc' ? 'Multiple Choice' : 'Short Answer'}</div>
-                          <div style="font-size:15px; font-weight:400; line-height:1.5">${q.text}</div>
+                          <div style="font-size:15px; font-weight:400; line-height:1.5">${DOMPurify.sanitize(q.text)}</div>
                         </div>
                         <div style="text-align:right; flex-shrink:0; background:var(--bg); border:1px solid var(--bd); padding:12px; border-radius:8px">
                           <button class="btn bs" style="padding:4px 8px; font-size:11px; margin-bottom:8px; width:100%" onclick="openAnaQEd(${idx})">Edit Modals & Rescore</button>
@@ -3753,7 +3754,7 @@
       html = html.replace(/\n\n+/g, '<br><br>');
       html = html.replace(/\n(?!<br>|<h|<ul|<\/ul)/g, '<br>');
 
-      return `<div style="font-family:inherit; padding-bottom:32px">${html}</div>`;
+      return `<div style="font-family:inherit; padding-bottom:32px">${DOMPurify.sanitize(html)}</div>`;
     }
 
     // ── DELETION TOOLS ──
