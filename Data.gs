@@ -407,7 +407,8 @@ const DB = {
       
       for(let i=1;i<rd.length;i++) {
         if(rd[i][0]===sessId && rd[i][1]===stuId && rd[i][3]===qId){
-          rSheet.getRange(i+1,6).setNumberFormat('@').setValue(ansStr);rSheet.getRange(i+1,7).setValue(isCorrect);rSheet.getRange(i+1,8).setValue(points);rSheet.getRange(i+1,10).setValue(new Date().toISOString());rSheet.getRange(i+1,11).setValue(partialCredit);
+          rSheet.getRange(i+1,6).setNumberFormat('@');
+          rSheet.getRange(i+1,6,1,6).setValues([[ansStr, isCorrect, points, rd[i][8], new Date().toISOString(), partialCredit]]);
           let ci2=null;if(sess.revealMode==='immediate')ci2=this._correctInfo(q);
           return {saved:true,isCorrect,points,maxPts,partialCredit,correctInfo:ci2};
         }
