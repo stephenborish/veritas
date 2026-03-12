@@ -125,15 +125,16 @@ const DB = {
   deleteQSet(id) { const s=this.sh('QSets'); const d=s.getDataRange().getValues(); for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);return true;} return false; },
   saveRoster(block, courseId, students) {
     const s=this.sh('Rosters'); const d=s.getDataRange().getValues(); const now=new Date().toISOString();
-    for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block)){s.getRange(i+1,2).setValue(courseId||'');s.getRange(i+1,3).setValue(JSON.stringify(students));s.getRange(i+1,4).setValue(now);return {block,count:students.length};}
+    for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block) && String(d[i][1])===String(courseId||'')){s.getRange(i+1,3).setValue(JSON.stringify(students));s.getRange(i+1,4).setValue(now);return {block,count:students.length};}
     s.appendRow([block,courseId||'',JSON.stringify(students),now]); return {block,count:students.length};
   },
   getRosters() {
     const d=this.sh('Rosters').getDataRange().getValues(); const r={};
     for(let i=1;i<d.length;i++){
       const block=d[i][0],courseId=d[i][1],rawJSON=d[i][2]||'[]',updatedAt=d[i][3];
+      const key = courseId ? courseId + '_' + block : block;
       let cached=null;
-      Object.defineProperty(r,block,{
+      Object.defineProperty(r,key,{
         get:()=>{if(!cached){const stu=JSON.parse(rawJSON);cached={block,courseId,students:stu,count:stu.length,updatedAt};}return cached;},
         enumerable:true,
         configurable:true
@@ -141,14 +142,25 @@ const DB = {
     }
     return r;
   },
-  getRoster(block) { const d=this.sh('Rosters').getDataRange().getValues(); for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block)) return JSON.parse(d[i][2]||'[]'); return []; },
+  getRoster(block, courseId) {
+    const d=this.sh('Rosters').getDataRange().getValues();
+    // If courseId is provided, match both. Otherwise fallback to just block match (legacy behavior)
+    for(let i=1;i<d.length;i++) {
+      if(String(d[i][0])===String(block)) {
+        if (!courseId || String(d[i][1])===String(courseId)) {
+          return JSON.parse(d[i][2]||'[]');
+        }
+      }
+    }
+    return [];
+  },
   getRostersByCourse(courseId) {
     const out = this.getRosters();
     return Object.values(out).filter(r => String(r.courseId || '') === String(courseId || ''));
   },
-  addStudent(block, student) {
+  addStudent(block, student, courseId) {
     return this.withLock(() => {
-      const roster = this.getRoster(block);
+      const roster = this.getRoster(block, courseId);
       const incomingName = String((student && student.name) || '').trim();
       if (!incomingName) return { error: 'Student name is required' };
       const normalized = this.normalizeStudentName(incomingName);
@@ -156,19 +168,21 @@ const DB = {
       if (exists) return { ok: true, added: false, count: roster.length };
       roster.push(student);
       const rosters = this.getRosters();
-      const existing = rosters[String(block)] || { courseId: '' };
+      const key = courseId ? courseId + '_' + block : block;
+      const existing = rosters[key] || { courseId: courseId || '' };
       this.saveRoster(block, existing.courseId || '', roster);
       return { ok: true, added: true, count: roster.length };
     });
   },
-  removeStudent(block, name) {
+  removeStudent(block, name, courseId) {
     return this.withLock(() => {
-      const roster = this.getRoster(block);
+      const roster = this.getRoster(block, courseId);
       const normalized = this.normalizeStudentName(name || '');
       const next = roster.filter(s => this.normalizeStudentName((s && s.name) || '') !== normalized);
       const removed = next.length !== roster.length;
       const rosters = this.getRosters();
-      const existing = rosters[String(block)] || { courseId: '' };
+      const key = courseId ? courseId + '_' + block : block;
+      const existing = rosters[key] || { courseId: courseId || '' };
       this.saveRoster(block, existing.courseId || '', next);
       return { ok: true, removed, count: next.length };
     });
@@ -244,7 +258,8 @@ const DB = {
       
       const name=(first.trim()+' '+last.trim()).trim();
       const normalizedName=this.normalizeStudentName(name);
-      const roster=this.getRoster(sess.block);
+      const courseId=(sess.config && sess.config.courseId) || '';
+      const roster=this.getRoster(sess.block, courseId);
       const accessToken = normalizeStudentToken(studentToken);
       const tokenData = accessToken ? verifyStudentAccessToken(accessToken) : null;
       if (accessToken && !tokenData) return {error:'Your secure link is invalid. Please reopen the email from your teacher.'};
@@ -529,7 +544,9 @@ const DB = {
     const qSet=this.getQSet(sess.setId);const questions=qSet?qSet.questions:[];
     const snapshot={};
     const stuSess=this.getStudentSessions(sessId,snapshot);const resps=this.getAllResponses(sessId,snapshot);
-    const viols=this.getActiveViolations(sessId,snapshot);const meta=this.getAllMeta(sessId,snapshot);const roster=this.getRoster(sess.block);
+    const viols=this.getActiveViolations(sessId,snapshot);const meta=this.getAllMeta(sessId,snapshot);
+    const courseId=(sess.config && sess.config.courseId) || '';
+    const roster=this.getRoster(sess.block, courseId);
     const grades=this.getAIGrades(sessId,snapshot);
 
     const questionById={};

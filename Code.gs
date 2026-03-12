@@ -207,10 +207,10 @@ function deleteQuestionSet(id) { return DB.deleteQSet(id); }
 // ── Rosters ──
 function saveRoster(block, courseId, students) { return DB.saveRoster(block, courseId, students); }
 function getRosters() { return DB.getRosters(); }
-function getRoster(block) { return DB.getRoster(block); }
+function getRoster(block, courseId) { return DB.getRoster(block, courseId); }
 function getRostersByCourse(courseId) { return DB.getRostersByCourse(courseId); }
-function addStudentToRoster(block, student) { return DB.addStudent(block, student); }
-function removeStudentFromRoster(block, name) { return DB.removeStudent(block, name); }
+function addStudentToRoster(block, student, courseId) { return DB.addStudent(block, student, courseId); }
+function removeStudentFromRoster(block, name, courseId) { return DB.removeStudent(block, name, courseId); }
 
 // ── Sessions ──
 function activateSession(config) { return DB.activateSession(config); }
@@ -366,7 +366,8 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
   const sess = DB.getSessionById(sessId);
   if (!sess) return { error: 'Session not found' };
   
-  const roster = DB.getRoster(sess.block);
+  const courseId = (sess.config && sess.config.courseId) || '';
+  const roster = DB.getRoster(sess.block, courseId);
   if (!roster.length) return { error: 'No students in roster for Block ' + sess.block };
   
   let baseUrl = resolveWebAppBaseUrl(clientBaseUrl);
@@ -416,7 +417,8 @@ function sendIndividualAssessmentEmail(sessId, stuId, clientBaseUrl) {
   const sess = DB.getSessionById(sessId);
   if (!sess) return { error: 'Session not found' };
   
-  const roster = DB.getRoster(sess.block);
+  const courseId = (sess.config && sess.config.courseId) || '';
+  const roster = DB.getRoster(sess.block, courseId);
   const student = roster.find(s => DB.normalizeStudentName(s.name) === DB.normalizeStudentName(stuId) || s.email === stuId);
   if (!student) return { error: 'Student not found in the block roster.' };
   if (!student.email || !student.email.includes('@')) return { error: 'Student does not have a valid email address.' };
@@ -566,10 +568,10 @@ DB wrappers
 - deleteQuestionSet(id) -> DB.deleteQSet() => boolean
 - saveRoster(block, courseId, students) -> DB.saveRoster() => { block, count }
 - getRosters() -> DB.getRosters() => Record<string, Roster>
-- getRoster(block) -> DB.getRoster() => Student[]
+- getRoster(block, courseId) -> DB.getRoster() => Student[]
 - getRostersByCourse(courseId) -> DB.getRostersByCourse() => Roster[]
-- addStudentToRoster(block, student) -> DB.addStudent() => boolean
-- removeStudentFromRoster(block, name) -> DB.removeStudent() => boolean
+- addStudentToRoster(block, student, courseId) -> DB.addStudent() => boolean
+- removeStudentFromRoster(block, name, courseId) -> DB.removeStudent() => boolean
 - activateSession(config) -> DB.activateSession() => Session
 - getActiveSession() -> DB.getActiveSession() => Session|null
 - endSession(id) -> DB.endSession() => boolean
