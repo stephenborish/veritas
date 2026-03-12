@@ -2438,8 +2438,8 @@
             const rArr = Object.values(rosters);
             rArr.forEach(r => {
               const course = courses.find(c => c.id === r.courseId) || { name: 'Unassigned Course' };
-              // By passing r.block, it perfectly connects to DB backend block ID, but displays nicely
-              html += `<option value="${r.block}">${course.name} — Block ${r.block}</option>`;
+              // Store composite courseId|block to allow safe multi-course blocks
+              html += `<option value="${r.courseId}|${r.block}">${course.name} — Block ${r.block}</option>`;
             });
             if (!html) html = '<option value="">No Rosters Found (Add in Manage)</option>';
             document.getElementById('lBk').innerHTML = html;
@@ -2461,7 +2461,12 @@
 
     function launchS() {
       const tt = document.getElementById('lTT').value;
-      const cfg = { setId: document.getElementById('lSet').value, block: document.getElementById('lBk').value, mode: document.getElementById('lMode').value, revealMode: document.getElementById('lRev').value, calculatorEnabled: document.getElementById('lCE').checked, metacognitionEnabled: document.getElementById('lME').checked, timer: tt === 'none' ? { type: 'none' } : { type: tt, seconds: +(document.getElementById('lTM').value || 30) * 60 } };
+      const rawBk = document.getElementById('lBk').value || '';
+      const sepIdx = rawBk.indexOf('|');
+      const courseId = sepIdx !== -1 ? rawBk.substring(0, sepIdx) : '';
+      const block = sepIdx !== -1 ? rawBk.substring(sepIdx + 1) : rawBk;
+
+      const cfg = { setId: document.getElementById('lSet').value, courseId: courseId, block: block, mode: document.getElementById('lMode').value, revealMode: document.getElementById('lRev').value, calculatorEnabled: document.getElementById('lCE').checked, metacognitionEnabled: document.getElementById('lME').checked, timer: tt === 'none' ? { type: 'none' } : { type: tt, seconds: +(document.getElementById('lTM').value || 30) * 60 } };
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         showLoad('Launching Live Session...');
         google.script.run.withFailureHandler(e => { hideLoad(); toast(e.message, 'err'); }).withSuccessHandler(r => { hideLoad(); aSid = r.sessionId; toast('Live! Code: ' + r.code, 'ok'); loadLaunch() }).activateSession(cfg);
