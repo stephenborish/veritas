@@ -1212,7 +1212,8 @@
     }
 
     function triggerLockout(type) {
-      if (S.locked) return; // FIX: Prevents double-firing if both events trigger at once
+      if (S.done) return;
+      if (type !== 'session_ended' && S.locked) return;
       S.locked = true;
 
       // Hide fullscreen prompt just in case, show lock explicitly. Solid backgrounds prevent mixing.
@@ -1239,7 +1240,9 @@
       lo.classList.add('show');
       document.getElementById('assessUI').style.display = 'none';
 
-      google.script.run.studentReportViolation(S.sid, S.stuId, type);
+      if (type !== 'sync_lock') {
+        google.script.run.studentReportViolation(S.sid, S.stuId, type);
+      }
     }
 
     function beginAssess() {
