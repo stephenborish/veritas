@@ -2462,9 +2462,9 @@
     function launchS() {
       const tt = document.getElementById('lTT').value;
       const rawBk = document.getElementById('lBk').value || '';
-      const bkParts = rawBk.split('|');
-      const courseId = bkParts.length > 1 ? bkParts[0] : '';
-      const block = bkParts.length > 1 ? bkParts[1] : rawBk;
+      const sepIdx = rawBk.indexOf('|');
+      const courseId = sepIdx !== -1 ? rawBk.substring(0, sepIdx) : '';
+      const block = sepIdx !== -1 ? rawBk.substring(sepIdx + 1) : rawBk;
 
       const cfg = { setId: document.getElementById('lSet').value, courseId: courseId, block: block, mode: document.getElementById('lMode').value, revealMode: document.getElementById('lRev').value, calculatorEnabled: document.getElementById('lCE').checked, metacognitionEnabled: document.getElementById('lME').checked, timer: tt === 'none' ? { type: 'none' } : { type: tt, seconds: +(document.getElementById('lTM').value || 30) * 60 } };
       if (typeof google !== 'undefined' && google.script && google.script.run) {

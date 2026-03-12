@@ -144,12 +144,11 @@ const DB = {
   },
   getRoster(block, courseId) {
     const d=this.sh('Rosters').getDataRange().getValues();
-    // If courseId is provided, match both. Otherwise fallback to just block match (legacy behavior)
+    // Match both block and courseId. Treat undefined/null courseId as empty string.
+    const targetCourseId = courseId || '';
     for(let i=1;i<d.length;i++) {
-      if(String(d[i][0])===String(block)) {
-        if (!courseId || String(d[i][1])===String(courseId)) {
-          return JSON.parse(d[i][2]||'[]');
-        }
+      if(String(d[i][0])===String(block) && String(d[i][1])===String(targetCourseId)) {
+        return JSON.parse(d[i][2]||'[]');
       }
     }
     return [];
