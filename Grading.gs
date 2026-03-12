@@ -335,13 +335,15 @@ const Grader = {
 
   _batchAppendRows(sheet, rows) {
     if (!rows || !rows.length) return;
-    const lastRow = sheet.getLastRow();
-    const maxRows = sheet.getMaxRows();
-    const neededRows = (lastRow + rows.length) - maxRows;
-    if (neededRows > 0) {
-      sheet.insertRowsAfter(maxRows, neededRows);
-    }
-    sheet.getRange(lastRow + 1, 1, rows.length, rows[0].length).setValues(rows);
+    return DB.withLock(() => {
+      const lastRow = sheet.getLastRow();
+      const maxRows = sheet.getMaxRows();
+      const neededRows = (lastRow + rows.length) - maxRows;
+      if (neededRows > 0) {
+        sheet.insertRowsAfter(maxRows, neededRows);
+      }
+      sheet.getRange(lastRow + 1, 1, rows.length, rows[0].length).setValues(rows);
+    });
   },
 
   _syncResponseScore(sessId, stuId, qId, score) {
