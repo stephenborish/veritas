@@ -1483,7 +1483,13 @@
           toast('Pasting is disabled.');
         });
       }
-      document.querySelectorAll('.katex-inline').forEach(function (el) { try { katex.render(el.dataset.latex, el, { throwOnError: false }); } catch (e) { } });
+      document.querySelectorAll('.katex-inline').forEach(function (el) {
+        try {
+          katex.render(el.dataset.latex, el, { throwOnError: false });
+        } catch (e) {
+          console.warn('KaTeX rendering error:', e);
+        }
+      });
       window.scrollTo(0, 0);
     }
 
@@ -1625,7 +1631,13 @@
       document.getElementById('calcWin').classList.remove('show');
       document.getElementById('doneScreen').style.display = 'block';
 
-      if (document.exitFullscreen) try { document.exitFullscreen() } catch (e) { }
+      if (document.exitFullscreen) {
+        try {
+          document.exitFullscreen();
+        } catch (e) {
+          // Failure to exit fullscreen is common and usually ignorable
+        }
+      }
       if (S.poll) clearInterval(S.poll); if (S.timerInt) clearInterval(S.timerInt);
 
       function doFinalSync() {

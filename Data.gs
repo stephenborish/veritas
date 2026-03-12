@@ -20,7 +20,13 @@ const DB = {
 
   ss() {
     const id = PropertiesService.getScriptProperties().getProperty('VA_SHEET_ID');
-    if (id) try { return SpreadsheetApp.openById(id); } catch(e) {}
+    if (id) {
+      try {
+        return SpreadsheetApp.openById(id);
+      } catch (e) {
+        Logger.log('Error opening spreadsheet by ID: ' + e.toString());
+      }
+    }
     const f = DriveApp.getFilesByName(this.SS_NAME);
     if (f.hasNext()) { const s = SpreadsheetApp.open(f.next()); PropertiesService.getScriptProperties().setProperty('VA_SHEET_ID',s.getId()); return s; }
     throw new Error('Run initSystem() first.');
@@ -49,7 +55,14 @@ const DB = {
       s.getRange(1,1,1,headers.length).setValues([headers]).setFontWeight('bold').setBackground('#0d7377').setFontColor('#fff');
       s.setFrozenRows(1);
     }
-    const d = ss.getSheetByName('Sheet1'); if (d && ss.getSheets().length>1) try{ss.deleteSheet(d)}catch(e){}
+    const d = ss.getSheetByName('Sheet1');
+    if (d && ss.getSheets().length > 1) {
+      try {
+        ss.deleteSheet(d);
+      } catch (e) {
+        Logger.log('Error deleting default Sheet1: ' + e.toString());
+      }
+    }
     return {url:ss.getUrl()};
   },
   
@@ -307,7 +320,16 @@ const DB = {
     const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Questions not found'};
     let questions=JSON.parse(JSON.stringify(qSet.questions)); const stimuli=qSet.stimuli||[];
     const sd=this.sh('StudentSessions').getDataRange().getValues(); let qOrder=null;
-    for(let i=1;i<sd.length;i++) if(sd[i][0]===sessId&&sd[i][1]===stuId&&sd[i][9]){try{qOrder=JSON.parse(sd[i][9])}catch(e){} break;}
+    for(let i=1;i<sd.length;i++) {
+      if(sd[i][0]===sessId&&sd[i][1]===stuId&&sd[i][9]){
+        try {
+          qOrder = JSON.parse(sd[i][9]);
+        } catch (e) {
+          Logger.log('Error parsing qOrder for student ' + stuId + ': ' + e.toString());
+        }
+        break;
+      }
+    }
     if(qOrder && qOrder.length && sess.mode !== 'lockstep') questions=qOrder.map(idx=>questions[idx]);
     if(sess.randC) questions.forEach(q=>{if(q.type==='mc'&&q.choices){const ci=q.correctIndices||[q.correctIndex];const ca=ci.map(x=>q.choices[x]);for(let i=q.choices.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[q.choices[i],q.choices[j]]=[q.choices[j],q.choices[i]];}q.correctIndices=ca.map(c=>q.choices.indexOf(c));if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
     const studentQs=questions.map(q=>{const sq={...q};
@@ -538,7 +560,19 @@ const DB = {
       if(q.type==='mc'){
         const correct=qr.filter(r=>r.isCorrect===true||r.isCorrect==='TRUE').length;
         const dist={};(q.choices||[]).forEach(c=>dist[c]=0);
-        qr.forEach(r=>{try{const a=JSON.parse(r.answer);if(Array.isArray(a))a.forEach(x=>{if(dist[x]!==undefined)dist[x]++});else if(dist[r.answer]!==undefined)dist[r.answer]++}catch(e){if(dist[r.answer]!==undefined)dist[r.answer]++}});
+        qr.forEach(r => {
+          try {
+            const a = JSON.parse(r.answer);
+            if (Array.isArray(a)) {
+              a.forEach(x => { if (dist[x] !== undefined) dist[x]++; });
+            } else if (dist[r.answer] !== undefined) {
+              dist[r.answer]++;
+            }
+          } catch (e) {
+            // Not JSON, treat as plain string
+            if (dist[r.answer] !== undefined) dist[r.answer]++;
+          }
+        });
         const ci=q.correctIndices||[q.correctIndex];
         return {id:q.id,idx,text:q.text,type:'mc',points:q.points||1,choices:q.choices||[],correctIndices:ci,total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
           studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect,confidence:(metaByStudentQuestion[r.studentId+'|'+q.id]||{}).confidence||null}))};
@@ -839,9 +873,13 @@ const DB = {
               const rowNum = i + 1;
               const rawAns = String(respRows[i][5]);
               let ansToMatch = rawAns;
-              try { const p = JSON.parse(rawAns); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch(e){}
+              try {
+                const p = JSON.parse(rawAns);
+                if (Array.isArray(p)) ansToMatch = p.join(' ');
+              } catch (e) {
+                // If it's not JSON, we use the raw string. No need to log excessively here as it's common.
+              }
               ansToMatch = stripHtml(ansToMatch);
-              
               let pts = 0; let isCorrect = false;
 
               if (qNew.type === 'mc') {
@@ -916,9 +954,13 @@ const DB = {
           data.responses.forEach(r => {
              if (r.questionId === questionId) {
                 let ansToMatch = String(r.answer || '');
-                try { const p = JSON.parse(ansToMatch); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch(e){}
+                try {
+                  const p = JSON.parse(ansToMatch);
+                  if (Array.isArray(p)) ansToMatch = p.join(' ');
+                } catch (e) {
+                  // Not JSON, use raw
+                }
                 ansToMatch = stripHtml(ansToMatch);
-                
                 const correctIndices = qOriginal.correctIndices || [qOriginal.correctIndex || 0];
                 const matchedIdx = (qOriginal.choices || []).findIndex(ch => {
                   const c = stripHtml(ch);
