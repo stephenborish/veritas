@@ -128,7 +128,11 @@ function getStudentLinkSecret_() {
     props.setProperty('STUDENT_LINK_SECRET', secret);
     return secret;
   } finally {
-    try { lock.releaseLock(); } catch (e) {}
+    try {
+      lock.releaseLock();
+    } catch (e) {
+      Logger.log('Error releasing lock in getStudentLinkSecret_: ' + e.toString());
+    }
   }
 }
 
@@ -449,7 +453,11 @@ function resolveWebAppBaseUrl(clientBaseUrl) {
   let baseUrl = '';
 
   // 1. Canonical deployment URL from the runtime — always correct when available.
-  try { baseUrl = ScriptApp.getService().getUrl() || ''; } catch (e) {}
+  try {
+    baseUrl = ScriptApp.getService().getUrl() || '';
+  } catch (e) {
+    Logger.log('Error getting Web App URL from ScriptApp: ' + e.toString());
+  }
 
   // 2. Caller-provided URL (window.location from the UI) — trustworthy runtime value.
   if (!baseUrl) {
@@ -463,7 +471,11 @@ function resolveWebAppBaseUrl(clientBaseUrl) {
 
   // Guard against internal editor preview links that break for students.
   if (baseUrl.indexOf('userCodeAppPanel') > -1) {
-    try { baseUrl = ScriptApp.getService().getUrl() || baseUrl; } catch (e) {}
+    try {
+      baseUrl = ScriptApp.getService().getUrl() || baseUrl;
+    } catch (e) {
+      Logger.log('Error resolving Web App URL for editor preview: ' + e.toString());
+    }
   }
 
   return String(baseUrl).split('?')[0];

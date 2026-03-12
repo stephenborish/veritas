@@ -2093,7 +2093,16 @@
 
         if (h) {
           document.execCommand('insertHTML', false, h);
-          document.querySelectorAll('.katex-inline').forEach(el => { if (!el.dataset.done) { try { katex.render(el.dataset.latex, el, { throwOnError: false }); el.dataset.done = '1' } catch (e) { } } });
+          document.querySelectorAll('.katex-inline').forEach(el => {
+            if (!el.dataset.done) {
+              try {
+                katex.render(el.dataset.latex, el, { throwOnError: false });
+                el.dataset.done = '1';
+              } catch (e) {
+                console.warn('KaTeX error:', e);
+              }
+            }
+          });
         }
       });
     }
@@ -2364,7 +2373,16 @@
       }).join('');
 
       // Render Math on load
-      document.querySelectorAll('.katex-inline').forEach(el => { if (!el.dataset.done) { try { katex.render(el.dataset.latex, el, { throwOnError: false }); el.dataset.done = '1' } catch (e) { } } });
+      document.querySelectorAll('.katex-inline').forEach(el => {
+        if (!el.dataset.done) {
+          try {
+            katex.render(el.dataset.latex, el, { throwOnError: false });
+            el.dataset.done = '1';
+          } catch (e) {
+            console.warn('KaTeX error:', e);
+          }
+        }
+      });
     }
 
     function togCI(qi, ci) { if (!edQ[qi].correctIndices) edQ[qi].correctIndices = []; const a = edQ[qi].correctIndices; const p = a.indexOf(ci); if (p >= 0) a.splice(p, 1); else a.push(ci); if (!a.length) a.push(ci); edQ[qi].correctIndex = a[0]; }
@@ -2627,7 +2645,13 @@
           (q.studentResponses || []).forEach(r => {
             if (r.answer) {
               let answers = [];
-              try { answers = JSON.parse(r.answer); if (!Array.isArray(answers)) answers = [r.answer]; } catch (e) { answers = [r.answer]; }
+              try {
+                answers = JSON.parse(r.answer);
+                if (!Array.isArray(answers)) answers = [r.answer];
+              } catch (e) {
+                // Not JSON, treat as plain string
+                answers = [r.answer];
+              }
               answers.forEach(a => {
                 if (choicesCount[a]) {
                   choicesCount[a].count++;
@@ -2746,7 +2770,9 @@
             try {
               const arr = JSON.parse(parsedAns);
               if (Array.isArray(arr)) parsedAns = arr.join(', ');
-            } catch (e) { }
+            } catch (e) {
+              console.error('Error generating detailed QStats:', e);
+            }
             // Clean up any remaining quotes or brackets just in case
             parsedAns = String(parsedAns).replace(/^\["|"\]$/g, '').replace(/","/g, ', ').replace(/"/g, '');
             ansSnippet = `<div style="margin-top:8px; padding:6px; background:var(--s); border-radius:4px; font-size:13px; font-weight:600; text-align:center; color:var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${parsedAns.replace(/"/g, '&quot;')}">${parsedAns}</div>`;
@@ -3127,7 +3153,12 @@
       if (!q || q.type !== 'mc' || !q.choices) return { pts: Number(r.points) || 0, isCorrect: r.isCorrect === true || r.isCorrect === 'TRUE', matchedIdx: -1 };
       const correctIdxs = q.correctIndices || [q.correctIndex != null ? q.correctIndex : 0];
       let rawAns = String(r.answer || '');
-      try { const p = JSON.parse(rawAns); if (Array.isArray(p)) rawAns = p.join(' '); } catch (e) { }
+      try {
+        const p = JSON.parse(rawAns);
+        if (Array.isArray(p)) rawAns = p.join(' ');
+      } catch (e) {
+        // Not JSON, use raw
+      }
       const cleanAns = _strip(rawAns);
       if (!cleanAns) return { pts: 0, isCorrect: false, matchedIdx: -1 };
       
@@ -3259,7 +3290,12 @@
         const confText = m.confidence ? confLabelMap[Number(m.confidence)] : '';
 
         let displayAns = String(r.answer || '').trim();
-        try { const p = JSON.parse(displayAns); if (Array.isArray(p)) displayAns = p.join(', '); } catch (e) { }
+        try {
+          const p = JSON.parse(displayAns);
+          if (Array.isArray(p)) displayAns = p.join(', ');
+        } catch (e) {
+          // Not JSON, use raw
+        }
 
         html += `
           <div style="position:relative; z-index:1; padding-left:48px; margin-bottom:40px">
@@ -3544,7 +3580,12 @@
                 const cleanOpt = stripHtml(optText);
                 const optResps = qResps.filter(r => {
                   let ansToMatch = String(r.answer || '');
-                  try { const p = JSON.parse(ansToMatch); if (Array.isArray(p)) ansToMatch = p.join(' '); } catch (e) { }
+                  try {
+                    const p = JSON.parse(ansToMatch);
+                    if (Array.isArray(p)) ansToMatch = p.join(' ');
+                  } catch (e) {
+                    // Not JSON, use raw
+                  }
                   const cleanAns = stripHtml(ansToMatch);
                   // Direct text match
                   if (cleanAns === cleanOpt) return true;
