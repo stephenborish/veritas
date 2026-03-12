@@ -223,6 +223,12 @@ function setTimer(id, config) { return DB.setTimer(id, config); }
 function updateSessionConfig(id, key, val) { return DB.updateSessionConfig(id, key, val); }
 function updateSummaryConfig(id, cfg) { return DB.updateSummaryConfig(id, cfg); }
 function archiveSession(id) { return DB.archiveSession(id); }
+function getArchivedSessions() { return DB.getArchivedSessions(); }
+function getArchivedSessionData(id) { return DB.getArchivedSessionData(id); }
+function rescoreQuestion(sessId, qId, newAnswerText) { return DB.rescoreQuestion(sessId, qId, newAnswerText); }
+function rescoreQuestionFull(sessId, qId, qJsonStr) { return DB.rescoreQuestionFull(sessId, qId, qJsonStr); }
+function deleteArchiveSession(id) { const a = DB.sh('Archive'); if(!a) return false; const d=a.getDataRange().getValues(); for(let i=1;i<d.length;i++) if(d[i][0]===id){a.deleteRow(i+1);return true;} return false; }
+function dismissViolation(sessId, timestamp) { return DB.dismissViolation(sessId, timestamp); }
 
 // ── Live ──
 function getLiveResults(id) { return DB.getLiveResults(id); }
@@ -238,6 +244,83 @@ function studentReportViolation(sessId, stuId, type) { return DB.studentReportVi
 function studentCheckStatus(sessId, stuId) { return DB.studentCheckStatus(sessId, stuId); }
 function studentFinish(sessId, stuId) { return DB.studentFinish(sessId, stuId); }
 function studentGetSummary(sessId, stuId) { return DB.studentGetSummary(sessId, stuId); }
+
+// ── AI Analysis ──
+function generateAIClassReport(sessId) {
+  try {
+    const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+    if (!key) return "Error: GEMINI_API_KEY not set. Go to Apps Script → Project Settings → Script Properties and add your key.";
+
+    const data = DB.getArchivedSessionData(sessId);
+    if (!data) return "Error: Could not retrieve session data for AI Analysis.";
+
+    // Strip bulky config to save tokens, extract only what the AI needs for analysis
+    const rawQuestions = (data.session.config && data.session.config.qSet ? data.session.config.qSet.questions : (data.session.qSet ? data.session.qSet.questions : [])) || [];
+    
+    const cleanData = {
+      questions: rawQuestions.map(q => ({
+        id: q.id,
+        text: q.text,
+        type: q.type,
+        choices: q.choices,
+        correctAnswer: q.type === 'mc' ? (q.choices ? q.choices[(q.correctIndices || [q.correctIndex || 0])[0]] : null) : (q.sampleAnswer || q.rubric)
+      })),
+      responses: data.responses.map(r => ({ questionId: r.questionId, answer: String(r.answer), isCorrect: r.isCorrect === true || r.isCorrect === 'TRUE' })),
+      metacognition: data.meta.map(m => ({ questionId: m.questionId, confidence: m.confidence })),
+      violations: data.violations.map(v => ({ type: v.type }))
+    };
+
+    const sysPrompt = "You are an expert K-12 pedagogy specialist, an assessment researcher, and a learning scientist. You have deep technical expertise in human behavior, metacognition, standardized assessment design, psychometrics, and science communication. Analyze this class dataset.";
+    const userPrompt = `
+      Please analyze this assessment session data and return a markdown-formatted report containing exactly these three sections:
+      
+      ## Class-Wide Strengths
+      (Identify what the class universally understood well based on high scores and high confidence).
+      
+      ## Primary Misconceptions Identified
+      (Identify specific distractors or common wrong answers chosen by multiple students. Explain what fundamental misunderstanding likely caused them to choose that distractor. 
+      CRITICAL: For every misconception you discuss, you MUST explicitly write out the Full Question Text and the Exact Distractor Text inline so the teacher knows exactly what you are referring to without scrolling down. Include exactly how many students chose that distractor.)
+      
+      ## Recommended Next Steps / Warm-ups
+      (Provide actionable suggestions for what the teacher should specifically address in the first 5 minutes of the next class to resolve these misconceptions).
+      
+      Here is the JSON dataset:
+      ${JSON.stringify(cleanData)}
+    `;
+
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=' + key;
+    
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        systemInstruction: { parts: [{ text: sysPrompt }] },
+        contents: [{ parts: [{ text: userPrompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 8192 }
+      }),
+      muteHttpExceptions: true
+    });
+
+    const httpCode = response.getResponseCode();
+    const body = response.getContentText();
+    if (httpCode !== 200) {
+      throw new Error('Gemini API HTTP ' + httpCode + ': ' + body.substring(0, 400));
+    }
+
+    const resData = JSON.parse(body);
+    if (!resData.candidates || !resData.candidates.length) {
+      throw new Error('No candidates returned from Gemini.');
+    }
+
+    let text = ((resData.candidates[0].content && resData.candidates[0].content.parts && resData.candidates[0].content.parts[0].text) || '').trim();
+    DB.saveAIClassReport(sessId, text);
+    return text;
+
+  } catch (e) {
+    Logger.log("AI Analysis Error: " + e.toString());
+    return "An error occurred while generating the AI report: " + e.toString();
+  }
+}
 function getStudentDetail(sessId, stuId) { return DB.getStudentDetail(sessId, stuId); }
 
 // ── Analytics ──
@@ -246,7 +329,8 @@ function getStudentAnalysis(id) { return DB.getStudentAnalysis(id); }
 function getMetacognitionData(id) { return DB.getMetacognitionData(id); }
 
 // ── AI Grading ──
-function runAIGrading(sessId) { return Grader.gradeSession(sessId); }
+function startAIGrading(sessId) { return Grader.startGradingAsync(sessId); }  // async – returns immediately
+function runAIGrading(sessId) { return Grader.gradeSession(sessId); }          // sync  – kept for compatibility
 function getStatus(sessId) { return Grader.getStatus(sessId); }
 function getGradingStatus(sessId) { return getStatus(sessId); }
 function overrideScore(sessId, stuId, qId, score, fb) { return Grader.overrideScore(sessId, stuId, qId, score, fb); }
@@ -324,6 +408,43 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
   return { sent, skipped, total: roster.length, errors: errors.slice(0, 3) };
 }
 
+function sendIndividualAssessmentEmail(sessId, stuId, clientBaseUrl) {
+  const sess = DB.getSessionById(sessId);
+  if (!sess) return { error: 'Session not found' };
+  
+  const roster = DB.getRoster(sess.block);
+  const student = roster.find(s => DB.normalizeStudentName(s.name) === DB.normalizeStudentName(stuId) || s.email === stuId);
+  if (!student) return { error: 'Student not found in the block roster.' };
+  if (!student.email || !student.email.includes('@')) return { error: 'Student does not have a valid email address.' };
+  
+  let baseUrl = resolveWebAppBaseUrl(clientBaseUrl);
+  if (!baseUrl) return { error: 'System could not identify the Web App URL.' };
+  
+  baseUrl = baseUrl.split('?')[0];
+  const studentUrl = resolveStudentLandingUrl(baseUrl);
+  if (!studentUrl) return { error: 'System could not identify the student landing URL.' };
+  
+  try {
+    const fname = student.firstName || student.name.split(' ')[0] || 'Student';
+    const studentToken = createStudentAccessToken(sess, student);
+    const joinUrl = buildStudentJoinUrl(studentUrl, sess.code, studentToken);
+    const html = buildAssessmentEmail(fname, joinUrl, student.email, sess.setName, sess.code);
+    const subject = 'Your VERITAS Assess Link – ' + new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+    
+    MailApp.sendEmail({
+      to: student.email,
+      subject: subject,
+      htmlBody: html,
+      name: 'VERITAS Assess'
+    });
+    
+    return { ok: true, sentTo: student.email };
+  } catch(e) {
+    Logger.log('Email error for single student ' + student.email + ': ' + e.toString());
+    return { error: 'Failed to send email: ' + e.message };
+  }
+}
+
 function resolveWebAppBaseUrl(clientBaseUrl) {
   let baseUrl = '';
 
@@ -371,7 +492,14 @@ function resolveStudentLandingUrl(fallbackBaseUrl) {
 }
 
 function buildStudentJoinUrl(baseUrl, sessionCode, studentToken) {
-  const normalizedBase = String(baseUrl || '').trim();
+  let normalizedBase = String(baseUrl || '').trim();
+  
+  // Fix Google Workspace legacy execution URLs which break the web app iframe
+  const badFormatMatch = normalizedBase.match(/^https:\/\/script\.google\.com\/a\/([^\/]+)\/macros\/s\/([^\/]+)\/exec/i);
+  if (badFormatMatch) {
+    normalizedBase = 'https://script.google.com/a/macros/' + badFormatMatch[1] + '/s/' + badFormatMatch[2] + '/exec';
+  }
+
   const normalizedCode = normalizeStudentCode(sessionCode);
   const normalizedToken = normalizeStudentToken(studentToken);
   if (!normalizedBase) return '';
@@ -531,4 +659,12 @@ function buildAssessmentEmail(name, url, email, assessName, sessionCode) {
     </div>
 </body>
 </html>`;
+}
+
+function toggleLockQuestion(sessId, qId) {
+  try {
+    return DB.toggleLockQuestion(sessId, qId);
+  } catch (e) {
+    return {error: e.message};
+  }
 }
