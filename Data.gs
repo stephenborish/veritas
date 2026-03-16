@@ -874,6 +874,7 @@ const DB = {
       }
       return data;
     } catch(e) {
+      Logger.log('Error parsing archived session data for sessionId ' + sessionId + ': ' + e.toString());
       return null;
     }
   },
@@ -892,6 +893,7 @@ const DB = {
       archive.getRange(rowNum, 9).setValue(JSON.stringify(data));
       return true;
     } catch (e) {
+      Logger.log('Error saving AI class report for sessionId ' + sessionId + ': ' + e.toString());
       return false;
     }
   },
@@ -970,7 +972,9 @@ const DB = {
             }
           }
         }
-      } catch(e) { /* Live update failed, continue to archive */ }
+      } catch(e) {
+        Logger.log('Live update failed during rescoreQuestionFull for sessionId ' + sessionId + ': ' + e.toString() + '. Continuing to archive.');
+      }
 
       // 2. UPDATE ARCHIVE DATABASE
       const archive = this.sh('Archive');
@@ -1071,6 +1075,7 @@ const DB = {
         
         return true;
       } catch (e) {
+        Logger.log('Error updating archive database in rescoreQuestionFull for sessionId ' + sessionId + ': ' + e.toString());
         return false;
       }
     });
@@ -1100,6 +1105,7 @@ const DB = {
       }
       return true;
     } catch (e) {
+      Logger.log('Error dismissing violation for sessionId ' + sessionId + ' at ' + timestamp + ': ' + e.toString());
       return false;
     }
   },
