@@ -61,6 +61,7 @@ Veritas Assess has a premium, polished, glassmorphism aesthetic. Do not introduc
   * Intercepting `fullscreenchange` (exiting fullscreen).
   * Intercepting keystrokes (Mac/Win/Chrome OS screenshot shortcuts).
   * Violations trigger `triggerLockout()`, halting the exam and updating the `S.locked` state until the teacher explicitly readmits them.
+* **XSS Prevention (DOMPurify):** Because the app relies heavily on string interpolation inside template literals to render UI components, you **MUST** ensure all user-controlled data (e.g., question text, student responses, answer choices) is wrapped in `DOMPurify.sanitize(variable)` before being injected into the DOM. Failure to do so introduces critical Cross-Site Scripting (XSS) vulnerabilities.
 
 ---
 
