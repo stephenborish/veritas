@@ -88,3 +88,8 @@ When you are tasked with adding a feature or fixing a bug, follow this exact wor
 2. Review your changes against the architecture rules in this document.
 3. Once you are confident the code is complete, execute `npx clasp push` in the terminal to deploy the updates directly to the live Apps Script project.
 4. Notify the user that the code has been successfully pushed and is ready for them to test.
+
+## 9. Code Health & Best Practices
+* **Exception Handling:** Never use empty `catch (e) {}` blocks. Every caught error must be logged or re-thrown to aid in debugging and maintainability.
+  * In client-side code (`TeacherApp.html`, `StudentApp.html`), use `console.warn(e)` for non-critical fallback errors (like JSON parsing failures for raw strings) and `console.error(e)` for critical logic failures.
+  * In backend code (`Code.gs`, `Data.gs`, `Grading.gs`), use `console.error(e)` or `Logger.log(e)` so errors are visible in the Apps Script execution logs.
