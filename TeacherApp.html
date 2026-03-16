@@ -3843,12 +3843,12 @@
       let body = '';
       if (q.type === 'mc') {
         body = `
-        <div class="fr"><label>Question Text (Read Only)</label><div style="padding:12px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); font-weight:600">${q.text}</div></div>
+        <div class="fr"><label>Question Text (Read Only)</label><div style="padding:12px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); font-weight:600">${DOMPurify.sanitize(q.text)}</div></div>
         <div class="fr"><label>Answer Choices (Select Correct Answers)</label>
           ${q.choices.map((c, ci) => `
             <div style="margin-bottom:8px; display:flex; gap:12px; align-items:flex-start;">
               <input type="checkbox" name="aqc_${idx}" value="${ci}" ${q.correctIndices && q.correctIndices.includes(ci) ? 'checked' : ''} style="width:20px; height:20px; flex-shrink:0; margin-top:10px; cursor:pointer; accent-color:var(--teal);">
-              <div class="rte-content" style="flex:1; padding:10px 12px; border:1px solid var(--bd); border-radius:6px; background:var(--bg); min-width:0;">${c}</div>
+              <div class="rte-content" style="flex:1; padding:10px 12px; border:1px solid var(--bd); border-radius:6px; background:var(--bg); min-width:0;">${DOMPurify.sanitize(c)}</div>
             </div>
           `).join('')}
         </div>
@@ -3857,7 +3857,7 @@
         </div>`;
       } else {
         body = `
-        <div class="fr"><label>Question Text (Read Only)</label><div style="padding:12px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); font-weight:600">${q.text}</div></div>
+        <div class="fr"><label>Question Text (Read Only)</label><div style="padding:12px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); font-weight:600">${DOMPurify.sanitize(q.text)}</div></div>
         <div class="fg">
           <div class="fr"><label>Points Possible</label><input type="number" id="aqPts" value="${q.points || 1}" min="0"></div>
           <div class="fr"><label>Keywords / Sample Answer</label><input type="text" id="aqSamp" value="${(q.sampleAnswer || '').replace(/"/g, '&quot;')}"></div>
