@@ -90,6 +90,7 @@ When you are tasked with adding a feature or fixing a bug, follow this exact wor
 4. Notify the user that the code has been successfully pushed and is ready for them to test.
 
 ## 9. Code Health & Best Practices
-* **Exception Handling:** Never use empty `catch (e) {}` blocks. Every caught error must be logged or re-thrown to aid in debugging and maintainability.
-  * In client-side code (`TeacherApp.html`, `StudentApp.html`), use `console.warn(e)` for non-critical fallback errors (like JSON parsing failures for raw strings) and `console.error(e)` for critical logic failures.
+* **Exception Handling:** In general, avoid empty `catch (e) {}` blocks and log unexpected errors to aid in debugging.
+  * **Expected Fallbacks (DO NOT LOG):** Do *not* log warnings for expected parse fallbacks (like JSON parsing failures for raw strings) in O(N) loops. Plain-string answers are a normal input shape, and logging them emits thousands of avoidable warnings that add client-side overhead and bury actionable errors.
+  * **Client-Side Logging:** In client-side code (`TeacherApp.html`, `StudentApp.html`), use `console.error(e)` for critical logic failures and `console.warn(e)` for unexpected but non-critical errors (like KaTeX rendering failures).
   * In backend code (`Code.gs`, `Data.gs`, `Grading.gs`), use `console.error(e)` or `Logger.log(e)` so errors are visible in the Apps Script execution logs.

@@ -2656,7 +2656,6 @@
                 if (!Array.isArray(answers)) answers = [r.answer];
               } catch (e) {
                 // Not JSON, treat as plain string
-                console.warn('JSON parse fallback used for answer:', e);
                 answers = [r.answer];
               }
               answers.forEach(a => {
@@ -3164,9 +3163,8 @@
         const p = JSON.parse(rawAns);
         if (Array.isArray(p)) rawAns = p.join(' ');
       } catch (e) {
-        // Not JSON, use raw
-        console.warn('JSON parse fallback used for answer:', e);
-      }
+                    // Expected fallback: Not JSON, use raw plain-string answer
+                  }
       const cleanAns = _strip(rawAns);
       if (!cleanAns) return { pts: 0, isCorrect: false, matchedIdx: -1 };
       
@@ -3307,9 +3305,8 @@
           const p = JSON.parse(displayAns);
           if (Array.isArray(p)) displayAns = p.join(', ');
         } catch (e) {
-        // Not JSON, use raw
-        console.warn('JSON parse fallback used for answer:', e);
-      }
+                    // Expected fallback: Not JSON, use raw plain-string answer
+                  }
 
         html += `
           <div style="position:relative; z-index:1; padding-left:48px; margin-bottom:40px">
@@ -3603,9 +3600,8 @@
                     const p = JSON.parse(ansToMatch);
                     if (Array.isArray(p)) ansToMatch = p.join(' ');
                   } catch (e) {
-        // Not JSON, use raw
-        console.warn('JSON parse fallback used for answer:', e);
-      }
+                    // Expected fallback: Not JSON, use raw plain-string answer
+                  }
                   const cleanAns = stripHtml(ansToMatch);
                   // Direct text match
                   if (cleanAns === cleanOpt) return true;
