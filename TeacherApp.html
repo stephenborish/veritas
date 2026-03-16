@@ -3164,6 +3164,7 @@
         if (Array.isArray(p)) rawAns = p.join(' ');
       } catch (e) {
         // Not JSON, use raw
+        console.debug('Expected plain text answer, skipping JSON parse:', e);
       }
       const cleanAns = _strip(rawAns);
       if (!cleanAns) return { pts: 0, isCorrect: false, matchedIdx: -1 };
@@ -3306,6 +3307,7 @@
           if (Array.isArray(p)) displayAns = p.join(', ');
         } catch (e) {
           // Not JSON, use raw
+          console.debug('Expected plain text answer, skipping JSON parse:', e);
         }
 
         html += `
@@ -3601,6 +3603,7 @@
                     if (Array.isArray(p)) ansToMatch = p.join(' ');
                   } catch (e) {
                     // Not JSON, use raw
+                    console.debug('Expected plain text answer, skipping JSON parse:', e);
                   }
                   const cleanAns = stripHtml(ansToMatch);
                   // Direct text match

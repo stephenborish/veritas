@@ -81,7 +81,10 @@ Apps Script blocks web apps from creating triggers (`ScriptApp.newTrigger()`).
 
 ---
 
-## 8. Autonomous Deployment Workflow
+## 8. Code Health and Maintainability
+* **Empty Catch Blocks:** Never leave `catch` blocks entirely empty. If an error is expected (e.g., trying to `JSON.parse` a student's answer that might legitimately be plain text), gracefully handle the fallback and log the event securely using `console.debug()` or `console.warn()`. This preserves system observability without spamming the console with expected errors.
+
+## 9. Autonomous Deployment Workflow
 You have been granted full authorization to deploy code directly to Google Apps Script via `clasp`. 
 When you are tasked with adding a feature or fixing a bug, follow this exact workflow:
 1. Write and modify the necessary `.gs` or `.html` files.
