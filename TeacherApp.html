@@ -3121,7 +3121,7 @@
           document.getElementById('anaList').innerHTML = html;
         })
         .withFailureHandler(e => {
-          document.getElementById('anaList').innerHTML = `<div style="color:var(--red);padding:20px">Error loading sessions: ${e.message || e}</div>`;
+          document.getElementById('anaList').innerHTML = `<div style="color:var(--red);padding:20px">Error loading sessions: ${DOMPurify.sanitize(e.message || e)}</div>`;
         })
         .getArchivedSessions();
     }
@@ -3143,7 +3143,7 @@
           renderAnaDetail(data);
         })
         .withFailureHandler(e => {
-          detailEl.innerHTML = `<div style="color:var(--red);padding:20px">Error loading data: ${e.message || e}</div><button class="btn bg" onclick="loadAnaList()">← Back</button>`;
+          detailEl.innerHTML = `<div style="color:var(--red);padding:20px">Error loading data: ${DOMPurify.sanitize(e.message || e)}</div><button class="btn bg" onclick="loadAnaList()">← Back</button>`;
         })
         .getArchivedSessionData(sessId);
     }
@@ -3755,7 +3755,7 @@
         .withFailureHandler(e => {
           btn.textContent = 'Retry Analysis';
           btn.disabled = false;
-          resContainer.innerHTML = `<div style="color:var(--red);">Error generating analysis: ${e.message || e}</div>`;
+          resContainer.innerHTML = `<div style="color:var(--red);">Error generating analysis: ${DOMPurify.sanitize(e.message || e)}</div>`;
         })
         .generateAIClassReport(sessId);
     }
