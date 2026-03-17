@@ -203,6 +203,15 @@ const Grader = {
 
           Logger.log('Batch failed, falling back to individual grading for this batch.');
           for (const r of batch) {
+             if (Date.now() - startTime > TIMEOUT_LIMIT) {
+               if (newGradeRows.length > 0) {
+                 this._batchAppendRows(gradeSheet, newGradeRows);
+               }
+               const out = { gradedCount: count, errors, totalToGrade, message: `Graded ${count}/${totalToGrade}. Time limit reached during fallback. Run again to finish.` };
+               this.setStatus(sessId, Object.assign({ state: 'partial', sessionId: sessId }, out));
+               return out;
+             }
+
              const k = r.studentId + '|' + q.id;
              if (done.has(k)) continue;
              try {
@@ -305,7 +314,21 @@ const Grader = {
     text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
     try {
-       let result = JSON.parse(text);
+       // Attempt a direct parse or find the first array literal block
+       let jsonMatch = text.match(/\[[\s\S]*\]/);
+       let result = [];
+
+       if (jsonMatch) {
+         try {
+           result = JSON.parse(jsonMatch[0]);
+         } catch(innerE) {
+           console.warn('Batch JSON parse failed on match, attempting raw parse fallback:', innerE);
+           result = JSON.parse(text);
+         }
+       } else {
+         result = JSON.parse(text);
+       }
+
        if (!Array.isArray(result)) result = [result];
 
        return result.map(res => ({
@@ -314,7 +337,7 @@ const Grader = {
          feedback: res.feedback || 'No feedback generated.'
        }));
     } catch(e) {
-       console.error('Batch JSON parse failed:', e, 'Raw text:', text);
+       console.error('Batch JSON parse completely failed:', e, 'Raw text:', text);
        throw new Error('Could not parse batch Gemini response: ' + text.substring(0, 200));
     }
   },
@@ -453,6 +476,11 @@ const Grader = {
       } catch (e) {
          Logger.log('Regrade batch error: ' + e.toString());
          for (const r of batch) {
+            // Re-check timeout in regrade context too, although we aren't enforcing TIMEOUT_LIMIT the same way in regrade,
+            // we should be careful. Since regrade currently lacks startTime tracking like gradeSession,
+            // the user's issue primarily pertained to gradeSession. We will leave regrade without a hard timer
+            // to avoid injecting undeclared variables, but we note the fallback behavior.
+
             // Only fallback if the specific ID wasn't successfully processed
             if (resultMap && resultMap[r.studentId]) continue;
             try {
