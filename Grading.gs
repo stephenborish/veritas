@@ -118,6 +118,7 @@ const Grader = {
     const gradeSheet = DB.sh('AIGrades');
     const respSheet = DB.sh('Responses');
     const respData = respSheet.getDataRange().getValues();
+
     const responseRowByKey = {};
     for (let i = 1; i < respData.length; i++) {
       if (respData[i][0] !== sessId) continue;
@@ -143,8 +144,10 @@ const Grader = {
 
     for (const q of saQs) {
       const qResps = resps.filter(r => r.questionId === q.id && r.answer && String(r.answer).length > 3);
+      const pendingResps = qResps.filter(r => !done.has(r.studentId + '|' + q.id));
+      const BATCH_SIZE = 15;
 
-      for (const r of qResps) {
+      for (let i = 0; i < pendingResps.length; i += BATCH_SIZE) {
         if (Date.now() - startTime > TIMEOUT_LIMIT) {
           if (newGradeRows.length > 0) {
             this._batchAppendRows(gradeSheet, newGradeRows);
@@ -154,33 +157,91 @@ const Grader = {
           return out;
         }
 
-        const k = r.studentId + '|' + q.id;
-        if (done.has(k)) continue;
+        const batch = pendingResps.slice(i, i + BATCH_SIZE);
 
         try {
-          const result = this.callGemini(key, q, r.answer, '');
+          const results = this.callGeminiBatch(key, q, batch, '');
 
-          newGradeRows.push([
-            sessId, r.studentId, r.studentName, q.id,
-            result.score, q.points || 1, result.feedback,
-            r.answer, new Date().toISOString(),
-            false, '', '', ''
-          ]);
+          const resultMap = {};
+          results.forEach(res => {
+            if (res && res.studentId) resultMap[res.studentId] = res;
+          });
 
-          const responseRow = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
-          if (responseRow) respSheet.getRange(responseRow, 8).setValue(result.score);
+          for (const r of batch) {
+            let finalResult = resultMap[r.studentId];
+            if (!finalResult) {
+              Logger.log('Batch missed ID ' + r.studentId + ', falling back to single');
+              if (Date.now() - startTime > TIMEOUT_LIMIT) {
+                if (newGradeRows.length > 0) {
+                  this._batchAppendRows(gradeSheet, newGradeRows);
+                }
+                const out = { gradedCount: count, errors, totalToGrade, message: `Graded ${count}/${totalToGrade}. Time limit reached during fallback. Run again to finish.` };
+                this.setStatus(sessId, Object.assign({ state: 'partial', sessionId: sessId }, out));
+                return out;
+              }
+              try {
+                const singleRes = this.callGemini(key, q, r.answer, '');
+                finalResult = { studentId: r.studentId, score: singleRes.score, feedback: singleRes.feedback };
+              } catch (fallbackErr) {
+                Logger.log(`Failed to grade ${r.studentName} (fallback): ${fallbackErr.message}`);
+                throw fallbackErr; // Trigger batch catch block
+              }
+            }
 
-          count++;
-          done.add(k);
+            newGradeRows.push([
+              sessId, r.studentId, r.studentName, q.id,
+              finalResult.score, q.points || 1, finalResult.feedback,
+              r.answer, new Date().toISOString(),
+              false, '', '', ''
+            ]);
+
+            const responseRow = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
+            if (responseRow) respSheet.getRange(responseRow, 8).setValue(finalResult.score);
+
+            count++;
+            done.add(r.studentId + '|' + q.id);
+          }
+
           this.setStatus(sessId, { state: 'running', sessionId: sessId, gradedCount: count, errors, totalToGrade, message: `Grading... (${count}/${totalToGrade} done)` });
-          Utilities.sleep(1200);
+          Utilities.sleep(1500);
 
         } catch (e) {
           lastError = e.message || e.toString();
-          Logger.log('Grade error ' + r.studentName + '/' + q.id + ': ' + e.toString());
-          errors++;
-          this.setStatus(sessId, { state: 'running', sessionId: sessId, gradedCount: count, errors, totalToGrade, message: `Error grading ${r.studentName}: ${lastError.substring(0, 150)}` });
-          Utilities.sleep(500);
+          Logger.log('Grade batch error on Q ' + q.id + ': ' + e.toString());
+
+          Logger.log('Batch failed, falling back to individual grading for this batch.');
+          for (const r of batch) {
+             if (Date.now() - startTime > TIMEOUT_LIMIT) {
+               if (newGradeRows.length > 0) {
+                 this._batchAppendRows(gradeSheet, newGradeRows);
+               }
+               const out = { gradedCount: count, errors, totalToGrade, message: `Graded ${count}/${totalToGrade}. Time limit reached during fallback. Run again to finish.` };
+               this.setStatus(sessId, Object.assign({ state: 'partial', sessionId: sessId }, out));
+               return out;
+             }
+
+             const k = r.studentId + '|' + q.id;
+             if (done.has(k)) continue;
+             try {
+                const singleRes = this.callGemini(key, q, r.answer, '');
+                newGradeRows.push([
+                  sessId, r.studentId, r.studentName, q.id,
+                  singleRes.score, q.points || 1, singleRes.feedback,
+                  r.answer, new Date().toISOString(),
+                  false, '', '', ''
+                ]);
+                const responseRow = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
+                if (responseRow) respSheet.getRange(responseRow, 8).setValue(singleRes.score);
+                count++;
+                done.add(k);
+                this.setStatus(sessId, { state: 'running', sessionId: sessId, gradedCount: count, errors, totalToGrade, message: `Grading... (${count}/${totalToGrade} done)` });
+                Utilities.sleep(1200);
+             } catch (fallbackE) {
+                lastError = fallbackE.message || fallbackE.toString();
+                errors++;
+             }
+          }
+
           if (errors > 5) {
             if (newGradeRows.length > 0) {
               this._batchAppendRows(gradeSheet, newGradeRows);
@@ -207,6 +268,86 @@ const Grader = {
     };
     this.setStatus(sessId, Object.assign({ state: errors ? 'partial' : 'done', sessionId: sessId }, out));
     return out;
+  },
+
+  callGeminiBatch(key, question, responses, extraContext) {
+    if (!responses || responses.length === 0) return [];
+
+    const maxPts = question.points || 1;
+    let rubricText = '';
+    if (question.rubric) rubricText += '\\nRUBRIC:\\n' + question.rubric;
+    if (question.sampleAnswer) rubricText += '\\nIDEAL ANSWER:\\n' + question.sampleAnswer;
+    if (extraContext) rubricText += '\\nADDITIONAL TEACHER CONTEXT:\\n' + extraContext;
+
+    let studentsText = responses.map(r => `ID: ${r.studentId}\\nANSWER: "${r.answer}"`).join('\\n\\n');
+
+    const prompt = 'You are a science teacher grading student responses. Be precise, fair, and direct. Focus entirely on the factual core of their answers. Ignore spelling, grammar, and punctuation mistakes unless they explicitly change the factual meaning of the science concept.\\n\\n' +
+      'QUESTION (' + maxPts + ' pt' + (maxPts > 1 ? 's' : '') + '):\\n' + question.text + '\\n' +
+      rubricText + '\\n\\nSTUDENT RESPONSES:\\n' + studentsText + '\\n\\n' +
+      'For each student, provide your evaluation in 1-2 brief, complete sentences. Do NOT cut off mid-sentence. You MUST include every student ID provided above.\\n\\n' +
+      'Reply with ONLY a JSON array of objects (no markdown, no prose, no code blocks):\\n' +
+      '[{"id":"<student_id>","score":<0–' + maxPts + '>,"feedback":"<exact notes>"}, ...]';
+
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + this.MODEL + ':generateContent?key=' + key;
+
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+      }),
+      muteHttpExceptions: true
+    });
+
+    const httpCode = response.getResponseCode();
+    const body = response.getContentText();
+    if (httpCode !== 200) {
+      throw new Error('Gemini API HTTP ' + httpCode + ': ' + body.substring(0, 400));
+    }
+
+    const data = JSON.parse(body);
+    if (!data.candidates || !data.candidates.length) {
+      throw new Error('No candidates. Response: ' + body.substring(0, 300));
+    }
+
+    const candidate = data.candidates[0];
+    const finishReason = candidate.finishReason || '';
+    if (finishReason === 'MAX_TOKENS') {
+      Logger.log('⚠ Gemini hit MAX_TOKENS for: ' + question.text.substring(0, 60));
+    }
+
+    let text = ((candidate.content && candidate.content.parts && candidate.content.parts[0].text) || '').trim();
+    // Strip markdown fences
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+    try {
+       // Attempt a direct parse or find the first array literal block
+       let jsonMatch = text.match(/\[[\s\S]*\]/);
+       let result = [];
+
+       if (jsonMatch) {
+         try {
+           result = JSON.parse(jsonMatch[0]);
+         } catch(innerE) {
+           console.warn('Batch JSON parse failed on match, attempting raw parse fallback:', innerE);
+           result = JSON.parse(text);
+         }
+       } else {
+         result = JSON.parse(text);
+       }
+
+       if (!Array.isArray(result)) result = [result];
+
+       return result.map(res => ({
+         studentId: String(res.id),
+         score: Math.min(Math.max(Number(res.score) || 0, 0), maxPts),
+         feedback: res.feedback || 'No feedback generated.'
+       }));
+    } catch(e) {
+       console.error('Batch JSON parse completely failed:', e, 'Raw text:', text);
+       throw new Error('Could not parse batch Gemini response: ' + text.substring(0, 200));
+    }
   },
 
   callGemini(key, question, answer, extraContext) {
@@ -306,26 +447,72 @@ const Grader = {
     const gradeSheet = DB.sh('AIGrades');
     let updated = 0;
     let newGradeRows = [];
-    resps.forEach(r => {
+
+    const BATCH_SIZE = 15;
+    for (let i = 0; i < resps.length; i += BATCH_SIZE) {
+      const batch = resps.slice(i, i + BATCH_SIZE);
+      let resultMap = {};
       try {
-        const result = this.callGemini(key, q, r.answer, ctx || '');
-        const rows = gradeSheet.getDataRange().getValues();
-        let found = false;
-        for (let i = 1; i < rows.length; i++) {
-          if (rows[i][0] === sessId && rows[i][1] === r.studentId && rows[i][3] === qId) {
-            gradeSheet.getRange(i + 1, 5).setValue(result.score);
-            gradeSheet.getRange(i + 1, 7).setValue(result.feedback);
-            gradeSheet.getRange(i + 1, 13).setValue(ctx || '');
-            found = true; break;
+        const results = this.callGeminiBatch(key, q, batch, ctx || '');
+        results.forEach(res => {
+          if (res && res.studentId) resultMap[res.studentId] = res;
+        });
+
+        for (const r of batch) {
+          let result = resultMap[r.studentId];
+          if (!result) {
+             try {
+               result = this.callGemini(key, q, r.answer, ctx || '');
+             } catch(e) { continue; }
           }
+          const rows = gradeSheet.getDataRange().getValues();
+          let found = false;
+          for (let j = 1; j < rows.length; j++) {
+            if (rows[j][0] === sessId && rows[j][1] === r.studentId && rows[j][3] === qId) {
+              gradeSheet.getRange(j + 1, 5).setValue(result.score);
+              gradeSheet.getRange(j + 1, 7).setValue(result.feedback);
+              gradeSheet.getRange(j + 1, 13).setValue(ctx || '');
+              found = true; break;
+            }
+          }
+          if (!found) {
+            newGradeRows.push([sessId, r.studentId, r.studentName, qId, result.score, q.points || 1, result.feedback, r.answer, new Date().toISOString(), false, '', '', ctx || '']);
+          }
+          this._syncResponseScore(sessId, r.studentId, qId, result.score);
+          updated++;
         }
-        if (!found) {
-          newGradeRows.push([sessId, r.studentId, r.studentName, qId, result.score, q.points || 1, result.feedback, r.answer, new Date().toISOString(), false, '', '', ctx || '']);
-        }
-        this._syncResponseScore(sessId, r.studentId, qId, result.score);
-        updated++;
-      } catch (e) { Logger.log('Regrade error: ' + e.toString()); }
-    });
+      } catch (e) {
+         Logger.log('Regrade batch error: ' + e.toString());
+         for (const r of batch) {
+            // Re-check timeout in regrade context too, although we aren't enforcing TIMEOUT_LIMIT the same way in regrade,
+            // we should be careful. Since regrade currently lacks startTime tracking like gradeSession,
+            // the user's issue primarily pertained to gradeSession. We will leave regrade without a hard timer
+            // to avoid injecting undeclared variables, but we note the fallback behavior.
+
+            // Only fallback if the specific ID wasn't successfully processed
+            if (resultMap && resultMap[r.studentId]) continue;
+            try {
+              const result = this.callGemini(key, q, r.answer, ctx || '');
+              const rows = gradeSheet.getDataRange().getValues();
+              let found = false;
+              for (let j = 1; j < rows.length; j++) {
+                if (rows[j][0] === sessId && rows[j][1] === r.studentId && rows[j][3] === qId) {
+                  gradeSheet.getRange(j + 1, 5).setValue(result.score);
+                  gradeSheet.getRange(j + 1, 7).setValue(result.feedback);
+                  gradeSheet.getRange(j + 1, 13).setValue(ctx || '');
+                  found = true; break;
+                }
+              }
+              if (!found) {
+                newGradeRows.push([sessId, r.studentId, r.studentName, qId, result.score, q.points || 1, result.feedback, r.answer, new Date().toISOString(), false, '', '', ctx || '']);
+              }
+              this._syncResponseScore(sessId, r.studentId, qId, result.score);
+              updated++;
+            } catch (fallbackE) { Logger.log('Regrade single error: ' + fallbackE.toString()); }
+         }
+      }
+    }
+
     if (newGradeRows.length > 0) {
       this._batchAppendRows(gradeSheet, newGradeRows);
     }

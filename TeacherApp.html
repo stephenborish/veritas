@@ -2646,7 +2646,7 @@
 
         if (q.type === 'mc' && q.choices) {
           const choicesCount = {};
-          q.choices.forEach(c => choicesCount[c] = { count: 0, confSum: 0, confCount: 0 });
+          q.choices.forEach(c => choicesCount[c] = { count: 0, confSum: 0, confCount: 0, students: [] });
 
           (q.studentResponses || []).forEach(r => {
             if (r.answer) {
@@ -2661,6 +2661,7 @@
               answers.forEach(a => {
                 if (choicesCount[a]) {
                   choicesCount[a].count++;
+                  choicesCount[a].students.push(r.name);
                   if (r.confidence) {
                     choicesCount[a].confSum += Number(r.confidence);
                     choicesCount[a].confCount++;
@@ -2682,9 +2683,19 @@
             const border = isC ? 'border: 2px solid var(--teal);' : 'border: 1px solid var(--bd);';
             const bg = isC ? 'background: var(--tealBg);' : 'background: var(--s);';
 
+            let studentListHtml = '';
+            if (st.students.length > 0) {
+              studentListHtml = `<div style="margin-top:8px; font-size:12px; color:var(--tx2); line-height:1.4;">
+                <strong>Students:</strong> ${st.students.map(name => DOMPurify.sanitize(name)).join(', ')}
+              </div>`;
+            }
+
             qFullHtml += `<div style="padding:12px 14px; border-radius:8px; font-size:14px; ${bg} ${border}">
                 <div style="display:flex; justify-content:space-between; align-items: flex-start; gap: 12px;">
-                    <div style="font-weight:600; color:var(--tx); flex:1; max-width:100%; overflow:hidden;" class="rte-content">${DOMPurify.sanitize(c)}</div>
+                    <div style="font-weight:600; color:var(--tx); flex:1; max-width:100%; overflow:hidden;">
+                        <div class="rte-content">${DOMPurify.sanitize(c)}</div>
+                        ${studentListHtml}
+                    </div>
                     <div style="display:flex; flex-direction:column; align-items:flex-end; white-space:nowrap; font-size:12px;">
                         <span style="font-weight:700; color:var(--tx2);">${st.count} selected (${pct}%)</span>
                         <span style="color:var(--tx3)">Avg Conf: <strong>${avgConf}</strong></span>
@@ -2692,6 +2703,42 @@
                 </div>
             </div>`;
           });
+          qFullHtml += `</div>`;
+        } else if (q.type === 'sa') {
+          qFullHtml += `<div style="font-weight:700; font-size:14px; margin-bottom:12px; border-bottom:1px solid var(--bd); padding-bottom:8px;">Responses List</div>`;
+          qFullHtml += `<div style="display:flex; flex-direction:column; gap:12px; max-height: 400px; overflow-y: auto; padding-right: 8px;">`;
+
+          if (!q.studentResponses || q.studentResponses.length === 0) {
+             qFullHtml += `<div style="color:var(--tx3); font-style:italic; font-size:13px;">No responses yet.</div>`;
+          } else {
+             (q.studentResponses || []).forEach(r => {
+                if (!r.answer) return;
+                let parsedAns = r.answer;
+                try {
+                  const arr = JSON.parse(parsedAns);
+                  if (Array.isArray(arr)) parsedAns = arr.join(', ');
+                } catch (e) {
+                  // Ignore
+                }
+                parsedAns = String(parsedAns).replace(/^\["|"\]$/g, '').replace(/","/g, ', ').replace(/"/g, '');
+
+                let isC = r.isCorrect === true || r.isCorrect === 'TRUE';
+                let hasGrade = r.isCorrect !== undefined && r.isCorrect !== '';
+                let border = hasGrade ? (isC ? 'border-left: 4px solid var(--grn);' : 'border-left: 4px solid var(--red);') : 'border-left: 4px solid var(--bd);';
+
+                qFullHtml += `<div style="padding:10px 12px; border-radius:4px; font-size:13px; background:var(--s2); border:1px solid var(--bd); ${border}">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <div style="font-weight:700; color:var(--tx);">${DOMPurify.sanitize(r.name)}</div>
+                        <div style="font-size:12px; color:var(--tx3);">
+                            Conf: <strong>${r.confidence ? r.confidence : '-'}</strong>
+                            ${hasGrade ? `| Score: <strong>${r.score || 0}</strong>` : ''}
+                        </div>
+                    </div>
+                    <div style="color:var(--tx2); line-height:1.4;">${DOMPurify.sanitize(parsedAns)}</div>
+                    ${r.feedback ? `<div style="margin-top:6px; font-size:11px; color:var(--teal); font-style:italic;"><strong>AI Feedback:</strong> ${DOMPurify.sanitize(r.feedback)}</div>` : ''}
+                </div>`;
+             });
+          }
           qFullHtml += `</div>`;
         }
         qFullHtml += `</div>`;
@@ -2722,25 +2769,28 @@
         });
 
         const partRate = withStateAll.length > 0 ? Math.round((totalAns / withStateAll.length) * 100) : 0;
-        let cpHT = `<div class="card" style="margin-top:24px;">
-             <div style="font-weight:700;font-size:15px;margin-bottom:12px">Confidence Pulse</div>
+        let cpHT = `<div class="card" style="margin-top:24px; position:sticky; top:24px;">
+             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--bd); padding-bottom:12px;">
+                 <div style="font-weight:700; font-size:15px; color:var(--tx)">Metacognition & Confidence</div>
+                 <div style="font-size:13px; color:var(--tx3)">Participation: ${partRate}%</div>
+             </div>
              
-             <div style="display:grid;grid-template-columns:1fr;gap:12px;">
-                <div style="border:2px solid var(--grn); background:rgba(16,185,129,0.05); padding:16px; border-radius:8px">
-                   <div style="font-weight:700; color:var(--grn); margin-bottom:8px">💯 Sure & Right (${sureRight.length})</div>
-                   <div style="font-size:13px; color:var(--tx2)">${sureRight.length ? sureRight.join(', ') : '<em>No students</em>'}</div>
+             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div style="border:1px solid var(--grn); background:rgba(16,185,129,0.08); padding:12px; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                   <div style="font-weight:700; color:var(--grn); font-size:12px; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">💯 Sure & Right (${sureRight.length})</div>
+                   <div style="font-size:12px; color:var(--tx2); line-height:1.4;">${sureRight.length ? sureRight.map(n => DOMPurify.sanitize(n)).join(', ') : '<span style="opacity:0.6;font-style:italic">None</span>'}</div>
                 </div>
-                <div style="border:2px solid var(--red); background:rgba(239,68,68,0.05); padding:16px; border-radius:8px">
-                   <div style="font-weight:700; color:var(--red); margin-bottom:8px">⚠️ Sure & Wrong (${sureWrong.length})</div>
-                   <div style="font-size:13px; color:var(--red)">${sureWrong.length ? sureWrong.join(', ') : '<em>No students</em>'}</div>
+                <div style="border:1px solid var(--red); background:rgba(239,68,68,0.08); padding:12px; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                   <div style="font-weight:700; color:var(--red); font-size:12px; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">⚠️ Sure & Wrong (${sureWrong.length})</div>
+                   <div style="font-size:12px; color:var(--tx2); line-height:1.4;">${sureWrong.length ? sureWrong.map(n => DOMPurify.sanitize(n)).join(', ') : '<span style="opacity:0.6;font-style:italic">None</span>'}</div>
                 </div>
-                <div style="border:2px solid var(--amb); background:rgba(245,158,11,0.05); padding:16px; border-radius:8px">
-                   <div style="font-weight:700; color:var(--amb); margin-bottom:8px">🤔 Unsure & Right (${unsureRight.length})</div>
-                   <div style="font-size:13px; color:var(--tx2)">${unsureRight.length ? unsureRight.join(', ') : '<em>No students</em>'}</div>
+                <div style="border:1px solid var(--amb); background:rgba(245,158,11,0.08); padding:12px; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                   <div style="font-weight:700; color:var(--amb); font-size:12px; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">🤔 Unsure & Right (${unsureRight.length})</div>
+                   <div style="font-size:12px; color:var(--tx2); line-height:1.4;">${unsureRight.length ? unsureRight.map(n => DOMPurify.sanitize(n)).join(', ') : '<span style="opacity:0.6;font-style:italic">None</span>'}</div>
                 </div>
-                <div style="border:2px solid var(--blu); background:rgba(59,130,246,0.05); padding:16px; border-radius:8px">
-                   <div style="font-weight:700; color:var(--blu); margin-bottom:8px">🤷 Unsure & Wrong (${unsureWrong.length})</div>
-                   <div style="font-size:13px; color:var(--tx2)">${unsureWrong.length ? unsureWrong.join(', ') : '<em>No students</em>'}</div>
+                <div style="border:1px solid var(--blu); background:rgba(59,130,246,0.08); padding:12px; border-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                   <div style="font-weight:700; color:var(--blu); font-size:12px; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.5px;">🤷 Unsure & Wrong (${unsureWrong.length})</div>
+                   <div style="font-size:12px; color:var(--tx2); line-height:1.4;">${unsureWrong.length ? unsureWrong.map(n => DOMPurify.sanitize(n)).join(', ') : '<span style="opacity:0.6;font-style:italic">None</span>'}</div>
                 </div>
              </div>
           </div>`;
