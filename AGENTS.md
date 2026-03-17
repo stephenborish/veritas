@@ -82,10 +82,15 @@ Apps Script blocks web apps from creating triggers (`ScriptApp.newTrigger()`).
 
 ---
 
-## 8. Code Health and Maintainability
+## 8. UX & State Transitions
+* **Optimistic/Immediate UI Feedback:** Google Apps Script backend calls are slow (often taking 1–3 seconds). Whenever an action is triggered (e.g. Next Question, Lock, AI Grade), you **MUST** immediately update the UI to reflect a loading or pending state. Examples include disabling buttons, showing spinners, or dimming elements (`opacity: 0.5`) so the user knows the system is working.
+* **Smooth Transitions:** Avoid harsh UI jumps. When swapping major components or questions (especially in Student Lockstep Mode), use CSS animations (like `.fade-in-up`, `opacity` transitions, or a `get-ready-overlay`) to make the interface feel responsive and high-end.
+* **State Interruption:** Lockstep mode runs on a continuous polling interval. When you trigger a UI transition (like a "Get Ready" screen), use a flag (e.g., `S.isTransitioning`) to temporarily ignore polling updates. This prevents the background sync from re-rendering the DOM while an animation is playing.
+
+## 9. Code Health and Maintainability
 * **Empty Catch Blocks:** Never leave `catch` blocks entirely empty. If an error is expected (e.g., trying to `JSON.parse` a student's answer that might legitimately be plain text), gracefully handle the fallback and log the event securely using `console.debug()` or `console.warn()`. This preserves system observability without spamming the console with expected errors.
 
-## 9. Autonomous Deployment Workflow
+## 10. Autonomous Deployment Workflow
 You have been granted full authorization to deploy code directly to Google Apps Script via `clasp`. 
 When you are tasked with adding a feature or fixing a bug, follow this exact workflow:
 1. Write and modify the necessary `.gs` or `.html` files.
@@ -93,7 +98,7 @@ When you are tasked with adding a feature or fixing a bug, follow this exact wor
 3. Once you are confident the code is complete, execute `npx clasp push` in the terminal to deploy the updates directly to the live Apps Script project.
 4. Notify the user that the code has been successfully pushed and is ready for them to test.
 
-## 9. Code Health & Best Practices
+## 11. Code Health & Best Practices
 * **Exception Handling:** In general, avoid empty `catch (e) {}` blocks and log unexpected errors to aid in debugging.
   * **Expected Fallbacks (DO NOT LOG):** Do *not* log warnings for expected parse fallbacks (like JSON parsing failures for raw strings) in O(N) loops. Plain-string answers are a normal input shape, and logging them emits thousands of avoidable warnings that add client-side overhead and bury actionable errors.
   * **Client-Side Logging:** In client-side code (`TeacherApp.html`, `StudentApp.html`), use `console.error(e)` for critical logic failures and `console.warn(e)` for unexpected but non-critical errors (like KaTeX rendering failures).
