@@ -31,7 +31,7 @@ const Grader = {
   getStatus(sessId) {
     const raw = PropertiesService.getScriptProperties().getProperty(this.statusKey(sessId));
     if (!raw) return { state: 'idle', sessionId: sessId };
-    try { return JSON.parse(raw); } catch (e) { return { state: 'idle', sessionId: sessId }; }
+    try { return JSON.parse(raw); } catch (e) { console.error('Failed to parse status JSON:', e); return { state: 'idle', sessionId: sessId }; }
   },
 
   // ── ASYNC ENTRY POINT (called from client via google.script.run) ─
@@ -64,7 +64,7 @@ const Grader = {
     // Push sessId into queue array (avoids overwriting concurrent sessions)
     const props = PropertiesService.getScriptProperties();
     let queue;
-    try { queue = JSON.parse(props.getProperty(this.QUEUE_KEY) || '[]'); } catch(e) { queue = []; }
+    try { queue = JSON.parse(props.getProperty(this.QUEUE_KEY) || '[]'); } catch(e) { console.error('Failed to parse queue JSON:', e); queue = []; }
     if (!queue.includes(sessId)) queue.push(sessId);
     props.setProperty(this.QUEUE_KEY, JSON.stringify(queue));
 
@@ -263,7 +263,7 @@ const Grader = {
         if (result.score !== undefined) {
           return { score: Math.min(Math.max(Number(result.score), 0), maxPts), feedback: result.feedback || 'No feedback generated.' };
         }
-      } catch(e) { /* fall through to partial extraction */ }
+      } catch(e) { console.warn('JSON parse failed, falling through to partial extraction:', e); }
     }
 
     // Fallback: extract score and whatever feedback exists from partial/malformed JSON
@@ -366,7 +366,7 @@ const Grader = {
 function checkGradeQueue() {
   const props = PropertiesService.getScriptProperties();
   let queue;
-  try { queue = JSON.parse(props.getProperty(Grader.QUEUE_KEY) || '[]'); } catch(e) { queue = []; }
+  try { queue = JSON.parse(props.getProperty(Grader.QUEUE_KEY) || '[]'); } catch(e) { console.error('Failed to parse queue JSON:', e); queue = []; }
   if (!queue.length) return; // Nothing queued
 
   // Dequeue the first session and save remaining back

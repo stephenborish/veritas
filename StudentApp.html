@@ -1061,6 +1061,7 @@
           return '%' + ('00' + ch.charCodeAt(0).toString(16)).slice(-2);
         }).join(''));
       } catch (e) {
+        console.error('Error decoding Base64:', e);
         return '';
       }
     }
@@ -1073,6 +1074,7 @@
       try {
         return JSON.parse(decodeBase64UrlUtf8(payloadSegment));
       } catch (e) {
+        console.error('Error decoding Student Token:', e);
         return null;
       }
     }
@@ -1640,6 +1642,7 @@
           document.exitFullscreen();
         } catch (e) {
           // Failure to exit fullscreen is common and usually ignorable
+          console.warn('Failed to exit fullscreen:', e);
         }
       }
       if (S.poll) clearInterval(S.poll); if (S.timerInt) clearInterval(S.timerInt);
