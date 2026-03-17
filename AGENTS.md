@@ -61,6 +61,7 @@ Veritas Assess has a premium, polished, glassmorphism aesthetic. Do not introduc
   * Intercepting `fullscreenchange` (exiting fullscreen).
   * Intercepting keystrokes (Mac/Win/Chrome OS screenshot shortcuts).
   * Violations trigger `triggerLockout()`, halting the exam and updating the `S.locked` state until the teacher explicitly readmits them.
+* **XSS Prevention (DOMPurify):** Because the app relies heavily on string interpolation inside template literals to render UI components, you **MUST** ensure all user-controlled data (e.g., question text, student responses, answer choices) is wrapped in `DOMPurify.sanitize(variable)` before being injected into the DOM. Failure to do so introduces critical Cross-Site Scripting (XSS) vulnerabilities.
 
 ---
 
@@ -81,7 +82,10 @@ Apps Script blocks web apps from creating triggers (`ScriptApp.newTrigger()`).
 
 ---
 
-## 8. Autonomous Deployment Workflow
+## 8. Code Health and Maintainability
+* **Empty Catch Blocks:** Never leave `catch` blocks entirely empty. If an error is expected (e.g., trying to `JSON.parse` a student's answer that might legitimately be plain text), gracefully handle the fallback and log the event securely using `console.debug()` or `console.warn()`. This preserves system observability without spamming the console with expected errors.
+
+## 9. Autonomous Deployment Workflow
 You have been granted full authorization to deploy code directly to Google Apps Script via `clasp`. 
 When you are tasked with adding a feature or fixing a bug, follow this exact workflow:
 1. Write and modify the necessary `.gs` or `.html` files.
