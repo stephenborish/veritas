@@ -1475,10 +1475,18 @@
       document.getElementById('qArea').innerHTML = html;
       const shortAnswerInput = document.getElementById('saIn');
       if (shortAnswerInput) {
+        let saTimeout;
         shortAnswerInput.addEventListener('input', function () {
           trackSA(shortAnswerInput.dataset.qid);
+          clearTimeout(saTimeout);
+          saTimeout = setTimeout(function () {
+            if (!S.submittedAns[shortAnswerInput.dataset.qid]) {
+              saveSA(shortAnswerInput.dataset.qid);
+            }
+          }, 2000); // Auto-save draft every 2 seconds of typing inactivity
         });
         shortAnswerInput.addEventListener('blur', function () {
+          clearTimeout(saTimeout);
           // Only save on blur if not already submitted
           if (!S.submittedAns[shortAnswerInput.dataset.qid]) {
             saveSA(shortAnswerInput.dataset.qid);
@@ -1685,10 +1693,17 @@
         google.script.run.withSuccessHandler(function (st) {
           if (!st) return;
           if (st.sessionStatus === 'ended') {
+            // Eagerly save SA if we are typing before end
+            const shortAnswerInput = document.getElementById('saIn');
+            if (shortAnswerInput && !S.submittedAns[shortAnswerInput.dataset.qid]) saveSA(shortAnswerInput.dataset.qid);
             triggerLockout('session_ended');
             return;
           }
-          if (st.lockedOut && !S.locked) triggerLockout('sync_lock');
+          if (st.lockedOut && !S.locked) {
+            const shortAnswerInput = document.getElementById('saIn');
+            if (shortAnswerInput && !S.submittedAns[shortAnswerInput.dataset.qid]) saveSA(shortAnswerInput.dataset.qid);
+            triggerLockout('sync_lock');
+          }
           if (!st.lockedOut && S.locked) {
             S.locked = false;
             // Teacher has unlocked them, explicitly trigger fsPrompt again
