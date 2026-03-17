@@ -216,11 +216,12 @@ const Grader = {
     if (question.sampleAnswer) rubricText += '\nIDEAL ANSWER:\n' + question.sampleAnswer;
     if (extraContext) rubricText += '\nADDITIONAL TEACHER CONTEXT:\n' + extraContext;
 
-    const prompt = 'You are a science teacher grading a student response. Be precise and direct.\n\n' +
+    const prompt = 'You are a science teacher grading a student response. Be precise, fair, and direct. Focus entirely on the factual core of their answer. Ignore spelling, grammar, and punctuation mistakes unless they explicitly change the factual meaning of the science concept.\n\n' +
       'QUESTION (' + maxPts + ' pt' + (maxPts > 1 ? 's' : '') + '):\n' + question.text + '\n' +
       rubricText + '\n\nSTUDENT ANSWER:\n"' + answer + '"\n\n' +
+      'Provide your evaluation in 1-2 brief, complete sentences. Do NOT cut off mid-sentence.\n\n' +
       'Reply with ONLY this JSON (no markdown, no prose):\n' +
-      '{"score":<0–' + maxPts + '>,"feedback":"<exact notes: what they got right, key missing concept(s), one specific correction>"}';
+      '{"score":<0–' + maxPts + '>,"feedback":"<exact notes: succinct complete sentences on what they got right and key missing concepts>"}';
 
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + this.MODEL + ':generateContent?key=' + key;
 

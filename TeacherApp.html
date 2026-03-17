@@ -2586,8 +2586,8 @@
 
           // Clear action-first labels: green = unlocked (can lock), red = locked (can unlock)
           const lockBtnHtml = isLocked
-            ? `<button class="btn" style="background:#dc2626;color:#fff;border:none;font-weight:700" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔒 Locked</button>`
-            : `<button class="btn" style="background:#059669;color:#fff;border:none;font-weight:700" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔓 Lock</button>`;
+          ? `<button class="btn" style="background:#dc2626;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔒 Locked</button>`
+          : `<button class="btn" style="background:#059669;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsInitiateLock('${d.qStats[curQIdx].id}')">🔓 Lock</button>`;
 
           const isLastQ = curQIdx === d.session.questionCount - 1;
           const nextBtnHtml = isLastQ
@@ -2943,6 +2943,26 @@
     function lsPrev() { if (curQIdx > 0 && (typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.goToQuestion(aSid, curQIdx - 1); } }
     function lsNext() { if ((typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.goToQuestion(aSid, curQIdx + 1); } }
     function lsReveal() { const d = window.__liveD; if (d && (typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.revealAnswer(aSid, d.qStats[curQIdx].id); } }
+    function lsInitiateLock(qId) {
+      const btn = document.getElementById('btnLockToggle');
+      if (!btn) return;
+      btn.onclick = null; // Disable clicking again while waiting
+      let countdown = 3;
+      btn.style.background = '#d97706'; // amber warning
+      btn.textContent = `Locking in ${countdown}...`;
+
+      const interval = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+          btn.textContent = `Locking in ${countdown}...`;
+        } else {
+          clearInterval(interval);
+          btn.textContent = `🔒 Locking...`;
+          lsToggleLock(qId);
+        }
+      }, 1000);
+    }
+
     function lsToggleLock(qId) {
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run
