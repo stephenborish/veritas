@@ -171,6 +171,14 @@ const Grader = {
             let finalResult = resultMap[r.studentId];
             if (!finalResult) {
               Logger.log('Batch missed ID ' + r.studentId + ', falling back to single');
+              if (Date.now() - startTime > TIMEOUT_LIMIT) {
+                if (newGradeRows.length > 0) {
+                  this._batchAppendRows(gradeSheet, newGradeRows);
+                }
+                const out = { gradedCount: count, errors, totalToGrade, message: `Graded ${count}/${totalToGrade}. Time limit reached during fallback. Run again to finish.` };
+                this.setStatus(sessId, Object.assign({ state: 'partial', sessionId: sessId }, out));
+                return out;
+              }
               try {
                 const singleRes = this.callGemini(key, q, r.answer, '');
                 finalResult = { studentId: r.studentId, score: singleRes.score, feedback: singleRes.feedback };
