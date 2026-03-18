@@ -2637,9 +2637,29 @@
 
       // === LEFT COLUMN STICKY CONTEXT ===
       if (isLS && q) {
-        let qFullHtml = `<div class="card" style="margin-bottom:24px; padding:20px; border: 2px solid var(--bd)">
-            <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-               <span style="font-weight:700; font-size:15px; color:var(--tx)">Current Question</span>
+        // Evaluate visual state for Teacher card
+        const lockedQsList = (d.session.config && d.session.config.lockedQs) || [];
+        const isLocked = lockedQsList.includes(q.id);
+        const revealedQsList = (d.session.config && d.session.config.revealedQs) || [];
+        const isRevealed = revealedQsList.includes(q.id);
+
+        let cardBorder = "var(--bd)";
+        let tagHtml = "";
+
+        if (isRevealed) {
+          cardBorder = "var(--teal)";
+          tagHtml = `<span style="background:var(--teal); color:#fff; font-size:12px; font-weight:700; padding:4px 8px; border-radius:4px; margin-left:8px">👁️ REVEALED</span>`;
+        } else if (isLocked) {
+          cardBorder = "var(--red)";
+          tagHtml = `<span style="background:var(--red); color:#fff; font-size:12px; font-weight:700; padding:4px 8px; border-radius:4px; margin-left:8px">🔒 LOCKED</span>`;
+        }
+
+        let qFullHtml = `<div class="card" style="margin-bottom:24px; padding:20px; border: 2px solid ${cardBorder}; transition: all 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:12px; align-items:center;">
+               <div style="display:flex; align-items:center;">
+                 <span style="font-weight:700; font-size:15px; color:var(--tx)">Current Question</span>
+                 ${tagHtml}
+               </div>
                <span style="font-weight:600; font-size:13px; color:var(--teal)">${q.type === 'mc' ? 'Multiple Choice' : 'Short Answer'}</span>
             </div>
             <div style="font-size:16px; margin-bottom:20px; max-width:100%; overflow:hidden;" class="q-text rte-content">${DOMPurify.sanitize(q.text)}</div>`;
@@ -2990,9 +3010,38 @@
       }).getStudentDetail(sessId, stuId);
     }
 
-    function lsPrev() { if (curQIdx > 0 && (typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.goToQuestion(aSid, curQIdx - 1); } }
-    function lsNext() { if ((typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.goToQuestion(aSid, curQIdx + 1); } }
-    function lsReveal() { const d = window.__liveD; if (d && (typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.revealAnswer(aSid, d.qStats[curQIdx].id); } }
+    function setLSActionLoading(label) {
+      const actions = document.getElementById('lsActions');
+      if (actions) {
+        actions.innerHTML = `<button class="btn bp" disabled style="opacity:0.8; cursor:wait;"><span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:8px;"></span>${label}...</button>`;
+      }
+      const leftCol = document.getElementById('liveDashboardLeft');
+      if (leftCol) {
+        leftCol.style.opacity = '0.5';
+        leftCol.style.pointerEvents = 'none';
+        leftCol.style.transition = 'opacity 0.2s';
+      }
+    }
+
+    function lsPrev() {
+      if (curQIdx > 0 && (typeof google !== 'undefined' && google.script && google.script.run)) {
+        setLSActionLoading('Loading Previous');
+        google.script.run.withSuccessHandler(() => startLive()).goToQuestion(aSid, curQIdx - 1);
+      }
+    }
+    function lsNext() {
+      if ((typeof google !== 'undefined' && google.script && google.script.run)) {
+        setLSActionLoading('Loading Next');
+        google.script.run.withSuccessHandler(() => startLive()).goToQuestion(aSid, curQIdx + 1);
+      }
+    }
+    function lsReveal() {
+      const d = window.__liveD;
+      if (d && (typeof google !== 'undefined' && google.script && google.script.run)) {
+        setLSActionLoading('Revealing');
+        google.script.run.withSuccessHandler(() => startLive()).revealAnswer(aSid, d.qStats[curQIdx].id);
+      }
+    }
     function lsInitiateLock(qId) {
       const btn = document.getElementById('btnLockToggle');
       if (!btn) return;
