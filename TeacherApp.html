@@ -1575,10 +1575,10 @@
         <div id="live-top-bar">
           <div id="liveStatusBanner" style="display:flex; align-items:center;"></div>
           <div id="liveStatsRow" style="display:flex; align-items:center;"></div>
-          <div id="lockstepControls" style="display:none; align-items:center; gap:16px;">
-            <div style="font-size:16px; font-weight:700; color:var(--teal); white-space:nowrap;" id="lsQText">Lockstep
-            </div>
-            <div id="lsActions" style="display:flex; gap:8px; align-items:center;"></div>
+          <div id="lockstepControls" style="display:none; align-items:center; gap:16px; flex-wrap:wrap;">
+            <div style="font-size:16px; font-weight:700; color:var(--teal); white-space:nowrap;" id="lsQText">Lockstep</div>
+            <div id="lsParticipation" style="font-size:13px;font-weight:700;padding:4px 12px;border-radius:20px;border:1.5px solid var(--bd);white-space:nowrap;display:none"></div>
+            <div id="lsActions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
           </div>
         </div>
 
@@ -1765,7 +1765,8 @@
     let liveInt = null, aSid = null, liveTab = 'students', curQIdx = 0;
     let edQ = [], curSetId = null, uploadCallback = null;
     let authChecked = false;
-    let gradePollingInt = null; // polls getGradingStatus while grading runs
+    let __gradingActive = false; // true while AI grading is running — drives faster poll rate
+    let __renderFP = {};         // fingerprints of last-rendered sections for diff-skipping
 
     document.querySelectorAll('.ni').forEach(n => n.addEventListener('click', () => {
       document.querySelectorAll('.ni').forEach(x => x.classList.remove('active'));
@@ -2469,7 +2470,27 @@
       const cfg = { setId: document.getElementById('lSet').value, courseId: courseId, block: block, mode: document.getElementById('lMode').value, revealMode: document.getElementById('lRev').value, calculatorEnabled: document.getElementById('lCE').checked, metacognitionEnabled: document.getElementById('lME').checked, timer: tt === 'none' ? { type: 'none' } : { type: tt, seconds: +(document.getElementById('lTM').value || 30) * 60 } };
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         showLoad('Launching Live Session...');
-        google.script.run.withFailureHandler(e => { hideLoad(); toast(e.message, 'err'); }).withSuccessHandler(r => { hideLoad(); aSid = r.sessionId; toast('Live! Code: ' + r.code, 'ok'); loadLaunch() }).activateSession(cfg);
+        google.script.run.withFailureHandler(e => { hideLoad(); toast(e.message, 'err'); }).withSuccessHandler(r => {
+          hideLoad();
+          aSid = r.sessionId;
+          // Navigate to launch tab if not already there
+          document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
+          document.querySelectorAll('.sec').forEach(s => s.classList.remove('active'));
+          document.querySelector('.ni[data-s="launch"]').classList.add('active');
+          document.getElementById('sec-launch').classList.add('active');
+          // Show prominent post-launch action panel with session code
+          document.getElementById('activeInfo').innerHTML = `
+            <div style="margin-top:20px;padding:20px 24px;border-radius:12px;background:rgba(20,184,166,0.08);border:2px solid var(--teal)">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--teal);letter-spacing:1px;margin-bottom:8px">Session Live</div>
+              <div style="font-size:38px;font-weight:800;letter-spacing:8px;color:var(--tx);font-family:monospace;margin-bottom:14px">${DOMPurify.sanitize(r.code)}</div>
+              <div style="font-size:13px;color:var(--tx2);margin-bottom:18px">Share this code with students, or send personalized email links.</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn bp" style="font-size:14px" onclick="sendEmails()">📧 Send Emails to Roster</button>
+                <button class="btn bp" style="font-size:14px;background:var(--teal)" onclick="document.querySelector('.ni[data-s=live]').click()">📡 Open Live Monitor</button>
+                <button class="btn bd" onclick="endS()">End Session</button>
+              </div>
+            </div>`;
+        }).activateSession(cfg);
       } else {
         toast('Google Apps Script API not available.', 'err');
       }
@@ -2477,7 +2498,20 @@
 
     function endS() {
       if (!aSid) return;
-      sysConfirm('End Session', 'Are you sure you want to completely end this session for all students?', 'End Session', () => {
+      let _endMsg = 'Are you sure you want to completely end this session for all students?';
+      const _endD = window.__liveD;
+      if (_endD) {
+        const _total = _endD.rosterSize || (_endD.students || []).length;
+        const _finished = _endD.totalFinished || 0;
+        const _remaining = _total - _finished;
+        const _qLabel = _endD.session && _endD.session.currentQ >= 0
+          ? `Q${_endD.session.currentQ + 1}/${_endD.session.questionCount}`
+          : 'not started';
+        _endMsg = _remaining > 0
+          ? `⚠ ${_remaining} student${_remaining !== 1 ? 's are' : ' is'} still in progress (${_finished}/${_total} finished, on ${_qLabel}). All data will be archived.`
+          : `All ${_finished} student${_finished !== 1 ? 's have' : ' has'} finished (${_qLabel}). Safe to end and archive.`;
+      }
+      sysConfirm('End Session', _endMsg, 'End Session', () => {
         if (typeof google !== 'undefined' && google.script && google.script.run) {
           google.script.run.withSuccessHandler(() => {
             toast('Ended', 'ok');
@@ -2544,72 +2578,163 @@
         const fNode = document.getElementById('liveRightFilter');
         if (fNode) fNode.style.display = 'none';
       }
+      // Force full re-render on tab switch by clearing fingerprint
+      __renderFP = {};
       if (window.__liveD) renderLive(window.__liveD);
+    }
+
+    // One-shot refresh — fires a single immediate poll without touching the interval.
+    // Use in action handlers (lock, readmit, override, regrade) instead of startLive()
+    // so the polling interval never drifts.
+    function refreshLive() {
+      if (!aSid || typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(d => {
+          if (!d) return;
+          window.__liveD = d;
+          if (d.gradeStatus) window.__gradeStatus = d.gradeStatus;
+          renderLive(d);
+        })
+        .getLiveResults(aSid);
     }
 
     function startLive() {
       if (liveInt) clearInterval(liveInt);
-      const go = () => {
-        if (typeof google !== 'undefined' && google.script && google.script.run) {
-          google.script.run.withSuccessHandler(d => {
-            if (!d) { document.getElementById('liveStatusBanner').innerHTML = '<div class="card">No active session. Please launch one first.</div>'; document.getElementById('lockstepControls').style.display = 'none'; return; }
-            window.__liveD = d;
-            renderLive(d);
-            if (d.session && d.session.sessionId) {
-              google.script.run.withSuccessHandler(st => { window.__gradeStatus = st; if (liveTab === 'grading' && window.__liveD) renderLive(window.__liveD); }).getGradingStatus(d.session.sessionId);
-            }
-          }).getLiveResults(aSid)
-        }
-      };
-      go(); liveInt = setInterval(go, 4000);
+      liveInt = null;
+      __renderFP = {};
+      pollLive_();
+      liveInt = setInterval(pollLive_, __gradingActive ? 2500 : 4000);
+    }
+
+    function pollLive_() {
+      if (!aSid || typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(d => {
+          if (!d) {
+            document.getElementById('liveStatusBanner').innerHTML = '<div class="card">No active session. Please launch one first.</div>';
+            document.getElementById('lockstepControls').style.display = 'none';
+            return;
+          }
+          window.__liveD = d;
+          if (d.gradeStatus) window.__gradeStatus = d.gradeStatus;
+          // Adaptive poll rate: speed up during AI grading, slow down when idle
+          const isGrading = d.gradeStatus &&
+            (d.gradeStatus.state === 'running' || d.gradeStatus.state === 'queued');
+          if (isGrading !== __gradingActive) {
+            __gradingActive = isGrading;
+            if (liveInt) { clearInterval(liveInt); liveInt = setInterval(pollLive_, isGrading ? 2500 : 4000); }
+          }
+          renderLive(d);
+        })
+        .getLiveResults(aSid);
     }
 
     function renderLive(d) {
       const isLS = d.session.mode === 'lockstep';
       curQIdx = d.session.currentQ || 0;
-      document.getElementById('liveStatusBanner').innerHTML = `<div style="display:flex;align-items:center;">
+
+      // ── Fingerprint-based diff: skip re-rendering unchanged sections ──
+      const _q = (d.qStats || [])[curQIdx] || null;
+      const _violCount = (d.violations || []).filter(v => !v.resolved).length;
+      const _answerFP  = (d.students || []).map(s => s.studentId + ':' + s.answered).join('|');
+      const _lockedQs  = JSON.stringify((d.session.config || {}).lockedQs || []);
+      const _gsState   = (d.gradeStatus || {}).state || 'idle';
+      const _gsCounts  = (d.gradeStatus || {}).gradedCount + '/' + (d.gradeStatus || {}).totalToGrade;
+      const _newFP = {
+        banner:   d.session.code + ':' + curQIdx,
+        stats:    d.totalJoined + ':' + d.totalFinished + ':' + (d.totalActiveNow || 0) + ':' + _violCount,
+        controls: isLS ? curQIdx + ':' + _lockedQs + ':' + _gsState + ':' + _gsCounts : 'off',
+        left:     isLS ? _lockedQs + ':' + _answerFP : _answerFP,
+        students: liveTab === 'students' ? _answerFP + ':' + _violCount : null,
+        details:  liveTab === 'details'  ? _answerFP : null,
+        grading:  liveTab === 'grading'  ? _gsState + ':' + _gsCounts + ':' + _answerFP : null,
+      };
+      const _fp = __renderFP;
+      const _ch = {
+        banner:   _newFP.banner   !== _fp.banner,
+        stats:    _newFP.stats    !== _fp.stats,
+        controls: _newFP.controls !== _fp.controls,
+        left:     _newFP.left     !== _fp.left,
+        students: _newFP.students !== _fp.students,
+        details:  _newFP.details  !== _fp.details,
+        grading:  _newFP.grading  !== _fp.grading,
+      };
+      if (!Object.values(_ch).some(Boolean)) return;
+      __renderFP = _newFP;
+      // ────────────────────────────────────────────────────────────────
+
+      if (_ch.banner) document.getElementById('liveStatusBanner').innerHTML = `<div style="display:flex;align-items:center;">
         <div style="font-weight:700;font-size:16px;margin-right:12px;">${DOMPurify.sanitize(d.session.setName)} <span style="font-weight:normal;color:var(--tx3);font-size:13px">· Block ${DOMPurify.sanitize(d.session.block)}</span></div>
         <div style="font-size:12px;font-weight:700;background:var(--s);padding:4px 8px;border-radius:4px;border:1px solid var(--bd); letter-spacing:1px">${DOMPurify.sanitize(d.session.code)}</div>
         <button onclick="document.querySelector('.app').classList.toggle('hide-sb')" class="btn bs bd" style="padding:4px 8px; font-size:12px; margin-left:12px;">◫ Toggle Left Panel</button>
       </div>`;
-      if (isLS) {
-        // FIX: lockedQs lives in session.config, NOT at session root
-        const lockedQsList = (d.session.config && d.session.config.lockedQs) || [];
-        const isLocked = curQIdx >= 0 ? lockedQsList.includes(d.qStats[curQIdx].id) : false;
-        document.getElementById('lockstepControls').style.display = 'flex';
+      if (!_ch.controls && !_ch.stats && !_ch.left && !_ch.students && !_ch.details && !_ch.grading) return;
+      if (_ch.controls) {
+        if (isLS) {
+          // FIX: lockedQs lives in session.config, NOT at session root
+          const lockedQsList = (d.session.config && d.session.config.lockedQs) || [];
+          const isLocked = curQIdx >= 0 ? lockedQsList.includes(d.qStats[curQIdx].id) : false;
+          document.getElementById('lockstepControls').style.display = 'flex';
 
-        if (curQIdx === -1) {
-          document.getElementById('lsQText').textContent = `Lockstep: Not Started`;
-          document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Start Session</button>`;
+          // Participation pill
+          const _partPill = document.getElementById('lsParticipation');
+          if (curQIdx >= 0 && _q) {
+            const _totalJoined = (d.students || []).filter(s => s.status !== 'not-joined').length;
+            const _answeredNow = (_q.studentResponses || []).filter(r => r.answer).length;
+            const _pct = _totalJoined > 0 ? _answeredNow / _totalJoined : 0;
+            const _pColor = _pct >= 0.8 ? 'var(--grn)' : _pct >= 0.5 ? 'var(--amb)' : 'var(--red)';
+            _partPill.style.display = 'block';
+            _partPill.style.color = _pColor;
+            _partPill.style.borderColor = _pColor;
+            _partPill.textContent = `${_answeredNow} / ${_totalJoined} answered`;
+          } else {
+            _partPill.style.display = 'none';
+          }
+
+          if (curQIdx === -1) {
+            document.getElementById('lsQText').textContent = `Lockstep: Not Started`;
+            document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Begin Q1</button>`;
+          } else {
+            document.getElementById('lsQText').textContent = `Lockstep: Q${curQIdx + 1} of ${d.session.questionCount}`;
+
+            // Clear action-first labels: green = unlocked (can lock), red = locked (can unlock)
+            const lockBtnHtml = isLocked
+            ? `<button class="btn" style="background:#dc2626;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔒 Locked</button>`
+            : `<button class="btn" style="background:#059669;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsInitiateLock('${d.qStats[curQIdx].id}')">🔓 Lock</button>`;
+
+            const isLastQ = curQIdx === d.session.questionCount - 1;
+            const nextBtnHtml = isLastQ
+              ? `<button class="btn bd" onclick="endS()">🏁 End Archive</button>`
+              : `<button class="btn bp" onclick="lsNext()">Next →</button>`;
+
+            const isSA = d.qStats[curQIdx].type === 'sa';
+            const gradeBtnHtml = (isLocked && isSA)
+              ? `<button class="btn bp" style="background:var(--teal);color:white" onclick="runGrade(aSid)">🤖 AI Grade</button>`
+              : '';
+
+            // Grading status pill in controls bar
+            const gs = window.__gradeStatus || {};
+            const gradeIndicator = (gs.state === 'running' || gs.state === 'queued')
+              ? `<span style="font-size:12px;padding:4px 8px;border-radius:12px;background:rgba(245,158,11,0.15);color:var(--amb);border:1px solid var(--amb);white-space:nowrap"><span class="spinner" style="width:10px;height:10px;border-width:2px;vertical-align:middle;margin-right:4px;display:inline-block"></span>Grading${gs.gradedCount !== undefined ? ' ' + gs.gradedCount + '/' + (gs.totalToGrade || '?') : ''}</span>`
+              : gs.state === 'done'
+              ? `<span style="font-size:12px;padding:4px 8px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--grn);border:1px solid var(--grn)">✓ Graded</span>`
+              : '';
+
+            document.getElementById('lsActions').innerHTML = `
+          <button class="btn bg" onclick="lsPrev()">← Prev</button>
+          ${lockBtnHtml}
+          ${gradeIndicator}
+          ${gradeBtnHtml}
+          <button class="btn bg" onclick="lsReveal()">👁 Reveal</button>
+          ${nextBtnHtml}
+        `;
+          }
         } else {
-          document.getElementById('lsQText').textContent = `Lockstep: Q${curQIdx + 1} of ${d.session.questionCount}`;
-
-          // Clear action-first labels: green = unlocked (can lock), red = locked (can unlock)
-          const lockBtnHtml = isLocked
-          ? `<button class="btn" style="background:#dc2626;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔒 Locked</button>`
-          : `<button class="btn" style="background:#059669;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsInitiateLock('${d.qStats[curQIdx].id}')">🔓 Lock</button>`;
-
-          const isLastQ = curQIdx === d.session.questionCount - 1;
-          const nextBtnHtml = isLastQ
-            ? `<button class="btn bd" onclick="endS()">🏁 End Archive</button>`
-            : `<button class="btn bp" onclick="lsNext()">Next →</button>`;
-
-          const isSA = d.qStats[curQIdx].type === 'sa';
-          const gradeBtnHtml = (isLocked && isSA)
-            ? `<button class="btn bp" style="background:var(--teal);color:white" onclick="runGrade(aSid)">🤖 AI Grade</button>`
-            : '';
-
-          document.getElementById('lsActions').innerHTML = `
-        <button class="btn bg" onclick="lsPrev()">← Prev</button>
-        ${lockBtnHtml}
-        ${gradeBtnHtml}
-        <button class="btn bg" onclick="lsReveal()">👁 Reveal</button>
-        ${nextBtnHtml}
-      `;
+          document.getElementById('lockstepControls').style.display = 'none';
         }
-      } else document.getElementById('lockstepControls').style.display = 'none';
+      }
 
-      document.getElementById('liveStatsRow').innerHTML = `
+      if (_ch.stats) document.getElementById('liveStatsRow').innerHTML = `
         <div style="display:flex; gap:20px; font-size:11px; text-transform:uppercase; color:var(--tx2); align-items:center;">
           <div style="display:flex; flex-direction:column; align-items:center;"><strong style="font-size:18px; color:var(--tx); line-height:1.2;">${d.totalJoined}</strong> Joined</div>
           <div style="display:flex; flex-direction:column; align-items:center;"><strong style="font-size:18px; color:var(--tx); line-height:1.2;">${d.totalActiveNow || 0}</strong> Active</div>
@@ -2796,10 +2921,10 @@
           </div>`;
         leftHtml += cpHT;
       }
-      document.getElementById('liveDashboardLeft').innerHTML = leftHtml;
+      if (_ch.left) document.getElementById('liveDashboardLeft').innerHTML = leftHtml;
 
       // === RIGHT COLUMN TABS ===
-      if (liveTab === 'students') {
+      if (liveTab === 'students' && _ch.students) {
         const filter = window.__tileFilter || 'all';
         const withFilteredState = withStateAll.filter(s => filter === 'all' || s.tileState === filter);
 
@@ -2836,13 +2961,17 @@
             ansSnippet = `<div style="margin-top:8px; padding:6px; background:var(--bd); border-radius:4px; font-size:12px; text-align:center; color:var(--tx3); font-style:italic;">No response</div>`;
           }
           let reAd = readmitByStudent[s.studentId] ? `<div style="margin-top:8px"><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${s.studentId}')">Re-admit student</button></div>` : '';
-          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${DOMPurify.sanitize(s.name)}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${ansSnippet}${reAd}</div>`;
+          // For not-joined roster students with a known email, show a resend link button
+          const resendBtn = (s.status === 'not-joined' && s.email)
+            ? `<div style="margin-top:8px"><button class="btn bg" style="width:100%;font-size:11px" onclick="event.stopPropagation();sendSingleEmail('${d.session.sessionId}','${DOMPurify.sanitize(s.email)}')">📧 Resend Link</button></div>`
+            : '';
+          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${DOMPurify.sanitize(s.name)}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${ansSnippet}${reAd}${resendBtn}</div>`;
         }).join('')}</div>`;
 
         document.getElementById('tab-students').innerHTML = rightHtml;
       }
 
-      if (liveTab === 'details') {
+      if (liveTab === 'details' && _ch.details) {
         let detHtml = '';
         d.qStats.forEach((q, i) => {
           if (isLS && i !== curQIdx) return;
@@ -2850,7 +2979,7 @@
         });
         document.getElementById('tab-details').innerHTML = detHtml || '<div class="card">No responses yet.</div>';
       }
-      if (liveTab === 'grading') {
+      if (liveTab === 'grading' && _ch.grading) {
         renderGradingTab(d);
       }
     }
@@ -2990,9 +3119,39 @@
       }).getStudentDetail(sessId, stuId);
     }
 
-    function lsPrev() { if (curQIdx > 0 && (typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.goToQuestion(aSid, curQIdx - 1); } }
-    function lsNext() { if ((typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.goToQuestion(aSid, curQIdx + 1); } }
-    function lsReveal() { const d = window.__liveD; if (d && (typeof google !== 'undefined' && google.script && google.script.run)) { google.script.run.revealAnswer(aSid, d.qStats[curQIdx].id); } }
+    function lsPrev() {
+      if (curQIdx <= 0 || typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => refreshLive()).goToQuestion(aSid, curQIdx - 1);
+    }
+    function lsReveal() {
+      const d = window.__liveD;
+      if (!d || typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => refreshLive()).revealAnswer(aSid, d.qStats[curQIdx].id);
+    }
+    function lsNext() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      const d = window.__liveD;
+      // Participation guard: warn if <80% of joined students have answered
+      if (d && curQIdx >= 0) {
+        const q = d.qStats[curQIdx];
+        const totalJoined = (d.students || []).filter(s => s.status !== 'not-joined').length;
+        const answered = q ? (q.studentResponses || []).filter(r => r.answer).length : 0;
+        if (totalJoined > 0 && answered / totalJoined < 0.8) {
+          const el = document.getElementById('lsActions');
+          el.dataset.savedHtml = el.innerHTML;
+          el.innerHTML = `
+            <span style="font-size:13px;color:var(--amb);font-weight:600;padding:4px 0">${answered}/${totalJoined} answered.</span>
+            <button class="btn bp" style="background:var(--amb)" onclick="lsNextForce()">Advance anyway</button>
+            <button class="btn bg" onclick="document.getElementById('lsActions').innerHTML=document.getElementById('lsActions').dataset.savedHtml">Cancel</button>`;
+          return;
+        }
+      }
+      google.script.run.withSuccessHandler(() => refreshLive()).goToQuestion(aSid, curQIdx + 1);
+    }
+    function lsNextForce() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => refreshLive()).goToQuestion(aSid, curQIdx + 1);
+    }
     function lsInitiateLock(qId) {
       const btn = document.getElementById('btnLockToggle');
       if (!btn) return;
@@ -3018,7 +3177,7 @@
       google.script.run
         .withSuccessHandler(res => {
           // Force immediate UI refresh so the button state updates now, not in 4s
-          startLive();
+          refreshLive();
           // Auto-switch to grading tab if a SA question was just locked
           if (res && res.ok && res.session && window.__liveD) {
             const q = window.__liveD.qStats[curQIdx];
@@ -3035,17 +3194,16 @@
         .toggleLockQuestion(aSid, qId);
     }
 
-    function readmitS(sid, stuId) { if ((typeof google !== 'undefined' && google.script && google.script.run)) google.script.run.withSuccessHandler(() => { toast('Student Re-admitted.', 'ok'); startLive(); }).readmitStudent(sid, stuId); }
+    function readmitS(sid, stuId) { if ((typeof google !== 'undefined' && google.script && google.script.run)) google.script.run.withSuccessHandler(() => { toast('Student Re-admitted.', 'ok'); refreshLive(); }).readmitStudent(sid, stuId); }
 
-    // ── AI Grading — Async + Poll ────────────────────────────────────
-    // Calls startAIGrading (returns instantly), then polls getGradingStatus
-    // every 3 seconds until the job finishes. UI updates in real-time.
+    // ── AI Grading ────────────────────────────────────────────────────
+    // Fires startAIGrading (returns instantly). Status is then tracked
+    // automatically via the gradeStatus field in every getLiveResults() poll —
+    // no separate polling loop needed. The main poll accelerates to 2.5s
+    // while grading is running (handled in pollLive_).
     function runGrade(sid) {
       if (!sid) { toast('No active session to grade.', 'err'); return; }
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-
-      // If already polling, do nothing
-      if (gradePollingInt) return;
 
       // Optimistically show queued state
       window.__gradeStatus = { state: 'queued', message: 'Queuing grading job...', sessionId: sid };
@@ -3053,7 +3211,6 @@
 
       showLoad('Initialising AI Grading...');
 
-      // Fire the async call — returns immediately
       google.script.run
         .withSuccessHandler(r => {
           hideLoad();
@@ -3063,8 +3220,8 @@
             toast('⚠ ' + r.error, 'err');
             return;
           }
-          // Job queued — start polling for status
-          startGradePolling(sid);
+          // Main poll now handles status — just refresh once immediately
+          refreshLive();
         })
         .withFailureHandler(e => {
           hideLoad();
@@ -3073,27 +3230,6 @@
           toast('⚠ ' + e.message, 'err');
         })
         .startAIGrading(sid);
-    }
-
-    function startGradePolling(sid) {
-      if (gradePollingInt) clearInterval(gradePollingInt);
-      gradePollingInt = setInterval(() => {
-        if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-        google.script.run
-          .withSuccessHandler(st => {
-            window.__gradeStatus = st;
-            if (window.__liveD) renderGradingTab(window.__liveD);
-            // Stop polling when done or errored
-            if (st.state === 'done' || st.state === 'error' || st.state === 'partial') {
-              clearInterval(gradePollingInt);
-              gradePollingInt = null;
-              // Refresh live data so student tiles update
-              if (st.state === 'done') { startLive(); toast('✓ AI grading complete!', 'ok'); }
-              if (st.state === 'partial') toast('⚠ Grading partially complete. Run again to finish.', 'err');
-            }
-          })
-          .getGradingStatus(sid);
-      }, 3000);
     }
 
     function saveOverride(sessId, stuId, qId, maxPts) {
@@ -3108,7 +3244,7 @@
           hideLoad();
           if (r && r.error) return toast('⚠ ' + r.error, 'err');
           toast('✓ Score saved: ' + parsed + '/' + maxPts, 'ok');
-          startLive();
+          refreshLive();
         })
         .withFailureHandler(e => { hideLoad(); toast('⚠ Save failed: ' + (e.message || e), 'err'); })
         .overrideScore(sessId, stuId, qId, parsed, '');
@@ -3123,7 +3259,7 @@
           hideLoad();
           if (r && r.error) return toast('⚠ ' + r.error, 'err');
           toast('✓ ' + (r.message || 'Regrade complete'), 'ok');
-          startLive();
+          refreshLive();
         })
         .withFailureHandler(e => { hideLoad(); toast('⚠ Regrade failed: ' + (e.message || e), 'err'); })
         .regradeWithContext(sessId, qId, ctx.trim());

@@ -641,7 +641,7 @@ const DB = {
       });
     });
     
-    return {session:{...sess,questionCount:questions.length},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length};
+    return {session:{...sess,questionCount:questions.length},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,gradeStatus:Grader.getStatus(sessId)};
   },
 
 
