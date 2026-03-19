@@ -682,3 +682,17 @@ function toggleLockQuestion(sessId, qId) {
     return {error: e.message};
   }
 }
+
+// ── ADVANCED ANALYTICS WRAPPERS ──
+function computeCTTMetrics(sessionId) {
+  try { return DB.computeCTTMetrics(sessionId); } catch (e) { return { error: e.message }; }
+}
+function computeItemDiscrimination(sessionId) {
+  try { return DB.computeItemDiscrimination(sessionId); } catch (e) { return { error: e.message }; }
+}
+function computeConfidenceCalibration(sessionId) {
+  try { return DB.computeConfidenceCalibration(sessionId); } catch (e) { return { error: e.message }; }
+}
+function getCrossSessionRiskReport(courseId) {
+  try { return DB.getCrossSessionRiskReport(courseId); } catch (e) { return { error: e.message }; }
+}

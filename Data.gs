@@ -1081,6 +1081,368 @@ const DB = {
     });
   },
 
+  // ── ADVANCED ANALYTICS ──
+
+  computeCTTMetrics(sessionId) {
+    const data = this.getArchivedSessionData(sessionId);
+    if (!data) return { error: 'Session not found in archive' };
+
+    const students = data.students || [];
+    const responses = data.responses || [];
+    const qSet = (data.session.config && data.session.config.qSet) || data.session.qSet || {};
+    const questions = qSet.questions || [];
+    const mcQuestions = questions.filter(q => q.type === 'mc');
+
+    // Per-student total score (%)
+    const studentScores = students.map(st => {
+      const sr = responses.filter(r => r.studentId === st.studentId);
+      const pts = sr.reduce((a, r) => a + (Number(r.points) || 0), 0);
+      const max = sr.reduce((a, r) => a + (Number(r.maxPoints) || 0), 0);
+      const pct = max > 0 ? (pts / max) * 100 : 0;
+      return { studentId: st.studentId, name: st.studentName, pts, max, pct };
+    }).filter(s => s.max > 0);
+
+    if (studentScores.length === 0) return { error: 'No student responses found' };
+
+    const n = studentScores.length;
+    const mean = studentScores.reduce((a, s) => a + s.pct, 0) / n;
+    const variance = studentScores.reduce((a, s) => a + Math.pow(s.pct - mean, 2), 0) / n;
+    const sd = Math.sqrt(variance);
+    const sorted = [...studentScores].sort((a, b) => a.pct - b.pct);
+    const median = n % 2 === 0
+      ? (sorted[n / 2 - 1].pct + sorted[n / 2].pct) / 2
+      : sorted[Math.floor(n / 2)].pct;
+
+    // KR-20 (uses raw points variance, not % variance)
+    let kr20 = null;
+    if (mcQuestions.length >= 2 && n >= 3) {
+      const rawPts = studentScores.map(s => s.pts);
+      const rawMean = rawPts.reduce((a, b) => a + b, 0) / n;
+      const rawVar = rawPts.reduce((a, x) => a + Math.pow(x - rawMean, 2), 0) / n;
+      let sumPQ = 0;
+      mcQuestions.forEach(q => {
+        const qResps = responses.filter(r => r.questionId === q.id);
+        const correct = qResps.filter(r => r.isCorrect === true || r.isCorrect === 'TRUE').length;
+        if (students.length > 0) {
+          const p = correct / students.length;
+          sumPQ += p * (1 - p);
+        }
+      });
+      const k = mcQuestions.length;
+      if (rawVar > 0) {
+        kr20 = (k / (k - 1)) * (1 - sumPQ / rawVar);
+        kr20 = Math.round(Math.max(-1, Math.min(1, kr20)) * 1000) / 1000;
+      }
+    }
+
+    const sem = (kr20 !== null && sd > 0) ? Math.round(sd * Math.sqrt(1 - kr20) * 10) / 10 : null;
+    const skewness = sd > 0 ? Math.round((3 * (mean - median)) / sd * 100) / 100 : 0;
+
+    // Histogram: 10 equal buckets (0–10, 10–20, …, 90–100)
+    const histogram = Array.from({ length: 10 }, (_, i) => ({ label: `${i * 10}–${i * 10 + 10}`, count: 0 }));
+    studentScores.forEach(s => { histogram[Math.min(9, Math.floor(s.pct / 10))].count++; });
+
+    // Quartile cut-offs (index-based)
+    const q1End = Math.floor(n * 0.25);
+    const q2End = Math.floor(n * 0.50);
+    const q3End = Math.floor(n * 0.75);
+
+    const enriched = sorted.map((s, i) => ({
+      ...s,
+      pct: Math.round(s.pct * 10) / 10,
+      zScore: sd > 0 ? Math.round(((s.pct - mean) / sd) * 100) / 100 : 0,
+      percentileRank: Math.round(((i + 0.5) / n) * 100),
+      quartile: i < q1End ? 1 : i < q2End ? 2 : i < q3End ? 3 : 4
+    }));
+
+    return {
+      kr20,
+      kr20Label: kr20 === null ? 'N/A (need ≥2 MC items & ≥3 students)'
+        : kr20 < 0.5 ? 'Unacceptable (<0.50)' : kr20 < 0.7 ? 'Acceptable (0.50–0.70)'
+        : kr20 < 0.9 ? 'Good (0.70–0.90)' : 'Excellent (≥0.90)',
+      kr20Color: kr20 === null ? 'tx3' : kr20 < 0.5 ? 'red' : kr20 < 0.7 ? 'amb' : 'grn',
+      sem,
+      mean: Math.round(mean * 10) / 10,
+      median: Math.round(median * 10) / 10,
+      sd: Math.round(sd * 10) / 10,
+      skewness,
+      skewnessLabel: skewness > 0.5 ? 'Positively Skewed — many low scorers'
+        : skewness < -0.5 ? 'Negatively Skewed — many high scorers' : 'Roughly Symmetric',
+      n, histogram, students: enriched, mcItemCount: mcQuestions.length
+    };
+  },
+
+  computeItemDiscrimination(sessionId) {
+    const data = this.getArchivedSessionData(sessionId);
+    if (!data) return { error: 'Session not found' };
+
+    const students = data.students || [];
+    const responses = data.responses || [];
+    const qSet = (data.session.config && data.session.config.qSet) || data.session.qSet || {};
+    const questions = qSet.questions || [];
+    const n = students.length;
+    if (n < 3) return { error: 'Need ≥ 3 students for discrimination analysis' };
+
+    // Total raw score per student
+    const studentTotals = {};
+    students.forEach(st => {
+      const sr = responses.filter(r => r.studentId === st.studentId);
+      studentTotals[st.studentId] = sr.reduce((a, r) => a + (Number(r.points) || 0), 0);
+    });
+    const totalScores = Object.values(studentTotals);
+    const totalMean = totalScores.reduce((a, b) => a + b, 0) / n;
+    const totalSD = Math.sqrt(totalScores.reduce((a, x) => a + Math.pow(x - totalMean, 2), 0) / n);
+
+    const stripHtml = s => String(s || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, '').toLowerCase();
+
+    return questions.map((q, idx) => {
+      const qResps = responses.filter(r => r.questionId === q.id);
+      const correctCount = qResps.filter(r => r.isCorrect === true || r.isCorrect === 'TRUE').length;
+      const p = n > 0 ? correctCount / n : 0;
+
+      // Point-biserial for overall item
+      const correctTotals = qResps.filter(r => r.isCorrect === true || r.isCorrect === 'TRUE').map(r => studentTotals[r.studentId] || 0);
+      const incorrectTotals = students.filter(st => !qResps.some(r => r.studentId === st.studentId && (r.isCorrect === true || r.isCorrect === 'TRUE'))).map(st => studentTotals[st.studentId] || 0);
+      const mCorrect = correctTotals.length > 0 ? correctTotals.reduce((a, b) => a + b, 0) / correctTotals.length : 0;
+      const mIncorrect = incorrectTotals.length > 0 ? incorrectTotals.reduce((a, b) => a + b, 0) / incorrectTotals.length : 0;
+
+      let discrimination = 0;
+      if (totalSD > 0 && p > 0 && p < 1) {
+        discrimination = ((mCorrect - mIncorrect) / totalSD) * Math.sqrt(p * (1 - p));
+        discrimination = Math.round(Math.max(-1, Math.min(1, discrimination)) * 1000) / 1000;
+      }
+      const discLabel = discrimination >= 0.3 ? 'Excellent' : discrimination >= 0.2 ? 'Good' : discrimination >= 0.1 ? 'Fair' : 'Poor';
+      const discColor = discrimination >= 0.3 ? 'grn' : discrimination >= 0.1 ? 'amb' : 'red';
+
+      // Per-choice analysis (MC only)
+      let choiceStats = null;
+      let nonFunctioningCount = 0;
+      if (q.type === 'mc' && q.choices) {
+        const correctIdxs = q.correctIndices || [q.correctIndex || 0];
+        choiceStats = q.choices.map((optText, optIdx) => {
+          const isCorrect = correctIdxs.includes(optIdx);
+          const cleanOpt = stripHtml(optText);
+          const optResps = qResps.filter(r => {
+            let a = String(r.answer || '');
+            try { const p = JSON.parse(a); if (Array.isArray(p)) a = p.join(' '); } catch (e) {}
+            const ca = stripHtml(a);
+            return ca === cleanOpt || (cleanOpt.length > 2 && ca.includes(cleanOpt)) || (cleanOpt.length > 2 && cleanOpt.includes(ca) && ca.length > 2);
+          });
+          const chooseCount = optResps.length;
+          const choosePct = n > 0 ? Math.round((chooseCount / n) * 100) : 0;
+
+          // Point-biserial for this choice
+          const chooserTotals = optResps.map(r => studentTotals[r.studentId] || 0);
+          const nonChooserTotals = students.filter(st => !optResps.some(r => r.studentId === st.studentId)).map(st => studentTotals[st.studentId] || 0);
+          const mChoose = chooserTotals.length > 0 ? chooserTotals.reduce((a, b) => a + b, 0) / chooserTotals.length : 0;
+          const mNon = nonChooserTotals.length > 0 ? nonChooserTotals.reduce((a, b) => a + b, 0) / nonChooserTotals.length : 0;
+          const pChoice = n > 0 ? chooseCount / n : 0;
+          let choicePbis = 0;
+          if (totalSD > 0 && pChoice > 0 && pChoice < 1) {
+            choicePbis = Math.round(((mChoose - mNon) / totalSD) * Math.sqrt(pChoice * (1 - pChoice)) * 1000) / 1000;
+          }
+          const isFunctioning = choosePct >= 5 || isCorrect;
+          if (!isCorrect && !isFunctioning) nonFunctioningCount++;
+          return {
+            text: optText, letter: String.fromCharCode(65 + optIdx),
+            isCorrect, count: chooseCount, pct: choosePct, pointBiserial: choicePbis, isFunctioning,
+            pbisFlag: isCorrect ? (choicePbis > 0 ? 'good' : 'warn') : (choicePbis < 0 ? 'good' : 'warn')
+          };
+        });
+      }
+
+      return {
+        questionId: q.id, idx, text: q.text, type: q.type || 'sa',
+        difficulty: Math.round(p * 100) / 100,
+        difficultyPct: Math.round(p * 100),
+        difficultyLabel: p >= 0.9 ? 'Very Easy' : p >= 0.7 ? 'Easy' : p >= 0.4 ? 'Moderate' : p >= 0.2 ? 'Difficult' : 'Very Difficult',
+        difficultyColor: p >= 0.7 ? 'grn' : p >= 0.4 ? 'amb' : 'red',
+        discrimination, discLabel, discColor, choiceStats, nonFunctioningCount,
+        respondentCount: qResps.length
+      };
+    });
+  },
+
+  computeConfidenceCalibration(sessionId) {
+    const data = this.getArchivedSessionData(sessionId);
+    if (!data) return { error: 'Session not found' };
+
+    const students = data.students || [];
+    const responses = data.responses || [];
+    const meta = data.meta || [];
+    const qSet = (data.session.config && data.session.config.qSet) || data.session.qSet || {};
+    const questions = qSet.questions || [];
+
+    if (meta.length === 0) return { error: 'No confidence data for this session' };
+
+    const respMap = {};
+    responses.forEach(r => { respMap[r.studentId + '|' + r.questionId] = r; });
+
+    // Per-student calibration
+    const studentCalibration = students.map(st => {
+      const stuMeta = meta.filter(m => m.studentId === st.studentId);
+      if (stuMeta.length === 0) return null;
+      let brierSum = 0, brierCount = 0;
+      let accConf = 0, accUnconf = 0, inaccConf = 0, inaccUnconf = 0;
+      stuMeta.forEach(m => {
+        const r = respMap[st.studentId + '|' + m.questionId];
+        if (!r || !m.confidence) return;
+        const conf = Number(m.confidence);
+        if (conf === 0) return;
+        const confNorm = (conf - 1) / 4; // 1–5 → 0–1
+        const isCorrect = r.isCorrect === true || r.isCorrect === 'TRUE' ? 1 : 0;
+        brierSum += Math.pow(confNorm - isCorrect, 2);
+        brierCount++;
+        const highConf = conf >= 3;
+        if (isCorrect && highConf) accConf++;
+        else if (isCorrect && !highConf) accUnconf++;
+        else if (!isCorrect && highConf) inaccConf++;
+        else inaccUnconf++;
+      });
+      const brierScore = brierCount > 0 ? Math.round((brierSum / brierCount) * 1000) / 1000 : null;
+      const total = accConf + accUnconf + inaccConf + inaccUnconf;
+      const dangerPct = total > 0 ? Math.round((inaccConf / total) * 100) : 0;
+      return {
+        studentId: st.studentId, name: st.studentName, brierScore,
+        brierLabel: brierScore === null ? 'N/A' : brierScore < 0.1 ? 'Excellent' : brierScore < 0.2 ? 'Good' : brierScore < 0.35 ? 'Fair' : 'Poor',
+        brierColor: brierScore === null ? 'tx3' : brierScore < 0.1 ? 'grn' : brierScore < 0.2 ? 'grn' : brierScore < 0.35 ? 'amb' : 'red',
+        quadrant: { accConf, accUnconf, inaccConf, inaccUnconf }, totalRated: brierCount, dangerPct
+      };
+    }).filter(Boolean).sort((a, b) => b.dangerPct - a.dangerPct);
+
+    // Per-item overconfidence rate
+    const itemOverconfidence = questions.map(q => {
+      const qResps = responses.filter(r => r.questionId === q.id);
+      const qMeta = meta.filter(m => m.questionId === q.id);
+      let overconfident = 0, total = 0;
+      qMeta.forEach(m => {
+        const r = qResps.find(rx => rx.studentId === m.studentId);
+        if (!r || !m.confidence) return;
+        total++;
+        const isCorrect = r.isCorrect === true || r.isCorrect === 'TRUE';
+        if (!isCorrect && Number(m.confidence) >= 3) overconfident++;
+      });
+      return { questionId: q.id, text: q.text, overconfidenceCount: overconfident, overconfidenceRate: total > 0 ? Math.round((overconfident / total) * 100) : 0, total };
+    }).filter(q => q.total > 0).sort((a, b) => b.overconfidenceRate - a.overconfidenceRate);
+
+    // Class-wide quadrant summary
+    const classSummary = studentCalibration.reduce(
+      (acc, s) => { acc.accConf += s.quadrant.accConf; acc.accUnconf += s.quadrant.accUnconf; acc.inaccConf += s.quadrant.inaccConf; acc.inaccUnconf += s.quadrant.inaccUnconf; return acc; },
+      { accConf: 0, accUnconf: 0, inaccConf: 0, inaccUnconf: 0 }
+    );
+
+    return { studentCalibration, itemOverconfidence, classSummary };
+  },
+
+  getCrossSessionRiskReport(courseId) {
+    const archive = this.sh('Archive');
+    if (!archive) return { error: 'Archive not found' };
+
+    const values = archive.getDataRange().getValues();
+    const courseSessions = [];
+    values.slice(1).forEach(row => {
+      if (!row[8]) return;
+      try {
+        const data = JSON.parse(row[8]);
+        const cfg = (data.session && data.session.config) || {};
+        if (!courseId || cfg.courseId === courseId) {
+          let timerAlloc = null;
+          try {
+            const tj = data.session.timerJSON ? (typeof data.session.timerJSON === 'string' ? JSON.parse(data.session.timerJSON) : data.session.timerJSON) : null;
+            if (tj && tj.duration) timerAlloc = Number(tj.duration) * 60 * 1000;
+          } catch (e) {}
+          courseSessions.push({ sessionId: row[0], setName: row[2], block: row[3], startedAt: row[4], students: data.students || [], responses: data.responses || [], violations: data.violations || [], timerAlloc, config: cfg });
+        }
+      } catch (e) { Logger.log('getCrossSessionRiskReport parse error: ' + e.toString()); }
+    });
+
+    if (courseSessions.length === 0) return { error: 'No archived sessions found for this course' };
+
+    // Roster students
+    const allRosterStudents = {};
+    try {
+      const rosterData = this.getRostersByCourse(courseId);
+      (rosterData || []).forEach(roster => {
+        (roster.students || []).forEach(s => {
+          const key = this.normalizeStudentName(s.name);
+          if (!allRosterStudents[key]) allRosterStudents[key] = { name: s.name };
+        });
+      });
+    } catch (e) {}
+
+    // Aggregate per-student data
+    const studentData = {};
+    const getOrCreate = (id, name) => {
+      if (!studentData[id]) studentData[id] = { studentId: id, name, sessions: [], violationSessions: [], totalJoined: 0, totalFinished: 0, scores: [] };
+      return studentData[id];
+    };
+
+    courseSessions.forEach(sess => {
+      sess.students.forEach(st => {
+        const sd = getOrCreate(st.studentId, st.studentName);
+        const sr = sess.responses.filter(r => r.studentId === st.studentId);
+        const pts = sr.reduce((a, r) => a + (Number(r.points) || 0), 0);
+        const max = sr.reduce((a, r) => a + (Number(r.maxPoints) || 0), 0);
+        const score = max > 0 ? Math.round((pts / max) * 100) : null;
+        let durationMs = null;
+        if (st.joinedAt && st.finishedAt) durationMs = new Date(st.finishedAt).getTime() - new Date(st.joinedAt).getTime();
+        const stuViolations = sess.violations.filter(v => v.studentId === st.studentId);
+        if (stuViolations.length > 0) sd.violationSessions.push({ sessionId: sess.sessionId, setName: sess.setName, count: stuViolations.length });
+        const finished = st.status === 'finished';
+        if (st.status !== 'pending') sd.totalJoined++;
+        if (finished) { sd.totalFinished++; if (score !== null) sd.scores.push(score); }
+        sd.sessions.push({ sessionId: sess.sessionId, setName: sess.setName, block: sess.block, score, finished, joinedAt: st.joinedAt, finishedAt: st.finishedAt, durationMs, timerAlloc: sess.timerAlloc, answerCount: sr.length });
+      });
+    });
+
+    // Class avg/SD for "consistently low" threshold
+    const classScores = [];
+    courseSessions.forEach(sess => {
+      sess.students.forEach(st => {
+        if (st.status !== 'finished') return;
+        const sr = sess.responses.filter(r => r.studentId === st.studentId);
+        const pts = sr.reduce((a, r) => a + (Number(r.points) || 0), 0);
+        const max = sr.reduce((a, r) => a + (Number(r.maxPoints) || 0), 0);
+        if (max > 0) classScores.push((pts / max) * 100);
+      });
+    });
+    const classAvg = classScores.length > 0 ? classScores.reduce((a, b) => a + b, 0) / classScores.length : 50;
+    const classSD = classScores.length > 1 ? Math.sqrt(classScores.reduce((a, x) => a + Math.pow(x - classAvg, 2), 0) / classScores.length) : 15;
+    const lowThreshold = classAvg - classSD;
+
+    const neverAccessed = [], consistentlyLow = [], avoiders = [], violators = [], rapidSubmitters = [];
+
+    Object.values(studentData).forEach(st => {
+      if (st.totalJoined === 0) { neverAccessed.push({ name: st.name, sessions: st.sessions.map(s => s.setName) }); return; }
+      const joinedNotFinished = st.sessions.filter(s => s.joinedAt && !s.finished).length;
+      if (joinedNotFinished >= 2) avoiders.push({ name: st.name, avoidCount: joinedNotFinished, sessions: st.sessions.map(s => s.setName) });
+      if (st.scores.length >= 2) {
+        const stuAvg = st.scores.reduce((a, b) => a + b, 0) / st.scores.length;
+        if (stuAvg < lowThreshold) consistentlyLow.push({ name: st.name, avgScore: Math.round(stuAvg), threshold: Math.round(lowThreshold), classAvg: Math.round(classAvg), scores: st.scores.map(s => Math.round(s)), sessions: st.sessions.map(s => s.setName) });
+      }
+      if (st.violationSessions.length >= 2) violators.push({ name: st.name, sessionsWithViolations: st.violationSessions });
+      const rapidSess = st.sessions.filter(s => s.finished && s.durationMs && s.timerAlloc && s.durationMs < s.timerAlloc * 0.2);
+      if (rapidSess.length >= 2) rapidSubmitters.push({ name: st.name, rapidCount: rapidSess.length, sessions: rapidSess.map(s => ({ setName: s.setName, durationMin: Math.round(s.durationMs / 60000), allocMin: Math.round(s.timerAlloc / 60000) })) });
+    });
+
+    // Roster-only students who never appeared in any session
+    Object.values(allRosterStudents).forEach(rs => {
+      const normName = this.normalizeStudentName(rs.name);
+      const found = Object.values(studentData).find(st => this.normalizeStudentName(st.name) === normName);
+      if (!found) neverAccessed.push({ name: rs.name, sessions: [], fromRoster: true });
+    });
+
+    return {
+      courseId, sessionCount: courseSessions.length,
+      classAvg: Math.round(classAvg), classSD: Math.round(classSD), lowThreshold: Math.round(lowThreshold),
+      neverAccessed: neverAccessed.sort((a, b) => a.name.localeCompare(b.name)),
+      consistentlyLow: consistentlyLow.sort((a, b) => a.avgScore - b.avgScore),
+      avoiders: avoiders.sort((a, b) => b.avoidCount - a.avoidCount),
+      violators: violators.sort((a, b) => b.sessionsWithViolations.length - a.sessionsWithViolations.length),
+      rapidSubmitters: rapidSubmitters.sort((a, b) => b.rapidCount - a.rapidCount)
+    };
+  },
+
   dismissViolation(sessionId, timestamp) {
     const archive = this.sh('Archive');
     const values = archive.getDataRange().getValues();
