@@ -122,7 +122,7 @@ const Grader = {
     const responseRowByKey = {};
     for (let i = 1; i < respData.length; i++) {
       if (respData[i][0] !== sessId) continue;
-      responseRowByKey[respData[i][0] + '|' + respData[i][1] + '|' + respData[i][3]] = i + 1;
+      responseRowByKey[respData[i][0] + '|' + respData[i][1] + '|' + respData[i][3]] = { row: i + 1, maxPts: Number(respData[i][8]) || 0 };
     }
 
     const done = new Set(existing.map(g => g.studentId + '|' + g.questionId));
@@ -195,8 +195,11 @@ const Grader = {
               false, '', '', ''
             ]);
 
-            const responseRow = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
-            if (responseRow) respSheet.getRange(responseRow, 8).setValue(finalResult.score);
+            const responseEntry = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
+            if (responseEntry) {
+              respSheet.getRange(responseEntry.row, 8).setValue(finalResult.score);
+              respSheet.getRange(responseEntry.row, 7).setValue(responseEntry.maxPts > 0 && Number(finalResult.score) >= responseEntry.maxPts);
+            }
 
             count++;
             done.add(r.studentId + '|' + q.id);
@@ -230,8 +233,11 @@ const Grader = {
                   r.answer, new Date().toISOString(),
                   false, '', '', ''
                 ]);
-                const responseRow = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
-                if (responseRow) respSheet.getRange(responseRow, 8).setValue(singleRes.score);
+                const responseEntry = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
+                if (responseEntry) {
+                  respSheet.getRange(responseEntry.row, 8).setValue(singleRes.score);
+                  respSheet.getRange(responseEntry.row, 7).setValue(responseEntry.maxPts > 0 && Number(singleRes.score) >= responseEntry.maxPts);
+                }
                 count++;
                 done.add(k);
                 this.setStatus(sessId, { state: 'running', sessionId: sessId, gradedCount: count, errors, totalToGrade, message: `Grading... (${count}/${totalToGrade} done)` });

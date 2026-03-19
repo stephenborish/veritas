@@ -927,30 +927,65 @@ const DB = {
 
               if (qNew.type === 'mc') {
                 const correctIndices = qNew.correctIndices || [qNew.correctIndex || 0];
-                const matchedIdx = (qNew.choices || []).findIndex(ch => {
-                  const c = stripHtml(ch);
-                  return c === ansToMatch || (c.length > 2 && ansToMatch.includes(c)) || (c.length > 2 && c.includes(ansToMatch));
-                });
-                // Fallback: percentage-conversion (Sheets converts "+100%" → 1)
-                let finalIdx = matchedIdx;
-                if (finalIdx === -1) {
-                  const numAns = parseFloat(ansToMatch);
-                  if (!isNaN(numAns)) {
-                    const pctVal = Math.round(numAns * 100);
-                    const candidates = [String(pctVal)+'%',(pctVal>0?'+':'')+String(pctVal)+'%',String(pctVal),(pctVal>0?'+':'')+String(pctVal)].map(s=>stripHtml(s));
-                    finalIdx = (qNew.choices||[]).findIndex(ch => { const c=stripHtml(ch); return candidates.some(cd=>c===cd); });
-                    if (finalIdx === -1) {
-                      finalIdx = (qNew.choices||[]).findIndex(ch => { const c=stripHtml(ch); if(c.length>20) return false; const ns=c.replace(/[^0-9.\-+]/g,''); if(!ns) return false; return Math.abs(parseFloat(ns)-pctVal)<0.5; });
+                const ca = correctIndices.map(idx => stripHtml((qNew.choices || [])[idx] || ''));
+                let sel;
+                try {
+                  const p = JSON.parse(rawAns);
+                  sel = Array.isArray(p) ? p.map(a => stripHtml(a)) : [stripHtml(rawAns)];
+                } catch (e) { sel = [stripHtml(rawAns)]; }
+
+                if (ca.length === 1) {
+                  // Single-select: index-based match with percentage-conversion fallback
+                  const ansToMatch = sel[0];
+                  const matchedIdx = (qNew.choices || []).findIndex(ch => {
+                    const c = stripHtml(ch);
+                    return c === ansToMatch || (c.length > 2 && ansToMatch.includes(c)) || (c.length > 2 && c.includes(ansToMatch));
+                  });
+                  let finalIdx = matchedIdx;
+                  if (finalIdx === -1) {
+                    const numAns = parseFloat(ansToMatch);
+                    if (!isNaN(numAns)) {
+                      const pctVal = Math.round(numAns * 100);
+                      const candidates = [String(pctVal)+'%',(pctVal>0?'+':'')+String(pctVal)+'%',String(pctVal),(pctVal>0?'+':'')+String(pctVal)].map(s=>stripHtml(s));
+                      finalIdx = (qNew.choices||[]).findIndex(ch => { const c=stripHtml(ch); return candidates.some(cd=>c===cd); });
+                      if (finalIdx === -1) {
+                        finalIdx = (qNew.choices||[]).findIndex(ch => { const c=stripHtml(ch); if(c.length>20) return false; const ns=c.replace(/[^0-9.\-+]/g,''); if(!ns) return false; return Math.abs(parseFloat(ns)-pctVal)<0.5; });
+                      }
                     }
                   }
-                }
-                if (finalIdx !== -1 && correctIndices.includes(finalIdx)) {
-                  pts = qNew.points; isCorrect = true;
+                  if (finalIdx !== -1 && correctIndices.includes(finalIdx)) { pts = qNew.points; isCorrect = true; }
+                } else {
+                  // Multi-select: ALL selections must match correct answers, no extras
+                  let correctCount = 0, incorrectCount = 0;
+                  sel.forEach(cleanAns => {
+                    let matched = false;
+                    for (let j = 0; j < ca.length; j++) {
+                      if (cleanAns === ca[j] || (ca[j].length > 2 && cleanAns.includes(ca[j])) || (ca[j].length > 2 && ca[j].includes(cleanAns))) {
+                        matched = true; break;
+                      }
+                    }
+                    if (matched) correctCount++; else incorrectCount++;
+                  });
+                  isCorrect = (correctCount === ca.length && incorrectCount === 0);
+                  if (isCorrect) pts = qNew.points;
                 }
               }
               // SA rescoring requires an AI call so we wipe its grading
               respSh.getRange(rowNum, 7, 1, 3).setValues([[isCorrect, pts, qNew.points]]);
               globalUpdate = true;
+            }
+          }
+        }
+
+        // Clear stale AIGrades rows for SA questions so gradeSession() will re-grade them
+        if (qNew.type === 'sa') {
+          const aiSh = this.sh('AIGrades');
+          if (aiSh) {
+            const aiRows = aiSh.getDataRange().getValues();
+            for (let i = aiRows.length - 1; i >= 1; i--) {
+              if (aiRows[i][0] === sessionId && aiRows[i][3] === questionId) {
+                aiSh.deleteRow(i + 1);
+              }
             }
           }
         }
@@ -998,35 +1033,54 @@ const DB = {
           const stripHtml = s => String(s || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, '').toLowerCase();
           data.responses.forEach(r => {
              if (r.questionId === questionId) {
-                let ansToMatch = String(r.answer || '');
-                try {
-                  const p = JSON.parse(ansToMatch);
-                  if (Array.isArray(p)) ansToMatch = p.join(' ');
-                } catch (e) {
-                  // Not JSON, use raw
-                }
-                ansToMatch = stripHtml(ansToMatch);
+                const rawAns = String(r.answer || '');
                 const correctIndices = qOriginal.correctIndices || [qOriginal.correctIndex || 0];
-                const matchedIdx = (qOriginal.choices || []).findIndex(ch => {
-                  const c = stripHtml(ch);
-                  return c === ansToMatch || (c.length > 2 && ansToMatch.includes(c)) || (c.length > 2 && c.includes(ansToMatch));
-                });
-                // Fallback: percentage-conversion (Sheets converts "+100%" → 1)
-                let finalIdx = matchedIdx;
-                if (finalIdx === -1) {
-                  const numAns = parseFloat(ansToMatch);
-                  if (!isNaN(numAns)) {
-                    const pctVal = Math.round(numAns * 100);
-                    const candidates = [String(pctVal)+'%',(pctVal>0?'+':'')+String(pctVal)+'%',String(pctVal),(pctVal>0?'+':'')+String(pctVal)].map(s=>stripHtml(s));
-                    finalIdx = (qOriginal.choices||[]).findIndex(ch => { const c=stripHtml(ch); return candidates.some(cd=>c===cd); });
-                    if (finalIdx === -1) {
-                      finalIdx = (qOriginal.choices||[]).findIndex(ch => { const c=stripHtml(ch); if(c.length>20) return false; const ns=c.replace(/[^0-9.\-+]/g,''); if(!ns) return false; return Math.abs(parseFloat(ns)-pctVal)<0.5; });
+                const ca = correctIndices.map(idx => stripHtml((qOriginal.choices || [])[idx] || ''));
+                let sel;
+                try {
+                  const p = JSON.parse(rawAns);
+                  sel = Array.isArray(p) ? p.map(a => stripHtml(a)) : [stripHtml(rawAns)];
+                } catch (e) { sel = [stripHtml(rawAns)]; }
+
+                let pts = 0, isCorrect = false;
+                if (ca.length === 1) {
+                  // Single-select: index-based match with percentage-conversion fallback
+                  const ansToMatch = sel[0];
+                  const matchedIdx = (qOriginal.choices || []).findIndex(ch => {
+                    const c = stripHtml(ch);
+                    return c === ansToMatch || (c.length > 2 && ansToMatch.includes(c)) || (c.length > 2 && c.includes(ansToMatch));
+                  });
+                  let finalIdx = matchedIdx;
+                  if (finalIdx === -1) {
+                    const numAns = parseFloat(ansToMatch);
+                    if (!isNaN(numAns)) {
+                      const pctVal = Math.round(numAns * 100);
+                      const candidates = [String(pctVal)+'%',(pctVal>0?'+':'')+String(pctVal)+'%',String(pctVal),(pctVal>0?'+':'')+String(pctVal)].map(s=>stripHtml(s));
+                      finalIdx = (qOriginal.choices||[]).findIndex(ch => { const c=stripHtml(ch); return candidates.some(cd=>c===cd); });
+                      if (finalIdx === -1) {
+                        finalIdx = (qOriginal.choices||[]).findIndex(ch => { const c=stripHtml(ch); if(c.length>20) return false; const ns=c.replace(/[^0-9.\-+]/g,''); if(!ns) return false; return Math.abs(parseFloat(ns)-pctVal)<0.5; });
+                      }
                     }
                   }
+                  if (finalIdx !== -1 && correctIndices.includes(finalIdx)) { pts = qOriginal.points; isCorrect = true; }
+                } else {
+                  // Multi-select: ALL selections must match correct answers, no extras
+                  let correctCount = 0, incorrectCount = 0;
+                  sel.forEach(cleanAns => {
+                    let matched = false;
+                    for (let j = 0; j < ca.length; j++) {
+                      if (cleanAns === ca[j] || (ca[j].length > 2 && cleanAns.includes(ca[j])) || (ca[j].length > 2 && ca[j].includes(cleanAns))) {
+                        matched = true; break;
+                      }
+                    }
+                    if (matched) correctCount++; else incorrectCount++;
+                  });
+                  isCorrect = (correctCount === ca.length && incorrectCount === 0);
+                  if (isCorrect) pts = qOriginal.points;
                 }
-                
-                if (finalIdx !== -1 && correctIndices.includes(finalIdx)) {
-                   r.points = qOriginal.points; 
+
+                if (isCorrect) {
+                   r.points = qOriginal.points;
                    r.isCorrect = true;
                 } else {
                    r.points = 0;
