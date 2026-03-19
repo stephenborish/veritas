@@ -2762,9 +2762,29 @@
 
       // === LEFT COLUMN STICKY CONTEXT ===
       if (isLS && q) {
-        let qFullHtml = `<div class="card" style="margin-bottom:24px; padding:20px; border: 2px solid var(--bd)">
-            <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
-               <span style="font-weight:700; font-size:15px; color:var(--tx)">Current Question</span>
+        // Evaluate visual state for Teacher card
+        const lockedQsList = (d.session.config && d.session.config.lockedQs) || [];
+        const isLocked = lockedQsList.includes(q.id);
+        const revealedQsList = (d.session.config && d.session.config.revealedQs) || [];
+        const isRevealed = revealedQsList.includes(q.id);
+
+        let cardBorder = "var(--bd)";
+        let tagHtml = "";
+
+        if (isRevealed) {
+          cardBorder = "var(--teal)";
+          tagHtml = `<span style="background:var(--teal); color:#fff; font-size:12px; font-weight:700; padding:4px 8px; border-radius:4px; margin-left:8px">👁️ REVEALED</span>`;
+        } else if (isLocked) {
+          cardBorder = "var(--red)";
+          tagHtml = `<span style="background:var(--red); color:#fff; font-size:12px; font-weight:700; padding:4px 8px; border-radius:4px; margin-left:8px">🔒 LOCKED</span>`;
+        }
+
+        let qFullHtml = `<div class="card" style="margin-bottom:24px; padding:20px; border: 2px solid ${cardBorder}; transition: all 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:12px; align-items:center;">
+               <div style="display:flex; align-items:center;">
+                 <span style="font-weight:700; font-size:15px; color:var(--tx)">Current Question</span>
+                 ${tagHtml}
+               </div>
                <span style="font-weight:600; font-size:13px; color:var(--teal)">${q.type === 'mc' ? 'Multiple Choice' : 'Short Answer'}</span>
             </div>
             <div style="font-size:16px; margin-bottom:20px; max-width:100%; overflow:hidden;" class="q-text rte-content">${DOMPurify.sanitize(q.text)}</div>`;
