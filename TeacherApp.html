@@ -270,27 +270,80 @@
       gap: 20px;
     }
 
-    /* Top Global Fixed Bar */
+    /* Top Global Fixed Bar — two-row layout */
     #live-top-bar {
       position: sticky;
       top: 0;
       z-index: 990;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      background: var(--bg);
-      padding: 12px 24px;
-      border-bottom: 2px solid var(--bd);
+      background: var(--s2);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--bd);
       margin: -32px -32px 24px -32px;
-      /* Pull out of usual padding */
+      display: flex;
+      flex-direction: column;
     }
 
-    #lockstepControls {
-      margin-bottom: 0 !important;
-      padding: 6px 12px !important;
-      background: transparent !important;
-      border: none !important;
+    /* Row 1: session info + stats */
+    #live-top-bar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 24px;
+      border-bottom: 1px solid var(--bd);
+      flex-wrap: wrap;
+      gap: 12px;
     }
+
+    /* Row 2: lockstep action controls */
+    #lockstepControls {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 24px;
+      background: var(--tBg);
+      border-bottom: 1px solid var(--tBd);
+      flex-wrap: wrap;
+    }
+
+    /* Stat pills */
+    .stat-pill {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 48px;
+    }
+
+    .stat-pill .sp-val {
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1.1;
+      font-family: 'Outfit', sans-serif;
+      color: var(--tx);
+    }
+
+    .stat-pill .sp-lbl {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--tx3);
+      margin-top: 2px;
+    }
+
+    /* Lockstep Q label */
+    .ls-q-label {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--teal2);
+      white-space: nowrap;
+    }
+
+    /* Semantic active states for filter chips */
+    .fchip.fc-correct.active  { background: var(--grn); color: #fff; border-color: var(--grn); }
+    .fchip.fc-incorrect.active{ background: var(--red); color: #fff; border-color: var(--red); }
+    .fchip.fc-none.active     { background: var(--tx2); color: #fff; border-color: var(--tx2); }
 
     ::-webkit-scrollbar {
       width: 5px
@@ -1571,13 +1624,19 @@
 
       <!-- LIVE MONITOR -->
       <div class="sec" id="sec-live">
-        <!-- NEW: Full Width Top Bar -->
+        <!-- Full Width Top Bar: two-row layout -->
         <div id="live-top-bar">
-          <div id="liveStatusBanner" style="display:flex; align-items:center;"></div>
-          <div id="liveStatsRow" style="display:flex; align-items:center;"></div>
-          <div id="lockstepControls" style="display:none; align-items:center; gap:16px; flex-wrap:wrap;">
-            <div style="font-size:16px; font-weight:700; color:var(--teal); white-space:nowrap;" id="lsQText">Lockstep</div>
-            <div id="lsParticipation" style="font-size:13px;font-weight:700;padding:4px 12px;border-radius:20px;border:1.5px solid var(--bd);white-space:nowrap;display:none"></div>
+          <!-- Row 1: session info (left) + stats (right) -->
+          <div id="live-top-bar-header">
+            <div id="liveStatusBanner" style="display:flex; align-items:center; gap:10px;"></div>
+            <div id="liveStatsRow" style="display:flex; align-items:center; gap:20px;"></div>
+          </div>
+          <!-- Row 2: lockstep controls (hidden until lockstep mode) -->
+          <div id="lockstepControls">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="ls-q-label" id="lsQText">Lockstep</span>
+              <span id="lsParticipation" style="font-size:13px;font-weight:700;padding:3px 10px;border-radius:20px;border:1.5px solid var(--bd);white-space:nowrap;display:none"></span>
+            </div>
             <div id="lsActions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
           </div>
         </div>
@@ -2663,11 +2722,15 @@
       __renderFP = _newFP;
       // ────────────────────────────────────────────────────────────────
 
-      if (_ch.banner) document.getElementById('liveStatusBanner').innerHTML = `<div style="display:flex;align-items:center;">
-        <div style="font-weight:700;font-size:16px;margin-right:12px;">${DOMPurify.sanitize(d.session.setName)} <span style="font-weight:normal;color:var(--tx3);font-size:13px">· Block ${DOMPurify.sanitize(d.session.block)}</span></div>
-        <div style="font-size:12px;font-weight:700;background:var(--s);padding:4px 8px;border-radius:4px;border:1px solid var(--bd); letter-spacing:1px">${DOMPurify.sanitize(d.session.code)}</div>
-        <button onclick="document.querySelector('.app').classList.toggle('hide-sb')" class="btn bs bd" style="padding:4px 8px; font-size:12px; margin-left:12px;">◫ Toggle Left Panel</button>
-      </div>`;
+      if (_ch.banner) document.getElementById('liveStatusBanner').innerHTML = `
+        <button onclick="document.querySelector('.app').classList.toggle('hide-sb')"
+          class="btn bg" style="padding:5px 10px; font-size:13px; border-radius:6px; flex-shrink:0;" title="Toggle sidebar">◫</button>
+        <div style="font-weight:700; font-size:15px; white-space:nowrap;">${DOMPurify.sanitize(d.session.setName)}
+          <span style="font-weight:400; color:var(--tx3); font-size:13px;"> · Block ${DOMPurify.sanitize(d.session.block)}</span>
+        </div>
+        <div style="font-size:11px; font-weight:700; background:var(--s); padding:3px 8px; border-radius:5px;
+          border:1px solid var(--bd); letter-spacing:1.5px; color:var(--tx2); white-space:nowrap;">${DOMPurify.sanitize(d.session.code)}</div>
+      `;
       if (!_ch.controls && !_ch.stats && !_ch.left && !_ch.students && !_ch.details && !_ch.grading) return;
       if (_ch.controls) {
         if (isLS) {
@@ -2734,13 +2797,27 @@
         }
       }
 
-      if (_ch.stats) document.getElementById('liveStatsRow').innerHTML = `
-        <div style="display:flex; gap:20px; font-size:11px; text-transform:uppercase; color:var(--tx2); align-items:center;">
-          <div style="display:flex; flex-direction:column; align-items:center;"><strong style="font-size:18px; color:var(--tx); line-height:1.2;">${d.totalJoined}</strong> Joined</div>
-          <div style="display:flex; flex-direction:column; align-items:center;"><strong style="font-size:18px; color:var(--tx); line-height:1.2;">${d.totalActiveNow || 0}</strong> Active</div>
-          <div style="display:flex; flex-direction:column; align-items:center;"><strong style="font-size:18px; color:var(--tx); line-height:1.2;">${d.totalFinished}</strong> Finished</div>
-          <div style="display:flex; flex-direction:column; align-items:center; color:${d.violations.filter(v => !v.resolved).length ? 'var(--red)' : ''}"><strong style="font-size:18px; line-height:1.2;">${d.violations.filter(v => !v.resolved).length}</strong> Violations</div>
-        </div>`;
+      if (_ch.stats) {
+        const _vCount = d.violations.filter(v => !v.resolved).length;
+        document.getElementById('liveStatsRow').innerHTML = `
+          <div class="stat-pill">
+            <span class="sp-val">${d.totalJoined}</span>
+            <span class="sp-lbl">Joined</span>
+          </div>
+          <div class="stat-pill">
+            <span class="sp-val" style="color:var(--teal)">${d.totalActiveNow || 0}</span>
+            <span class="sp-lbl">Active</span>
+          </div>
+          <div class="stat-pill">
+            <span class="sp-val" style="color:var(--grn)">${d.totalFinished}</span>
+            <span class="sp-lbl">Finished</span>
+          </div>
+          <div class="stat-pill">
+            <span class="sp-val" style="color:${_vCount ? 'var(--red)' : 'var(--tx3)'}">${_vCount}</span>
+            <span class="sp-lbl" style="${_vCount ? 'color:var(--red)' : ''}">Violations</span>
+          </div>
+        `;
+      }
 
       let leftHtml = '';
       const q = (d.qStats || [])[curQIdx] || null;
@@ -2949,11 +3026,11 @@
         const withFilteredState = withStateAll.filter(s => filter === 'all' || s.tileState === filter);
 
         if (isLS && q) {
-          document.getElementById('liveRightFilter').innerHTML = `<strong style="margin-right:8px;font-size:13px;color:var(--tx2)">Q${q.idx + 1} Filter:</strong>
+          document.getElementById('liveRightFilter').innerHTML = `<strong style="margin-right:4px;font-size:13px;color:var(--tx2)">Q${q.idx + 1} Filter:</strong>
                  <span class="fchip ${filter === 'all' ? 'active' : ''}" onclick="setTileFilter('all')" style="padding:4px 10px; font-size:12px">All</span>
-                 <span class="fchip ${filter === 'correct' ? 'active' : ''}" onclick="setTileFilter('correct')" style="padding:4px 10px; font-size:12px">Correct</span>
-                 <span class="fchip ${filter === 'incorrect' ? 'active' : ''}" onclick="setTileFilter('incorrect')" style="padding:4px 10px; font-size:12px">Incorrect</span>
-                 <span class="fchip ${filter === 'none' ? 'active' : ''}" onclick="setTileFilter('none')" style="padding:4px 10px; font-size:12px">No Response</span>`;
+                 <span class="fchip fc-correct ${filter === 'correct' ? 'active' : ''}" onclick="setTileFilter('correct')" style="padding:4px 10px; font-size:12px">Correct</span>
+                 <span class="fchip fc-incorrect ${filter === 'incorrect' ? 'active' : ''}" onclick="setTileFilter('incorrect')" style="padding:4px 10px; font-size:12px">Incorrect</span>
+                 <span class="fchip fc-none ${filter === 'none' ? 'active' : ''}" onclick="setTileFilter('none')" style="padding:4px 10px; font-size:12px">No Response</span>`;
           document.getElementById('liveRightFilter').style.display = 'flex';
         } else {
           document.getElementById('liveRightFilter').style.display = 'none';
