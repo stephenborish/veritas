@@ -1431,6 +1431,7 @@
       <div class="ns">
         <div class="nl">Review</div>
         <div class="ni" data-s="analytics"><span class="ic">📊</span>Analytics & History</div>
+        <div class="ni" data-s="risk"><span class="ic">🚨</span>Risk Report</div>
       </div>
       <div class="sb-ft">Veritas Assess v5.3</div>
     </div>
@@ -1686,6 +1687,29 @@
         <!-- Detailed Session View -->
         <div id="anaDetail" style="display:none;"></div>
       </div>
+
+      <!-- RISK REPORT SECTION -->
+      <div class="sec" id="sec-risk">
+        <div class="sec-hdr">
+          <div>
+            <h1>Student Risk Report</h1>
+            <p>Cross-session behavioral flags and at-risk indicators by course</p>
+          </div>
+        </div>
+        <div id="riskContent">
+          <div style="padding:32px; max-width:520px">
+            <div class="card" style="padding:24px">
+              <div style="font-weight:700; font-size:15px; margin-bottom:12px">Select a Course</div>
+              <p style="font-size:13px; color:var(--tx2); margin-bottom:16px">Choose a course to analyze student patterns across all its archived sessions.</p>
+              <select id="riskCourseSelect" style="width:100%; padding:10px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); color:var(--tx); font-size:14px">
+                <option value="">Loading courses...</option>
+              </select>
+              <button class="btn bp" style="margin-top:16px; width:100%" onclick="loadRiskReport()">Generate Risk Report</button>
+            </div>
+          </div>
+          <div id="riskResult"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1838,6 +1862,7 @@
       if (n.dataset.s === 'launch') loadLaunch();
       if (n.dataset.s === 'live') startLive();
       if (n.dataset.s === 'analytics') loadAnaList();
+      if (n.dataset.s === 'risk') initRiskSection();
     }));
 
     // ── DASHBOARD CONTROLLER ──
@@ -4036,6 +4061,20 @@
         </div>
       `;
 
+      // ── Advanced Analytics Card ──
+      html += `
+        <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px">
+          <div style="padding:16px 20px; border-bottom:1px solid var(--bd); background:var(--s2); display:flex; justify-content:space-between; align-items:center">
+            <div>
+              <div style="font-weight:700; font-size:15px">🔬 Advanced Psychometric Analytics</div>
+              <div style="font-size:12px; color:var(--tx2); margin-top:2px">CTT reliability, item discrimination, point-biserial, distractor efficiency &amp; confidence calibration</div>
+            </div>
+            <button class="btn bp" id="btnLoadAdvAna" onclick="loadAdvancedAnalytics('${sess.id}')">Compute Analytics</button>
+          </div>
+          <div id="advAnaBody" style="padding:0"></div>
+        </div>
+      `;
+
       document.getElementById('anaDetail').innerHTML = html;
     }
 
@@ -4194,6 +4233,374 @@
         .rescoreQuestionFull(sessId, q.id, JSON.stringify(q));
     }
 
+
+    // ── ADVANCED ANALYTICS ──
+
+    function loadAdvancedAnalytics(sessId) {
+      const body = document.getElementById('advAnaBody');
+      const btn = document.getElementById('btnLoadAdvAna');
+      if (!body) return;
+      btn.disabled = true;
+      btn.textContent = 'Computing...';
+      body.innerHTML = '<div style="padding:24px; color:var(--teal); font-style:italic; font-weight:600">⚙️ Running psychometric computations…</div>';
+
+      // Active tab state
+      let advTab = 'ctt';
+
+      // Load all three datasets in parallel
+      let cttData = null, discData = null, confData = null;
+      let loaded = 0;
+      const tryRender = () => { if (++loaded === 3) renderAdvAna(sessId, cttData, discData, confData); };
+
+      google.script.run.withSuccessHandler(d => { cttData = d; tryRender(); }).withFailureHandler(e => { cttData = { error: e.message }; tryRender(); }).computeCTTMetrics(sessId);
+      google.script.run.withSuccessHandler(d => { discData = d; tryRender(); }).withFailureHandler(e => { discData = { error: e.message }; tryRender(); }).computeItemDiscrimination(sessId);
+      google.script.run.withSuccessHandler(d => { confData = d; tryRender(); }).withFailureHandler(e => { confData = { error: e.message }; tryRender(); }).computeConfidenceCalibration(sessId);
+    }
+
+    function renderAdvAna(sessId, ctt, disc, conf) {
+      const btn = document.getElementById('btnLoadAdvAna');
+      if (btn) { btn.disabled = false; btn.textContent = 'Refresh'; }
+      const body = document.getElementById('advAnaBody');
+      if (!body) return;
+
+      const tabBtn = (id, label, active) => `<button onclick="advSwitchTab('${id}')" id="advTab_${id}" style="padding:8px 16px; border:1px solid var(--bd); border-radius:20px; font-size:13px; font-weight:600; cursor:pointer; background:${active ? 'var(--teal)' : 'var(--bg)'}; color:${active ? '#fff' : 'var(--tx)'}">${label}</button>`;
+
+      let html = `
+        <div style="padding:16px 20px; border-bottom:1px solid var(--bd); display:flex; gap:8px; flex-wrap:wrap; background:var(--bg)">
+          ${tabBtn('ctt', '📊 Test Health', true)}
+          ${tabBtn('disc', '🔍 Item Deep Dive', false)}
+          ${tabBtn('conf', '🧠 Confidence Calibration', false)}
+        </div>
+        <div id="advTabContent" style="padding:20px">
+      `;
+
+      html += `<div id="advPanel_ctt">${renderCTTPanel(ctt)}</div>`;
+      html += `<div id="advPanel_disc" style="display:none">${renderDiscPanel(disc)}</div>`;
+      html += `<div id="advPanel_conf" style="display:none">${renderConfPanel(conf)}</div>`;
+      html += `</div>`;
+
+      body.innerHTML = DOMPurify.sanitize(html, { FORCE_BODY: true, ADD_ATTR: ['onclick', 'style', 'id'] });
+    }
+
+    function advSwitchTab(id) {
+      ['ctt', 'disc', 'conf'].forEach(t => {
+        const panel = document.getElementById('advPanel_' + t);
+        const btn = document.getElementById('advTab_' + t);
+        if (panel) panel.style.display = t === id ? 'block' : 'none';
+        if (btn) { btn.style.background = t === id ? 'var(--teal)' : 'var(--bg)'; btn.style.color = t === id ? '#fff' : 'var(--tx)'; }
+      });
+    }
+
+    function renderCTTPanel(ctt) {
+      if (!ctt || ctt.error) return `<div style="color:var(--red); padding:16px">${(ctt && ctt.error) || 'Failed to compute CTT metrics.'}</div>`;
+
+      // Histogram max count for scaling
+      const histMax = Math.max(1, ...ctt.histogram.map(b => b.count));
+
+      const histBars = ctt.histogram.map(b => {
+        const h = Math.round((b.count / histMax) * 80);
+        const pct = ctt.n > 0 ? Math.round((b.count / ctt.n) * 100) : 0;
+        return `<div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex:1; min-width:28px">
+          <div style="font-size:10px; color:var(--tx3); font-weight:700">${b.count > 0 ? b.count : ''}</div>
+          <div style="width:100%; height:80px; display:flex; align-items:flex-end">
+            <div style="width:100%; height:${h}px; background:var(--teal); border-radius:4px 4px 0 0; opacity:0.85; transition:height 0.3s" title="${b.label}: ${b.count} student(s) (${pct}%)"></div>
+          </div>
+          <div style="font-size:9px; color:var(--tx3); text-align:center; line-height:1.2">${b.label}</div>
+        </div>`;
+      }).join('');
+
+      const quartileColors = ['var(--red)', 'var(--amb)', 'var(--grn)', 'var(--teal)'];
+      const quartileLabels = ['Q1 — Bottom 25%', 'Q2 — Low-Mid 25%', 'Q3 — High-Mid 25%', 'Q4 — Top 25%'];
+      const quartilesByGroup = [1, 2, 3, 4].map(q => ctt.students.filter(s => s.quartile === q));
+
+      const quartileCols = quartilesByGroup.map((group, qi) => {
+        const names = group.map(s => `<div style="font-size:12px; padding:4px 0; border-bottom:1px solid var(--bd); display:flex; justify-content:space-between"><span>${s.name}</span><span style="color:var(--tx3)">${Math.round(s.pct)}% <span style="font-size:10px; color:var(--tx3)">(z=${s.zScore})</span></span></div>`).join('') || '<div style="color:var(--tx3); font-size:12px; font-style:italic">None</div>';
+        return `<div style="border:1px solid var(--bd); border-radius:8px; padding:12px; background:var(--s)">
+          <div style="font-size:11px; font-weight:800; color:${quartileColors[qi]}; text-transform:uppercase; margin-bottom:8px">${quartileLabels[qi]}</div>
+          ${names}
+        </div>`;
+      }).join('');
+
+      const skewColor = Math.abs(ctt.skewness) > 0.5 ? 'amb' : 'grn';
+
+      return `
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:16px; margin-bottom:24px">
+          <div style="border:1px solid var(--bd); border-radius:8px; padding:16px; background:var(--s); text-align:center">
+            <div style="font-size:11px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:6px">KR-20 Reliability</div>
+            <div style="font-size:28px; font-weight:800; color:var(--${ctt.kr20Color})">${ctt.kr20 !== null ? ctt.kr20 : 'N/A'}</div>
+            <div style="font-size:11px; color:var(--${ctt.kr20Color}); margin-top:4px">${ctt.kr20Label}</div>
+          </div>
+          <div style="border:1px solid var(--bd); border-radius:8px; padding:16px; background:var(--s); text-align:center">
+            <div style="font-size:11px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:6px">SEM</div>
+            <div style="font-size:28px; font-weight:800; color:var(--teal)">${ctt.sem !== null ? ctt.sem + '%' : 'N/A'}</div>
+            <div style="font-size:11px; color:var(--tx3); margin-top:4px">Standard Error of Measurement</div>
+          </div>
+          <div style="border:1px solid var(--bd); border-radius:8px; padding:16px; background:var(--s); text-align:center">
+            <div style="font-size:11px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:6px">Mean Score</div>
+            <div style="font-size:28px; font-weight:800; color:var(--tx)">${ctt.mean}%</div>
+            <div style="font-size:11px; color:var(--tx3); margin-top:4px">Median: ${ctt.median}% · SD: ±${ctt.sd}%</div>
+          </div>
+          <div style="border:1px solid var(--bd); border-radius:8px; padding:16px; background:var(--s); text-align:center">
+            <div style="font-size:11px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:6px">Distribution Shape</div>
+            <div style="font-size:18px; font-weight:800; color:var(--${skewColor})">${ctt.skewness > 0 ? '▶' : ctt.skewness < 0 ? '◀' : '■'} ${Math.abs(ctt.skewness)}</div>
+            <div style="font-size:11px; color:var(--${skewColor}); margin-top:4px">${ctt.skewnessLabel}</div>
+          </div>
+        </div>
+
+        <div class="card" style="padding:16px; margin-bottom:24px">
+          <div style="font-weight:700; font-size:13px; margin-bottom:12px; color:var(--tx2)">SCORE DISTRIBUTION — ${ctt.n} Students</div>
+          <div style="display:flex; gap:4px; align-items:flex-end; height:100px">${histBars}</div>
+        </div>
+
+        <div style="font-weight:700; font-size:13px; margin-bottom:12px; color:var(--tx2)">QUARTILE BREAKDOWN</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px">${quartileCols}</div>
+      `;
+    }
+
+    function renderDiscPanel(disc) {
+      if (!disc || disc.error) return `<div style="color:var(--red); padding:16px">${(disc && disc.error) || 'Failed to compute item discrimination.'}</div>`;
+      if (!Array.isArray(disc) || disc.length === 0) return `<div style="color:var(--tx3); padding:16px">No questions found.</div>`;
+
+      // Quadrant scatterplot: difficulty (x) vs discrimination (y) — CSS grid approximation
+      const mcItems = disc.filter(q => q.type === 'mc' && q.discrimination !== null);
+
+      const scatterDots = mcItems.map(q => {
+        const x = Math.round(q.difficultyPct);
+        const y = Math.max(0, Math.min(1, (q.discrimination + 1) / 2)); // normalize -1..1 → 0..1
+        const color = q.discColor === 'grn' ? 'var(--grn)' : q.discColor === 'amb' ? 'var(--amb)' : 'var(--red)';
+        return `<div title="Q${q.idx + 1}: Difficulty=${x}%, Discrimination=${q.discrimination}" style="position:absolute; left:${x}%; bottom:${Math.round(y * 100)}%; width:10px; height:10px; border-radius:50%; background:${color}; transform:translate(-50%, 50%); cursor:default; border:1px solid rgba(0,0,0,0.15)"></div>`;
+      }).join('');
+
+      const scatterplot = mcItems.length > 0 ? `
+        <div class="card" style="padding:16px; margin-bottom:24px">
+          <div style="font-weight:700; font-size:13px; margin-bottom:8px; color:var(--tx2)">DIFFICULTY × DISCRIMINATION SCATTERPLOT</div>
+          <div style="font-size:11px; color:var(--tx3); margin-bottom:12px">X = Item Difficulty (% correct) · Y = Point-Biserial Discrimination · Colors: green ≥0.30, amber 0.10–0.30, red &lt;0.10</div>
+          <div style="position:relative; height:180px; border:1px solid var(--bd); border-radius:6px; background:var(--s); overflow:hidden; margin-bottom:4px">
+            <div style="position:absolute; left:0; right:0; top:50%; border-top:1px dashed var(--bd)"></div>
+            <div style="position:absolute; left:30%; top:0; bottom:0; border-left:1px dashed var(--bd)"></div>
+            <div style="position:absolute; left:70%; top:0; bottom:0; border-left:1px dashed var(--bd)"></div>
+            ${scatterDots}
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--tx3)"><span>0% (All Wrong)</span><span>50%</span><span>100% (All Correct)</span></div>
+        </div>
+      ` : '';
+
+      const itemRows = disc.map(q => {
+        const discVal = q.discrimination !== null ? q.discrimination : '—';
+        const discColor = q.discColor ? `var(--${q.discColor})` : 'var(--tx3)';
+        const diffColor = `var(--${q.difficultyColor || 'tx'})`;
+
+        let choiceHtml = '';
+        if (q.choiceStats) {
+          choiceHtml = `<div style="display:flex; flex-direction:column; gap:4px; margin-top:8px">`;
+          q.choiceStats.forEach(c => {
+            const barW = c.pct;
+            const pbisColor = c.pbisFlag === 'good' ? 'var(--grn)' : 'var(--amb)';
+            const nfBadge = !c.isFunctioning ? `<span style="font-size:9px; background:var(--rBg); color:var(--red); border:1px solid var(--red); border-radius:8px; padding:1px 5px; margin-left:4px">Non-functioning</span>` : '';
+            const correctMark = c.isCorrect ? ' ✓' : '';
+            choiceHtml += `<div style="display:flex; align-items:center; gap:8px; font-size:11px">
+              <div style="width:16px; font-weight:700; color:${c.isCorrect ? 'var(--grn)' : 'var(--tx3)'}">${c.letter}${correctMark}</div>
+              <div style="flex:1; background:var(--s2); border-radius:3px; height:14px; overflow:hidden">
+                <div style="height:100%; width:${barW}%; background:${c.isCorrect ? 'var(--grn)' : 'var(--bd)'}; opacity:0.7"></div>
+              </div>
+              <div style="width:32px; text-align:right; font-weight:700; color:${c.isCorrect ? 'var(--grn)' : 'var(--tx)'}">${c.pct}%</div>
+              <div style="width:48px; text-align:right; font-size:10px; color:${pbisColor}">r=${c.pointBiserial}</div>
+              ${nfBadge}
+            </div>`;
+          });
+          choiceHtml += `</div>`;
+        }
+
+        const nfWarning = q.nonFunctioningCount > 0
+          ? `<span style="font-size:10px; background:var(--aBg); color:var(--amb); border:1px solid rgba(217,119,6,0.3); border-radius:8px; padding:2px 6px; margin-left:8px">${q.nonFunctioningCount} non-functioning distractor${q.nonFunctioningCount > 1 ? 's' : ''}</span>`
+          : '';
+
+        return `<div style="padding:14px; border:1px solid var(--bd); border-radius:8px; background:var(--s); margin-bottom:12px">
+          <div style="display:flex; gap:16px; align-items:flex-start">
+            <div style="flex:1">
+              <div style="font-size:11px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:4px">Q${q.idx + 1} · ${q.type === 'mc' ? 'MC' : 'SA'}</div>
+              <div style="font-size:13px; line-height:1.4">${q.text ? q.text.replace(/<[^>]*>/g, '').slice(0, 120) + (q.text.length > 120 ? '…' : '') : '—'}</div>
+            </div>
+            <div style="display:flex; gap:12px; flex-shrink:0; text-align:center">
+              <div style="background:var(--bg); border:1px solid var(--bd); border-radius:6px; padding:8px 12px">
+                <div style="font-size:20px; font-weight:800; color:${diffColor}">${q.difficultyPct}%</div>
+                <div style="font-size:10px; color:var(--tx3); text-transform:uppercase">${q.difficultyLabel}</div>
+              </div>
+              ${q.discrimination !== null ? `<div style="background:var(--bg); border:1px solid var(--bd); border-radius:6px; padding:8px 12px">
+                <div style="font-size:20px; font-weight:800; color:${discColor}">${discVal}</div>
+                <div style="font-size:10px; color:${discColor}; text-transform:uppercase">${q.discLabel}</div>
+              </div>` : ''}
+            </div>
+          </div>
+          ${nfWarning}
+          ${choiceHtml}
+        </div>`;
+      }).join('');
+
+      return scatterplot + `<div style="font-weight:700; font-size:13px; margin-bottom:12px; color:var(--tx2)">ITEM-BY-ITEM ANALYSIS</div>` + itemRows;
+    }
+
+    function renderConfPanel(conf) {
+      if (!conf || conf.error) return `<div style="color:var(--red); padding:16px">${(conf && conf.error) || 'Failed to compute confidence calibration.'}</div>`;
+
+      const cs = conf.classSummary || {};
+      const totalQ = (cs.accConf || 0) + (cs.accUnconf || 0) + (cs.inaccConf || 0) + (cs.inaccUnconf || 0);
+      const pct = v => totalQ > 0 ? Math.round((v / totalQ) * 100) : 0;
+
+      const quadrantBox = (label, sublabel, val, color, bg) => `
+        <div style="border:2px solid ${color}; border-radius:10px; padding:16px; background:${bg}; text-align:center">
+          <div style="font-size:24px; font-weight:800; color:${color}">${pct(val)}%</div>
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; color:${color}; margin-top:4px">${label}</div>
+          <div style="font-size:10px; color:var(--tx3); margin-top:2px">${sublabel} · ${val} responses</div>
+        </div>`;
+
+      const quadGrid = `
+        <div style="display:grid; grid-template-columns:1fr 1fr; grid-template-rows:auto auto; gap:16px; margin-bottom:24px">
+          <div style="grid-column:1/-1; display:flex; justify-content:center; gap:32px; font-size:11px; color:var(--tx3); font-weight:700; text-transform:uppercase; padding-bottom:4px; border-bottom:1px dashed var(--bd)">
+            <span>← Incorrect</span><span>Correct →</span>
+          </div>
+          ${quadrantBox('Inaccurate + Confident', 'Most Dangerous', cs.inaccConf || 0, 'var(--red)', 'var(--rBg)')}
+          ${quadrantBox('Accurate + Confident', 'Ideal', cs.accConf || 0, 'var(--grn)', 'var(--gBg)')}
+          ${quadrantBox('Inaccurate + Uncertain', 'At Risk', cs.inaccUnconf || 0, 'var(--amb)', 'var(--aBg)')}
+          ${quadrantBox('Accurate + Uncertain', 'Underconfident', cs.accUnconf || 0, 'var(--teal)', 'rgba(13,148,136,0.1)')}
+        </div>`;
+
+      const studentRows = (conf.studentCalibration || []).map(s => {
+        const qb = s.quadrant || {};
+        const tot = (qb.accConf || 0) + (qb.accUnconf || 0) + (qb.inaccConf || 0) + (qb.inaccUnconf || 0);
+        const dangerW = tot > 0 ? Math.round(((qb.inaccConf || 0) / tot) * 100) : 0;
+        const brierColor = s.brierColor ? `var(--${s.brierColor})` : 'var(--tx)';
+        return `<div style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid var(--bd); font-size:12px">
+          <div style="width:140px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${s.name}</div>
+          <div style="width:60px; text-align:center; font-weight:800; color:${brierColor}">${s.brierScore !== null ? s.brierScore : '—'}</div>
+          <div style="width:80px; text-align:center; font-size:11px; color:${brierColor}">${s.brierLabel}</div>
+          <div style="flex:1; background:var(--s2); border-radius:3px; height:8px; overflow:hidden">
+            <div style="height:100%; width:${dangerW}%; background:var(--red); opacity:0.7; border-radius:3px"></div>
+          </div>
+          <div style="width:36px; text-align:right; font-size:11px; color:var(--red)">${dangerW}%</div>
+          <div style="width:80px; text-align:right; font-size:10px; color:var(--tx3)">${s.totalRated} rated</div>
+        </div>`;
+      }).join('') || '<div style="color:var(--tx3); font-style:italic">No confidence data available.</div>';
+
+      const overconfRows = (conf.itemOverconfidence || []).slice(0, 8).map(item => {
+        const barW = item.overconfidenceRate;
+        const color = barW >= 50 ? 'var(--red)' : barW >= 25 ? 'var(--amb)' : 'var(--grn)';
+        return `<div style="padding:8px 0; border-bottom:1px solid var(--bd); font-size:12px">
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px">
+            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%">${item.text ? item.text.replace(/<[^>]*>/g, '').slice(0, 80) : '—'}</span>
+            <span style="font-weight:800; color:${color}; flex-shrink:0">${item.overconfidenceRate}% overconfident</span>
+          </div>
+          <div style="background:var(--s2); border-radius:3px; height:6px; overflow:hidden">
+            <div style="height:100%; width:${barW}%; background:${color}; border-radius:3px; opacity:0.75"></div>
+          </div>
+        </div>`;
+      }).join('') || '<div style="color:var(--tx3); font-style:italic">No overconfidence data.</div>';
+
+      return `
+        <div style="font-weight:700; font-size:13px; margin-bottom:12px; color:var(--tx2)">CLASS CONFIDENCE QUADRANT MATRIX</div>
+        ${quadGrid}
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px">
+          <div>
+            <div style="font-weight:700; font-size:13px; margin-bottom:12px; color:var(--tx2)">PER-STUDENT CALIBRATION (Brier Score)</div>
+            <div style="font-size:11px; color:var(--tx3); margin-bottom:8px">Lower Brier Score = better calibrated. Red bar = % of answers that were inaccurate + confident.</div>
+            <div style="display:flex; align-items:center; gap:12px; font-size:10px; color:var(--tx3); padding-bottom:4px; border-bottom:1px solid var(--bd); text-transform:uppercase">
+              <div style="width:140px">Student</div><div style="width:60px; text-align:center">Brier</div><div style="width:80px; text-align:center">Quality</div><div style="flex:1">Danger %</div><div style="width:36px; text-align:right"></div><div style="width:80px; text-align:right">Rated</div>
+            </div>
+            ${studentRows}
+          </div>
+          <div>
+            <div style="font-weight:700; font-size:13px; margin-bottom:12px; color:var(--tx2)">TOP OVERCONFIDENCE ITEMS</div>
+            <div style="font-size:11px; color:var(--tx3); margin-bottom:8px">% of students who answered wrong but rated confidence ≥ 3 (Medium–Very Confident).</div>
+            ${overconfRows}
+          </div>
+        </div>
+      `;
+    }
+
+    // ── RISK REPORT ──
+
+    function initRiskSection() {
+      const sel = document.getElementById('riskCourseSelect');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Loading...</option>';
+      google.script.run
+        .withSuccessHandler(courses => {
+          if (!courses || !courses.length) { sel.innerHTML = '<option value="">No courses found</option>'; return; }
+          sel.innerHTML = '<option value="">— Select a Course —</option>' + courses.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        })
+        .withFailureHandler(() => { sel.innerHTML = '<option value="">Error loading courses</option>'; })
+        .getCourses();
+    }
+
+    function loadRiskReport() {
+      const courseId = document.getElementById('riskCourseSelect').value;
+      if (!courseId) { alert('Please select a course first.'); return; }
+      const res = document.getElementById('riskResult');
+      res.innerHTML = '<div style="padding:24px; color:var(--teal); font-style:italic; font-weight:600">⚙️ Scanning all archived sessions across the course…</div>';
+      google.script.run
+        .withSuccessHandler(data => renderRiskReport(data))
+        .withFailureHandler(e => { res.innerHTML = `<div style="padding:24px; color:var(--red)">Error: ${DOMPurify.sanitize(e.message || String(e))}</div>`; })
+        .getCrossSessionRiskReport(courseId);
+    }
+
+    function renderRiskReport(data) {
+      const res = document.getElementById('riskResult');
+      if (!data || data.error) { res.innerHTML = `<div style="padding:24px; color:var(--red)">${DOMPurify.sanitize(data && data.error ? data.error : 'Unknown error')}</div>`; return; }
+
+      const flagCard = (icon, title, color, bg, items, renderItem) => {
+        if (!items || !items.length) return `
+          <div class="card" style="padding:16px; border-left:4px solid var(--bd); opacity:0.6">
+            <div style="font-size:13px; font-weight:700; color:var(--tx3)">${icon} ${title}</div>
+            <div style="font-size:12px; color:var(--tx3); margin-top:6px; font-style:italic">No students flagged.</div>
+          </div>`;
+        return `
+          <div class="card" style="padding:0; overflow:hidden; border-left:4px solid ${color}">
+            <div style="padding:12px 16px; background:${bg}; display:flex; justify-content:space-between; align-items:center">
+              <div style="font-size:13px; font-weight:700; color:${color}">${icon} ${title}</div>
+              <span style="background:${color}; color:#fff; font-size:11px; font-weight:700; border-radius:10px; padding:2px 8px">${items.length} Student${items.length !== 1 ? 's' : ''}</span>
+            </div>
+            <div style="padding:12px 16px">
+              ${items.map(renderItem).join('')}
+            </div>
+          </div>`;
+      };
+
+      const stuRow = (name, detail) => `<div style="padding:6px 0; border-bottom:1px solid var(--bd); font-size:12px; display:flex; justify-content:space-between; align-items:center"><span style="font-weight:600">${DOMPurify.sanitize(name)}</span><span style="color:var(--tx3); font-size:11px">${detail}</span></div>`;
+
+      const summary = `
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:24px">
+          <div style="border:1px solid var(--bd); border-radius:8px; padding:12px; text-align:center; background:var(--s)">
+            <div style="font-size:22px; font-weight:800; color:var(--teal)">${data.sessionCount}</div>
+            <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">Sessions Analyzed</div>
+          </div>
+          <div style="border:1px solid var(--bd); border-radius:8px; padding:12px; text-align:center; background:var(--s)">
+            <div style="font-size:22px; font-weight:800; color:var(--tx)">${data.classAvg}%</div>
+            <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">Course Avg Score</div>
+          </div>
+          <div style="border:1px solid var(--bd); border-radius:8px; padding:12px; text-align:center; background:var(--s)">
+            <div style="font-size:22px; font-weight:800; color:var(--red)">${data.lowThreshold}%</div>
+            <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">At-Risk Threshold</div>
+          </div>
+          <div style="border:1px solid var(--bd); border-radius:8px; padding:12px; text-align:center; background:var(--s)">
+            <div style="font-size:22px; font-weight:800; color:var(--red)">${(data.neverAccessed || []).length + (data.consistentlyLow || []).length + (data.avoiders || []).length}</div>
+            <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">Total Flags</div>
+          </div>
+        </div>`;
+
+      const html = `
+        <div style="padding:24px; padding-top:0">
+          ${summary}
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
+            ${flagCard('🔴', 'Never Accessed', 'var(--red)', 'var(--rBg)', data.neverAccessed, s => stuRow(s.name, s.fromRoster ? 'On roster — never joined' : `${s.sessions.length} sessions, never joined`))}
+            ${flagCard('🟠', 'Consistently Low', 'var(--amb)', 'var(--aBg)', data.consistentlyLow, s => stuRow(s.name, `Avg: ${s.avgScore}% · Threshold: ${s.threshold}% · Scores: ${s.scores.join(', ')}%`))}
+            ${flagCard('🟡', 'Assessment Avoiders', 'var(--amb)', 'var(--aBg)', data.avoiders, s => stuRow(s.name, `Joined but did not finish in ${s.avoidCount} sessions`))}
+            ${flagCard('🟣', 'Repeat Violations', '#7c3aed', 'rgba(124,58,237,0.08)', data.violators, s => stuRow(s.name, `Violations in ${s.sessionsWithViolations.length} sessions: ${s.sessionsWithViolations.map(v => v.setName + ' (×' + v.count + ')').join(', ')}`))}
+            ${flagCard('⚡', 'Rapid Submitters', 'var(--teal)', 'rgba(13,148,136,0.08)', data.rapidSubmitters, s => stuRow(s.name, `Rapid in ${s.rapidCount} sessions: ${s.sessions.map(v => v.setName + ' ' + v.durationMin + '/' + v.allocMin + ' min').join(', ')}`))}
+          </div>
+        </div>`;
+
+      res.innerHTML = DOMPurify.sanitize(html, { FORCE_BODY: true, ADD_ATTR: ['style', 'onclick'] });
+    }
 
     // Init
     setTimeout(loadDashboard, 500);
