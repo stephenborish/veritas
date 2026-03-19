@@ -807,7 +807,9 @@ const DB = {
       const r=respMap[q.id]||null;
       const m=metaMap[q.id]||null;
       const g=gradeMap[q.id]||null;
-      return {questionId:q.id,qIndex:idx,questionText:q.text,type:q.type,answer:r?r.answer:'',isCorrect:r?r.isCorrect:null,points:r?Number(r.points)||0:0,maxPoints:q.points||1,confidence:m?m.confidence:null,aiScore:g?g.score:null,aiFeedback:g?g.feedback:null};
+      const effectiveAiScore = g ? (g.overridden ? Number(g.overrideScore) : g.score) : null;
+      const effectiveAiFeedback = g ? (g.overridden && g.overrideFeedback ? g.overrideFeedback : g.feedback) : null;
+      return {questionId:q.id,qIndex:idx,questionText:q.text,type:q.type,answer:r?r.answer:'',isCorrect:r?r.isCorrect:null,points:r?Number(r.points)||0:0,maxPoints:q.points||1,confidence:m?m.confidence:null,aiScore:effectiveAiScore,aiFeedback:effectiveAiFeedback,overridden:g?!!g.overridden:false};
     });
     const totalPts=details.reduce((a,b)=>a+(Number(b.points)||0),0);
     const totalMax=details.reduce((a,b)=>a+(Number(b.maxPoints)||0),0);
@@ -868,9 +870,13 @@ const DB = {
       data.session.id = sessionId; // Ensure id is always present
       if (!data.session.config) data.session.config = {};
       
-      // Legacy support: inject missing qSet
+      // Legacy support: inject missing qSet only when the archive genuinely has no question data
+      // (sessions archived before question snapshots were stored). Flag the result so callers
+      // know the question data may differ from what students saw, because it reflects the current
+      // live question set rather than the version used during the session.
       if (!data.session.config.qSet && !data.session.qSet && data.session.setId) {
         data.session.config.qSet = this.getQSet(data.session.setId) || {};
+        data._qSetIsLive = true;
       }
       return data;
     } catch(e) {
@@ -977,14 +983,18 @@ const DB = {
           }
         }
 
-        // Clear stale AIGrades rows for SA questions so gradeSession() will re-grade them
+        // Clear stale AIGrades rows for SA questions so gradeSession() will re-grade them.
+        // Rows where the teacher has set an override are preserved so those scores are not lost.
         if (qNew.type === 'sa') {
           const aiSh = this.sh('AIGrades');
           if (aiSh) {
             const aiRows = aiSh.getDataRange().getValues();
             for (let i = aiRows.length - 1; i >= 1; i--) {
               if (aiRows[i][0] === sessionId && aiRows[i][3] === questionId) {
-                aiSh.deleteRow(i + 1);
+                const isOverridden = aiRows[i][9] === true || aiRows[i][9] === 'TRUE';
+                if (!isOverridden) {
+                  aiSh.deleteRow(i + 1);
+                }
               }
             }
           }
@@ -1090,17 +1100,33 @@ const DB = {
              }
           });
         } else {
+           // Build a lookup of teacher-overridden scores for this question so they are preserved.
+           const overriddenScores = {};
+           if (data.grades) {
+             data.grades.forEach(g => {
+               if (g.questionId === questionId && g.overridden) {
+                 overriddenScores[g.studentId] = Number(g.overrideScore) || 0;
+               }
+             });
+           }
            data.responses.forEach(r => {
              if (r.questionId === questionId) {
-               r.points = 0;
-               r.isCorrect = false;
                r.maxPoints = qOriginal.points;
-               r.score = 0;
-               r.feedback = '';
+               if (overriddenScores.hasOwnProperty(r.studentId)) {
+                 // Preserve the teacher's manually overridden score.
+                 r.points = overriddenScores[r.studentId];
+                 r.isCorrect = r.maxPoints > 0 && r.points >= r.maxPoints;
+               } else {
+                 r.points = 0;
+                 r.isCorrect = false;
+                 r.score = 0;
+                 r.feedback = '';
+               }
              }
            });
            if (data.grades) {
-             data.grades = data.grades.filter(g => g.questionId !== questionId);
+             // Remove non-overridden grades so re-grading will fill them in; keep overrides intact.
+             data.grades = data.grades.filter(g => g.questionId !== questionId || !!g.overridden);
            }
         }
         
