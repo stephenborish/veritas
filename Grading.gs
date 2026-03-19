@@ -205,6 +205,14 @@ const Grader = {
             done.add(r.studentId + '|' + q.id);
           }
 
+          // Flush grade rows to AIGrades immediately after each batch so that AIGrades and
+          // Responses stay in sync — if the job times out or throws after this point, any
+          // already-scored responses will have a matching AIGrades record.
+          if (newGradeRows.length > 0) {
+            this._batchAppendRows(gradeSheet, newGradeRows);
+            newGradeRows = [];
+          }
+
           this.setStatus(sessId, { state: 'running', sessionId: sessId, gradedCount: count, errors, totalToGrade, message: `Grading... (${count}/${totalToGrade} done)` });
           Utilities.sleep(1500);
 
@@ -237,6 +245,11 @@ const Grader = {
                 if (responseEntry) {
                   respSheet.getRange(responseEntry.row, 8).setValue(singleRes.score);
                   respSheet.getRange(responseEntry.row, 7).setValue(responseEntry.maxPts > 0 && Number(singleRes.score) >= responseEntry.maxPts);
+                }
+                // Flush immediately after each fallback grade to keep sheets in sync.
+                if (newGradeRows.length > 0) {
+                  this._batchAppendRows(gradeSheet, newGradeRows);
+                  newGradeRows = [];
                 }
                 count++;
                 done.add(k);
@@ -429,18 +442,20 @@ const Grader = {
 
 
   overrideScore(sessId, stuId, qId, score, fb) {
-    const sheet = DB.sh('AIGrades');
-    const d = sheet.getDataRange().getValues();
-    for (let i = 1; i < d.length; i++) {
-      if (d[i][0] === sessId && d[i][1] === stuId && d[i][3] === qId) {
-        sheet.getRange(i + 1, 10).setValue(true);
-        sheet.getRange(i + 1, 11).setValue(score);
-        sheet.getRange(i + 1, 12).setValue(fb || '');
-        this._syncResponseScore(sessId, stuId, qId, Number(score) || 0);
-        return { ok: true };
+    return DB.withLock(() => {
+      const sheet = DB.sh('AIGrades');
+      const d = sheet.getDataRange().getValues();
+      for (let i = 1; i < d.length; i++) {
+        if (d[i][0] === sessId && d[i][1] === stuId && d[i][3] === qId) {
+          sheet.getRange(i + 1, 10).setValue(true);
+          sheet.getRange(i + 1, 11).setValue(score);
+          sheet.getRange(i + 1, 12).setValue(fb || '');
+          this._syncResponseScore(sessId, stuId, qId, Number(score) || 0);
+          return { ok: true };
+        }
       }
-    }
-    return { error: 'Grade record not found — run AI grading first.' };
+      return { error: 'Grade record not found — run AI grading first.' };
+    });
   },
 
   regradeWithContext(sessId, qId, ctx) {
@@ -563,12 +578,34 @@ function checkGradeQueue() {
   try { queue = JSON.parse(props.getProperty(Grader.QUEUE_KEY) || '[]'); } catch(e) { console.error('Failed to parse queue JSON:', e); queue = []; }
   if (!queue.length) return; // Nothing queued
 
-  // Dequeue the first session and save remaining back
+  // Dequeue the first session and save remaining back BEFORE processing so that
+  // if the script times out mid-grading the entry is still removed (partial state
+  // is recoverable by re-running grading from the UI).
   const sessId = queue.shift();
   props.setProperty(Grader.QUEUE_KEY, JSON.stringify(queue));
 
   Logger.log('checkGradeQueue: processing session ' + sessId);
-  Grader.gradeSession(sessId);
+  try {
+    Grader.gradeSession(sessId);
+  } catch (e) {
+    Logger.log('checkGradeQueue: gradeSession threw for ' + sessId + ': ' + e.toString());
+    // Re-queue the session for retry, up to a maximum of 3 attempts so a persistently
+    // broken session does not loop forever.
+    const status = Grader.getStatus(sessId);
+    const attempts = (status.attempts || 0) + 1;
+    const MAX_ATTEMPTS = 3;
+    if (attempts <= MAX_ATTEMPTS) {
+      let retryQueue;
+      try { retryQueue = JSON.parse(props.getProperty(Grader.QUEUE_KEY) || '[]'); } catch(e2) { retryQueue = []; }
+      if (!retryQueue.includes(sessId)) retryQueue.push(sessId);
+      props.setProperty(Grader.QUEUE_KEY, JSON.stringify(retryQueue));
+      Grader.setStatus(sessId, { state: 'queued', sessionId: sessId, attempts, message: 'Grading error — will retry automatically (attempt ' + attempts + '/' + MAX_ATTEMPTS + '). Error: ' + (e.message || e.toString()).substring(0, 200) });
+      Logger.log('checkGradeQueue: re-queued ' + sessId + ' for retry (attempt ' + attempts + '/' + MAX_ATTEMPTS + ')');
+    } else {
+      Grader.setStatus(sessId, { state: 'error', sessionId: sessId, attempts, message: 'Grading failed after ' + MAX_ATTEMPTS + ' attempts. Last error: ' + (e.message || e.toString()).substring(0, 300) });
+      Logger.log('checkGradeQueue: giving up on ' + sessId + ' after ' + MAX_ATTEMPTS + ' attempts');
+    }
+  }
 }
 
 // ── ONE-TIME SETUP (run from Apps Script editor, not from web app) ───
