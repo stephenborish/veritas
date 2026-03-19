@@ -1,105 +1,308 @@
-# Veritas Assess - AI Developer Master Guidelines
+# Veritas Assess — AI Developer Master Guidelines
 
-You are developing **Veritas Assess**, a highly concurrent, secure, and beautiful K-12 standardized assessment platform built natively on Google Apps Script (GAS). 
+You are developing **Veritas Assess**, a highly concurrent, secure, and polished K-12 standardized assessment platform built natively on Google Apps Script (GAS). This is a fully deployed, production-grade system — not a prototype. Treat every change with that level of care.
 
-GAS has severe architectural quirks. Do not assume a standard Node.js or React environment. You MUST strictly adhere to the rules in this document to prevent breaking concurrency, UI/UX consistency, or security.
-
----
-
-## 1. Core Architecture & Environment Limitations
-* **Global Namespace:** All backend `.gs` files (`Code.gs`, `Data.gs`, `Grading.gs`) share a single global scope.
-  * 🛑 **NEVER** use ES6 `import`/`export` syntax. 
-  * 🛑 **NEVER** use `require()` or attempt to install npm packages for runtime. 
-* **Frontend Delivery:** The client is served via `HtmlService.createHtmlOutputFromFile()`.
-  * 🛑 **NEVER** create separate `.css` or `.js` files. All styles and scripts must be inline within `StudentApp.html` and `TeacherApp.html`.
-  * The web app uses `XFrameOptionsMode.ALLOWALL` and a mobile viewport meta tag. Do not alter these headers.
-* **External APIs:** All external HTTP requests must be executed using Google's `UrlFetchApp.fetch()`.
+GAS has severe architectural quirks that differ fundamentally from Node.js, React, or standard web environments. Read and internalize every rule in this document before writing a single line of code. Violating any of these constraints risks breaking concurrency safety, corrupting student data, or introducing security vulnerabilities.
 
 ---
 
-## 2. Database & CRITICAL Concurrency (`Data.gs`)
-The app uses Google Sheets as a database. Because 30+ students might submit answers simultaneously, standard Sheets writes will result in data loss.
-* **The `DB` Wrapper:** All database reads/writes MUST route through the `DB` object in `Data.gs`.
-* **LockService (Mandatory):** Every single write operation MUST be wrapped in `DB.withLock(() => { ... })`. This utilizes `LockService.getScriptLock().waitLock(10000)` to queue simultaneous executions safely.
-* **Data Formatting:** Complex objects (like arrays of answers or session configs) are stored as JSON strings in the Sheet. You must `JSON.parse()` on read and `JSON.stringify()` on write.
-* **No Auto-formatting:** When writing student answers to Sheets, prepend with a single quote (`'`) if the answer looks like a number or boolean to prevent Google Sheets from auto-formatting it (e.g., converting "+100%" to `1`).
+> **Living Document Rule:** After every major feature addition, bug fix, or refactor, **update this file** to reflect what you discovered. This is especially important when you uncover non-obvious behaviors — platform quirks, implicit data contracts, subtle security constraints, or anything you would not have known without reading the code deeply. Future AI sessions depend on this knowledge.
 
 ---
 
-## 3. Frontend Client-Server Sync (`StudentApp.html`)
-The connection between the client and Google's servers can drop. You must never lose a student's answer.
-* **The `SyncQueue` Object:** Do not call `google.script.run` directly for student submissions. You MUST use the `SyncQueue` object.
-  * *Why?* It implements a retry mechanism with exponential backoff if the server throws a "System is busy" lock error.
-  * *Usage:* `SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, answer]);`
-* **Local State (`S` Object):** The student's session state is tracked in the global `S` object (e.g., `S.ans`, `S.conf`, `S.cur`, `S.locked`). Keep DOM updates in sync with this object.
+## 1. Core Architecture & Environment Constraints
+
+### Shared Global Namespace
+All backend `.gs` files (`Code.gs`, `Data.gs`, `Grading.gs`) share a single global scope. There is no module system.
+* 🛑 **NEVER** use ES6 `import`/`export` syntax.
+* 🛑 **NEVER** use `require()` or attempt to install npm packages at runtime.
+* ✅ Define shared state via top-level `const` objects (e.g., `const DB = {...}`, `const Grader = {...}`).
+
+### Frontend Delivery
+The client UI is served via `HtmlService.createHtmlOutputFromFile()`. There is no build step, no bundler, no CDN of your own.
+* 🛑 **NEVER** create separate `.css` or `.js` files. All styles and scripts must be inline within `StudentApp.html` and `TeacherApp.html`.
+* The app uses `XFrameOptionsMode.ALLOWALL` and a mobile viewport meta tag. Do not alter these.
+* External resources (fonts, KaTeX, DOMPurify) are loaded via CDN `<link>`/`<script>` tags at the top of the HTML files.
+
+### External HTTP
+All external HTTP requests (including Gemini API calls) must use `UrlFetchApp.fetch()`. `fetch()`, `XMLHttpRequest`, and `axios` are not available on the server side.
+
+### `google.script.run` Constraint (Critical)
+The client calls backend functions via `google.script.run`. **This mechanism can ONLY call top-level global functions** — it cannot reach into object methods like `DB.foo()` or `Grader.bar()`. This is why `Code.gs` exists entirely as a thin layer of top-level wrapper functions that delegate into `DB` and `Grader`. Do not bypass this pattern.
+
+### `doGet` Routing
+The `doGet(e)` function in `Code.gs` is the single entry point for all web requests. It routes to `StudentApp.html` if the URL contains `?page=student`, a `?code=`, or a `?studentToken=` parameter. All other requests go to `TeacherApp.html`. Do not add additional routing logic without understanding this.
 
 ---
 
-## 4. UI/UX Aesthetic: Glassmorphism & Design Tokens
-Veritas Assess has a premium, polished, glassmorphism aesthetic. Do not introduce foreign UI frameworks (like Tailwind or Bootstrap). Use the established CSS variables and classes.
+## 2. Database Architecture (`Data.gs`)
 
-**Design Tokens:**
-* **Backgrounds:** `--bg` (soft gradient), `--s` (glassmorphism pane `rgba(255, 255, 255, 0.85)`).
-* **Borders & Shadows:** `--bd`, `--bd2`, `--sh` (subtle shadow), `--sh2` (hover shadow).
-* **Colors:** `--teal` (Primary), `--red` (Violations), `--amb` (Warnings/Unsure), `--grn` (Correct), `--blue` (MC tags), `--pur` (SA tags).
-* **Typography:** * `Outfit`: Headers, branding, buttons, big numbers.
-  * `Inter`: Body text, inputs, textareas.
-  * `JetBrains Mono`: Timers, session codes.
+### Google Sheets as a Database
+The app uses a Google Sheets spreadsheet (named `'Veritas Assess — Data'`) as its database. The spreadsheet ID is cached in `PropertiesService` under `VA_SHEET_ID` after the first `initSystem()` call to avoid expensive Drive searches on every request.
 
-**Standardized Components:**
-* **Buttons:** Use `<button class="btn bp">` for primary actions (gradient teal), `.btn bg` for ghost/secondary, `.btn bd` for destructive.
-* **Cards:** Use `<div class="card">` or `<div class="q-card">` for the glassmorphism blur effect and hover transitions.
-* **Modals:** Use the `.sys-modal-bg` and `.sys-modal-card` system. Never use native browser `alert()` or `prompt()`. Trigger via `sysConfirm(title, desc, confirmText, callback)`.
-* **Toasts:** Use `toast('Message', 'ok' | 'err')` for transient notifications.
+### Sheet Schema
+The following named sheets exist. Each column maps to a specific field — do not reorder:
+* **Courses:** `ID | Name | Blocks | CreatedAt`
+* **QSets:** `ID | Name | CourseID | CreatedAt | UpdatedAt | QuestionsJSON | StimuliJSON`
+* **Rosters:** `Block | CourseID | StudentsJSON | UpdatedAt`
+* **Sessions:** *(active and recently ended sessions)*
+* **Archive:** *(ended sessions promoted here by `archiveSession()`)*
+* **Responses:** `SessionID | StudentID | StudentName | QuestionID | Answer | IsCorrect | ... | AIScore`
+* **Meta:** *(metacognition / confidence data)*
+* **Violations:** *(anti-cheat event log)*
+* **AIGrades:** `SessionID | StudentID | StudentName | QuestionID | Score | MaxPts | Feedback | Answer | GradedAt | IsOverride | OverrideScore | OverrideFeedback | ContextUsed`
 
----
+### The `DB` Object
+All reads and writes route through the `DB` object in `Data.gs`. Never call `SpreadsheetApp` directly from `Code.gs` or `Grading.gs`. `DB.ss()` resolves the spreadsheet; `DB.sh(name)` gets a named sheet.
 
-## 5. Security, Identity, and Anti-Cheat
-* **Student Tokens:** Student entry links use a custom JWT-like implementation. The token contains a Base64-URL encoded JSON payload, signed via HMAC-SHA256 (`Utilities.computeHmacSha256Signature`) using `STUDENT_LINK_SECRET`.
-* **Lockout Mechanics:** The student view tightly monitors focus. 
-  * Intercepting `visibilitychange` (tab switching).
-  * Intercepting `fullscreenchange` (exiting fullscreen).
-  * Intercepting keystrokes (Mac/Win/Chrome OS screenshot shortcuts).
-  * Violations trigger `triggerLockout()`, halting the exam and updating the `S.locked` state until the teacher explicitly readmits them.
-* **XSS Prevention (DOMPurify):** Because the app relies heavily on string interpolation inside template literals to render UI components, you **MUST** ensure all user-controlled data (e.g., question text, student responses, answer choices) is wrapped in `DOMPurify.sanitize(variable)` before being injected into the DOM. Failure to do so introduces critical Cross-Site Scripting (XSS) vulnerabilities.
+### LockService (Mandatory for All Writes)
+Because 30+ students may submit answers simultaneously, every single write operation **must** be wrapped in `DB.withLock(() => { ... })`. This uses `LockService.getScriptLock().waitLock(10000)` to queue simultaneous executions. If the lock isn't obtained, `withLock` returns `{ error: 'System is busy...' }` — the client `SyncQueue` handles this gracefully via retry.
 
----
+### Data Serialization
+Complex objects (arrays of answers, session configs, student rosters) are stored as JSON strings in cells. Always `JSON.parse()` on read and `JSON.stringify()` on write. The `QSets` sheet stores `QuestionsJSON` and `StimuliJSON` in separate columns.
 
-## 6. AI Integration Rules (`Code.gs` & `Grading.gs`)
-The app integrates with Gemini via raw REST calls (`UrlFetchApp`).
-* **Grading Regex Fallback:** The AI is instructed to return pure JSON `{"score": X, "feedback": "Y"}`. However, LLMs hallucinate markdown (` ```json `). The code strips markdown fences and uses regex to extract score/feedback if parsing fails. When modifying AI logic, preserve this robust fallback parsing.
-* **Context Overrides:** The grading system supports `regradeWithContext`. Any changes to grading logic must preserve the ability to pass the teacher's custom context string to the AI prompt.
-* **Token Limits:** Large class reports use `gemini-2.5-pro` with `maxOutputTokens: 8192`. Before passing data to the AI, strip bloated config JSON and send *only* clean arrays of `questions`, `responses`, and `metacognition` to save tokens.
+### Auto-Formatting Gotcha
+When writing student answers, prepend with a single quote (`'`) if the answer could be misinterpreted by Sheets (numbers, booleans, percent strings like `+100%` → `1`).
 
 ---
 
-## 7. The Persistent Background Trigger Pattern
-Apps Script blocks web apps from creating triggers (`ScriptApp.newTrigger()`).
-* **The Queue:** When a teacher requests AI grading, DO NOT attempt to run it synchronously (it will time out after 6 mins) and DO NOT try to create a trigger. 
-* **The Solution:** Write the `sessionId` to the `PropertiesService` under the key `VA_GRADE_QUEUE`. 
-* A persistent 1-minute trigger (`checkGradeQueue()`) installed manually by the teacher will automatically pick up the queued ID and execute `Grader.gradeSession(sessId)`.
-* Polling: The client UI uses `setInterval` to poll `getGradingStatus()` and updates the progress bar based on the background worker's writes.
+## 3. Client-Server Communication (`StudentApp.html`)
+
+### The `SyncQueue` Object (Never Bypass)
+Do not call `google.script.run` directly for student submissions. Always use:
+```js
+SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, answer]);
+SyncQueue.add('studentSubmitMeta',   [S.sid, S.stuId, qId, confVal]);
+```
+`SyncQueue` implements exponential-backoff retry for GAS "System is busy" lock errors. Bypassing it risks silent data loss.
+
+### The `S` (Session State) Object
+All student-side state lives in the global `S` object:
+* `S.sid` — session ID
+* `S.stuId` — student identifier
+* `S.qs` — questions array
+* `S.ans` — answers map `{ qId: answerValue }`
+* `S.conf` — confidence ratings map
+* `S.cur` — current question index
+* `S.locked` — whether the student is locked out (anti-cheat)
+* `S.done` — whether the student has submitted
+* `S.mode` — `'lockstep'` or free-navigation
+* `S.metaEnabled` — whether confidence rating is active
+* `S.lockedQs` / `S.revealedQs` — lockstep control arrays
+
+Keep all DOM updates in sync with this object.
+
+### Lockstep Mode
+When `S.mode === 'lockstep'`, navigation is entirely teacher-controlled. Students cannot advance questions themselves. The teacher's dashboard sends `advanceQuestion()` / `goToQuestion()` / `revealAnswer()` / `revealAllAnswers()` / `toggleLockQuestion()` server calls. The student UI polls `studentCheckStatus()` to detect teacher-driven state changes and re-renders accordingly. In lockstep, the previous/next buttons are hidden and the student UI shows a "waiting" state for locked questions.
+
+### Polling Architecture
+The student UI uses `setInterval` to poll `studentCheckStatus()` (and `getGradingStatus()` during grading). The teacher UI polls `getLiveResults()` for the live dashboard. These are the primary mechanisms for real-time updates — GAS has no WebSocket or push capability.
 
 ---
 
-## 8. UX & State Transitions
-* **Optimistic/Immediate UI Feedback:** Google Apps Script backend calls are slow (often taking 1–3 seconds). Whenever an action is triggered (e.g. Next Question, Lock, AI Grade), you **MUST** immediately update the UI to reflect a loading or pending state. Examples include disabling buttons, showing spinners, or dimming elements (`opacity: 0.5`) so the user knows the system is working.
-* **Smooth Transitions:** Avoid harsh UI jumps. When swapping major components or questions (especially in Student Lockstep Mode), use CSS animations (like `.fade-in-up`, `opacity` transitions, or a `get-ready-overlay`) to make the interface feel responsive and high-end.
-* **State Interruption:** Lockstep mode runs on a continuous polling interval. When you trigger a UI transition (like a "Get Ready" screen), use a flag (e.g., `S.isTransitioning`) to temporarily ignore polling updates. This prevents the background sync from re-rendering the DOM while an animation is playing.
+## 4. Security, Identity & Anti-Cheat
 
-## 9. Code Health and Maintainability
-* **Empty Catch Blocks:** Never leave `catch` blocks entirely empty. If an error is expected (e.g., trying to `JSON.parse` a student's answer that might legitimately be plain text), gracefully handle the fallback and log the event securely using `console.debug()` or `console.warn()`. This preserves system observability without spamming the console with expected errors.
+### Student Access Tokens (JWT-like)
+Student entry links embed a signed token (`?studentToken=...`). The token is a Base64-URL-encoded JSON payload signed with HMAC-SHA256 using `STUDENT_LINK_SECRET` (stored in `PropertiesService`, auto-generated on first use).
 
-## 10. Autonomous Deployment Workflow
-You have been granted full authorization to deploy code directly to Google Apps Script via `clasp`. 
-When you are tasked with adding a feature or fixing a bug, follow this exact workflow:
-1. Write and modify the necessary `.gs` or `.html` files.
-2. Review your changes against the architecture rules in this document.
-3. Once you are confident the code is complete, execute `npx clasp push` in the terminal to deploy the updates directly to the live Apps Script project.
-4. Notify the user that the code has been successfully pushed and is ready for them to test.
+Token format: `<base64url_payload>.<base64url_signature>`
 
-## 11. Code Health & Best Practices
-* **Exception Handling:** In general, avoid empty `catch (e) {}` blocks and log unexpected errors to aid in debugging.
-  * **Expected Fallbacks (DO NOT LOG):** Do *not* log warnings for expected parse fallbacks (like JSON parsing failures for raw strings) in O(N) loops. Plain-string answers are a normal input shape, and logging them emits thousands of avoidable warnings that add client-side overhead and bury actionable errors.
-  * **Client-Side Logging:** In client-side code (`TeacherApp.html`, `StudentApp.html`), use `console.error(e)` for critical logic failures and `console.warn(e)` for unexpected but non-critical errors (like KaTeX rendering failures).
-  * In backend code (`Code.gs`, `Data.gs`, `Grading.gs`), use `console.error(e)` or `Logger.log(e)` so errors are visible in the Apps Script execution logs.
+Key functions in `Code.gs`:
+* `createStudentAccessToken(session, student)` — issues a token
+* `verifyStudentAccessToken(token)` — validates signature, returns decoded payload or `null`
+* `constantTimeEquals_(a, b)` — timing-safe string comparison (prevents timing attacks on HMAC verification)
+* `signStudentAccessPayload_(payloadSegment)` — HMAC signing
+
+The token payload includes: `v`, `sid`, `code`, `block`, `email`, `name`, `firstName`, `lastName`, `normalizedName`, `issuedAt`.
+
+🛑 **NEVER** use `===` for HMAC comparison — always use `constantTimeEquals_()`.
+
+### Identity Normalization
+Student names are normalized via `normalizeStudentIdentityName_()` (lowercased, whitespace-collapsed) for fuzzy roster matching. This normalization is stored in the token payload itself (`normalizedName` field) so re-computation is consistent.
+
+### Anti-Cheat: Browser Lockout
+The student view enforces exam integrity by:
+* Requiring the browser to enter fullscreen before the exam begins (with a hard block that re-prompts if they haven't entered).
+* Listening for `fullscreenchange` — exiting fullscreen triggers `triggerLockout('fullscreen_exit')`.
+* Listening for `visibilitychange` — switching tabs triggers a lockout.
+* Intercepting screenshot keystrokes (Mac: Cmd+Shift+3/4/5; Win: Win+PrtSc; Chrome OS: CtrlWindow+PrtSc, etc.).
+* Violations call `studentReportViolation()` → `DB.studentReportViolation()`, which logs to the Violations sheet and sets a `locked` flag on the student's session row.
+* Teachers can `readmitStudent()` from the live dashboard. Teachers can also `dismissViolation()` from the archived session view.
+* The `S.done` flag is set **before** exiting fullscreen on final submission to prevent a false lockout on the finish flow.
+
+### XSS Prevention (DOMPurify)
+Because UI rendering relies heavily on template literals injecting server-provided strings (question text, student names, answer choices, AI feedback), **all user-controlled data must be wrapped in `DOMPurify.sanitize(variable)`** before being injected into the DOM. DOMPurify is loaded via CDN in both HTML files.
+
+🛑 This is non-negotiable. Missing a single sanitization call on question text or student answers is a critical XSS vulnerability.
+
+---
+
+## 5. Email Delivery (`Code.gs`)
+
+### `MailApp` vs `GmailApp`
+The app uses `MailApp.sendEmail()` — **not** `GmailApp`. `MailApp` handles Google Workspace EDU domain restrictions far more gracefully and is the correct choice for school deployments. Do not switch to `GmailApp`.
+
+### URL Resolution Complexity
+Generating correct student join URLs is non-trivial due to GAS deployment quirks:
+* `ScriptApp.getService().getUrl()` — canonical deployment URL (preferred, may be unavailable in some execution contexts).
+* `clientBaseUrl` — passed from `window.location` in the browser (reliable runtime value, used as fallback).
+* `PropertiesService.getProperty('DEPLOY_URL')` — stored property (last resort, may be stale after re-deploy).
+* Editor preview URLs (containing `userCodeAppPanel` or `script.googleusercontent.com`) are **invalid** for student links and must be detected and rejected by `isPreviewEditorUrl()`.
+* Legacy Workspace URLs (`/a/<domain>/macros/s/<id>/exec`) are rewritten to the canonical format (`/a/macros/<domain>/s/<id>/exec`) by `buildStudentJoinUrl()`.
+
+Key URL helpers: `resolveWebAppBaseUrl()`, `resolveStudentLandingUrl()`, `buildStudentJoinUrl()`, `isCanonicalExecUrl()`, `isPreviewEditorUrl()`.
+
+### Personalized Tokens in Emails
+Each student's email contains a **unique, pre-signed `studentToken`** embedded in their join URL. This auto-fills their name and session code on the student login screen, eliminating manual entry. The email also displays the session code as a plaintext backup in case the token pre-fill fails.
+
+---
+
+## 6. AI Integration
+
+### Gemini Models in Use
+* **`gemini-2.5-flash`** — used for short-answer grading (`Grader.MODEL`). Chosen for speed and cost on per-response batch calls.
+* **`gemini-2.5-pro`** — used for the full-class AI analysis report (`generateAIClassReport()`). Higher token budget, more analytical depth.
+
+All calls use `UrlFetchApp.fetch()` to the `v1beta` REST endpoint with `muteHttpExceptions: true`. Always check `response.getResponseCode()` before parsing.
+
+### Batch Grading (Primary Path)
+`Grader.callGeminiBatch()` sends up to **15 student responses per API call** (the `BATCH_SIZE` constant) in a single prompt. The model is asked to return a JSON **array** of `{ id, score, feedback }` objects. This dramatically reduces API call count versus per-student calls.
+
+### Single-Response Fallback (Secondary Path)
+If a batch call fails (network error, malformed JSON) or a student ID is missing from the batch result, the grader falls back to `Grader.callGemini()` for individual student re-grading. This fallback-within-fallback is intentional for resilience.
+
+### Robust Response Parsing (Never Simplify)
+LLMs frequently hallucinate markdown fences (` ```json `) around their response. The parsing pipeline strips these before attempting `JSON.parse()`. For single-response calls, a further regex fallback extracts `score` and `feedback` from partially malformed or truncated JSON. **Do not remove these fallbacks** — they are the difference between graceful degradation and a hard failure.
+
+For batch calls, the parser attempts:
+1. Extract the first `[...]` array literal from the raw text.
+2. If that fails, parse the full `text` as JSON directly.
+3. If both fail, throw to trigger the per-student fallback path.
+
+### Token Budget Strategy
+Before sending data to `generateAIClassReport()`, strip the full session config (which contains bloated question-set metadata) and send only clean arrays of `questions`, `responses`, `metacognition`, and `violations`. This prevents token exhaustion and reduces latency.
+
+### Regrade with Context
+`regradeWithContext(sessId, qId, ctx)` re-grades all responses for a single question using a teacher-supplied `ctx` string appended to the prompt as `ADDITIONAL TEACHER CONTEXT`. This context string is also stored in the `AIGrades` sheet (`ContextUsed` column) for auditability.
+
+---
+
+## 7. Background Grading Trigger Pattern
+
+### Why It Exists
+GAS web app executions (`doGet`/`doPost` context) have a strict 6-minute execution timeout. Grading a full class of short-answer responses can exceed this limit. Additionally, `ScriptApp.newTrigger()` is **blocked** inside web app executions — you cannot create triggers dynamically from a web request.
+
+### The Solution (Queue + Permanent Trigger)
+1. **One-time setup (teacher does this once):** Run `setupGradingTrigger()` from the Apps Script editor. This creates a permanent 1-minute time-based trigger for `checkGradeQueue()`.
+2. **On teacher request:** `startAIGrading(sessId)` writes `sessId` into a JSON array stored under `VA_GRADE_QUEUE` in `PropertiesService` and returns immediately.
+3. **Every minute:** `checkGradeQueue()` dequeues the first session ID and calls `Grader.gradeSession()` synchronously.
+4. **Progress polling:** The teacher UI polls `getGradingStatus(sessId)` via `setInterval` and updates a progress bar based on the `VA_GRADE_STATUS_<sessId>` property that the grader continuously writes.
+
+### Grading Status States
+`{ state: 'idle' | 'queued' | 'running' | 'partial' | 'done' | 'error', gradedCount, totalToGrade, errors, message }`
+
+`'partial'` means the 5-minute timeout was hit mid-session — the teacher can trigger grading again to resume from where it stopped (already-graded responses are skipped via the `done` Set).
+
+### Trigger Guard
+`startGradingAsync()` checks that `checkGradeQueue` trigger exists **before** writing to the queue. If the trigger is missing, it returns a clear error message instructing the teacher to run `setupGradingTrigger()`. Do not remove this guard.
+
+---
+
+## 8. UI/UX Design System
+
+### Aesthetic
+Veritas Assess has a premium glassmorphism aesthetic. Do not introduce Tailwind, Bootstrap, or any external CSS framework. Use only the established CSS variables and component classes.
+
+### Design Tokens (CSS Variables)
+* **Backgrounds:** `--bg` (soft gradient page background), `--s` (glassmorphism pane — `rgba(255,255,255,0.85)`)
+* **Borders & Shadows:** `--bd`, `--bd2`, `--sh` (subtle shadow), `--sh2` (hover shadow)
+* **Brand Colors:** `--teal` (primary actions), `--red` (violations/destructive), `--amb` (warnings/unsure confidence), `--grn` (correct answers), `--blue` (MC question tags), `--pur` (SA question tags)
+* **Text:** `--tx`, `--tx2`, `--tx3` (primary, secondary, muted)
+
+### Typography (Google Fonts, loaded via CDN)
+* `Outfit` — headers, branding, buttons, large numbers
+* `Inter` — body text, inputs, textareas
+* `JetBrains Mono` — timers, session codes (monospace precision)
+
+### Standardized Components
+* **Buttons:** `.btn.bp` (primary, teal gradient), `.btn.bg` (ghost/secondary), `.btn.bd` (destructive/red)
+* **Cards:** `.card`, `.q-card` — glassmorphism blur effect with hover transitions
+* **Modals:** `.sys-modal-bg` / `.sys-modal-card`. 🛑 **NEVER** use `alert()`, `confirm()`, or `prompt()` — they trigger browser security warnings (especially in fullscreen). Always use `sysConfirm(title, desc, confirmText, callback, isDestructive)`.
+* **Toasts:** `toast('Message', 'ok' | 'err')` — transient notifications
+
+### KaTeX Math Rendering
+Both `StudentApp.html` and `TeacherApp.html` load KaTeX (v0.16.9) from CDN. Math expressions are rendered as `<span class="katex-inline" data-latex="...">` elements. After any dynamic DOM update that may contain math, call `document.querySelectorAll('.katex-inline').forEach(el => katex.render(...))`. KaTeX render errors are caught and logged with `console.warn()` — never let a KaTeX error block UI rendering.
+
+The teacher question editor has a rich-text toolbar (`rteTB()`) with math insertion shortcuts for fractions (`frac`), square roots (`sqrt`), and other common expressions.
+
+---
+
+## 9. Question & Session Data Model
+
+### Question Types
+* `'mc'` — Multiple choice. Has `choices[]` array and `correctIndices[]` (supports multiple correct answers) or legacy `correctIndex`.
+* `'sa'` — Short answer. Has `rubric` (grading criteria for AI), `sampleAnswer` (ideal answer for AI), and `points` (max score).
+
+### Session Config
+A session object includes: `sessionId`, `code` (student join code), `block`, `setId`, `setName`, `config` (JSON blob with `qSet`, `courseId`, `metacognitionEnabled`, `summaryConfig`, etc.), and runtime state like `currentQuestionIndex`, `revealedAnswers[]`, `lockedQuestions[]`.
+
+### Summary Config
+`updateSummaryConfig(id, cfg)` controls what students see on their post-submission summary screen (e.g., whether to show correct answers, AI feedback, scores). This is a teacher-controlled toggle.
+
+### Stimuli (Question Sets)
+Question sets support an optional `stimuli` array (stored in `StimuliJSON` column of `QSets`). Stimuli are reference materials (e.g., diagrams, passages) displayed alongside questions. The `stimuli` array is passed through to the student client in `studentGetQuestions()`.
+
+### Score Syncing
+After AI grading or a manual override, `Grader._syncResponseScore()` updates the `Responses` sheet directly (column 8 = AI score, column 7 = `isCorrect` boolean) to keep analytics consistent. This dual-write is intentional — the `Responses` sheet is the source of truth for analytics; `AIGrades` is the source of truth for grading details/feedback.
+
+---
+
+## 10. Drive Image Uploads
+
+Images are uploaded from the teacher's question editor via `uploadImage(base64, filename, mimeType)`. The server:
+1. Decodes the base64 string and creates a Drive blob.
+2. Stores it in a folder named `'Veritas Assess — Images'` (auto-created on first use via `getOrCreateImageFolder()`).
+3. Sets sharing to `ANYONE_WITH_LINK / VIEW`.
+4. Returns a `drive.google.com/thumbnail?id=...&sz=w1000` URL for direct embedding.
+
+Images are embedded directly in question text as `<img>` tags within the rich-text editor.
+
+---
+
+## 11. Permission & Initialization
+
+### `AUTHORIZE_SYSTEM()`
+This is a one-time setup function that the deployer runs manually from the Apps Script editor. It touches every GAS API the app uses (SpreadsheetApp, DriveApp, MailApp, PropertiesService, LockService) to trigger Google's OAuth consent flow for all required scopes at once. It also sends a confirmation email to the deployer. After running it, the deployer must re-deploy the web app with a new version.
+
+🛑 Do not remove or simplify `AUTHORIZE_SYSTEM()` — it is the primary onboarding step.
+
+### `initSystem()`
+Called from the teacher UI on first setup. Creates the `'Veritas Assess — Data'` spreadsheet (if it doesn't exist), creates all required named sheets with their header rows, and stores the spreadsheet ID in `PropertiesService`.
+
+---
+
+## 12. Code Health & Best Practices
+
+### Exception Handling
+* **Never leave `catch` blocks empty.** Log unexpected errors.
+* **Backend:** Use `console.error(e)` or `Logger.log(e)` so errors appear in the Apps Script execution log.
+* **Frontend:** Use `console.error(e)` for critical failures, `console.warn(e)` for non-critical (e.g., KaTeX render failures).
+* **Expected fallbacks (do not log in O(N) loops):** `JSON.parse()` failures on plain-string student answers are expected and normal — do not emit a warning per student. Logging in tight loops causes thousands of avoidable noise entries and buries real errors.
+
+### API Contract (Code.gs as Single Source of Truth)
+`Code.gs` contains a full API contract comment block listing every server-callable function, its parameters, and its return type. Keep this block updated whenever you add or modify server functions. It is the canonical contract between the frontend and backend.
+
+### Backward Compatibility
+The codebase maintains a few backward-compatible aliases (e.g., `getGradingStatus` → `getStatus`). Do not remove these without auditing all client callsites first.
+
+---
+
+## 13. Deployment Workflow
+
+When making any change:
+1. Edit the relevant `.gs` or `.html` file(s).
+2. Review your changes against every applicable rule in this document.
+3. Run `npx clasp push` to deploy to the live Apps Script project.
+4. Notify the user the push is complete and ready for testing.
+
+You have full authorization to deploy directly via `clasp`. Do not ask for permission to push — just push when the code is ready.
