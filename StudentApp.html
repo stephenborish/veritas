@@ -265,6 +265,50 @@
       opacity: 0.9;
     }
 
+    /* Polished Session Ended card */
+    @keyframes sessionEndedIn {
+      from { opacity: 0; transform: translateY(28px) scale(0.96); }
+      to   { opacity: 1; transform: translateY(0)   scale(1);    }
+    }
+
+    .session-ended-card {
+      background: rgba(255, 255, 255, 0.13);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 28px;
+      padding: 64px 56px;
+      max-width: 560px;
+      width: calc(100% - 48px);
+      text-align: center;
+      animation: sessionEndedIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.12);
+    }
+
+    .session-ended-icon {
+      font-size: 72px;
+      margin-bottom: 20px;
+      display: block;
+    }
+
+    .session-ended-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 36px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 14px;
+      letter-spacing: -1px;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .session-ended-msg {
+      font-size: 17px;
+      color: rgba(255, 255, 255, 0.82);
+      line-height: 1.65;
+      max-width: 380px;
+      margin: 0 auto;
+    }
+
     .fsbtn {
       padding: 18px 48px;
       font-family: 'Outfit', sans-serif;
@@ -1342,10 +1386,10 @@
       const lo = document.getElementById('lockOverlay');
       if (type === 'session_ended') {
         lo.innerHTML = `
-          <div class="q-card" style="text-align:center; padding: 64px 40px; border:2px solid var(--red); max-width:600px;">
-            <div style="font-size:56px; margin-bottom:16px">🛑</div>
-            <h2 style="font-size:32px; font-weight:800; margin-bottom:12px; color:var(--red);">Session Ended</h2>
-            <div style="color:var(--tx2); font-size:18px;">The teacher has officially ended this session. You can no longer submit responses or view questions.</div>
+          <div class="session-ended-card">
+            <span class="session-ended-icon">🛑</span>
+            <div class="session-ended-title">Session Ended</div>
+            <div class="session-ended-msg">The teacher has officially ended this session. You can no longer submit responses or view questions.</div>
           </div>
         `;
         lo.classList.add('show');
