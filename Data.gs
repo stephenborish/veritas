@@ -518,7 +518,8 @@ const DB = {
     const d=this.sh('StudentSessions').getDataRange().getValues();
     for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){
       return {...sessionState,lockedOut:d[i][8]===true||d[i][8]==='TRUE',
-        needsFullscreen:d[i][10]===true||d[i][10]==='TRUE'};
+        needsFullscreen:d[i][10]===true||d[i][10]==='TRUE',
+        gradeStatus:Grader.getStatus(sessId).state||'idle'};
     }
     return {sessionStatus:'not-found'};
   },
