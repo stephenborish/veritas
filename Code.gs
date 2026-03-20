@@ -693,6 +693,6 @@ function computeItemDiscrimination(sessionId) {
 function computeConfidenceCalibration(sessionId) {
   try { return DB.computeConfidenceCalibration(sessionId); } catch (e) { return { error: e.message }; }
 }
-function getCrossSessionRiskReport(courseId) {
-  try { return DB.getCrossSessionRiskReport(courseId); } catch (e) { return { error: e.message }; }
+function getCrossSessionRiskReport(courseId, blockFilter) {
+  try { return DB.getCrossSessionRiskReport(courseId, blockFilter); } catch (e) { return { error: e.message }; }
 }
