@@ -224,6 +224,7 @@ function goToQuestion(id, qIndex) { return DB.goToQuestion(id, qIndex); }
 function revealAnswer(id, qId) { return DB.revealAnswer(id, qId); }
 function revealAllAnswers(id) { return DB.revealAllAnswers(id); }
 function setTimer(id, config) { return DB.setTimer(id, config); }
+function dismissQuestionTimer(sessId) { try { return DB.dismissQuestionTimer(sessId); } catch(e) { return {error:e.message}; } }
 function updateSessionConfig(id, key, val) { return DB.updateSessionConfig(id, key, val); }
 function updateSummaryConfig(id, cfg) { return DB.updateSummaryConfig(id, cfg); }
 function archiveSession(id) { return DB.archiveSession(id); }

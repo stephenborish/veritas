@@ -223,6 +223,7 @@ const DB = {
     if (revealMode === 'never') revealedQs = [];
     if (revealMode === 'end' && sess.status === 'ended') revealedQs = ids.slice();
     const lockedQs = Array.isArray((sess.config || {}).lockedQs) ? sess.config.lockedQs : [];
+    const cfg = sess.config || {};
     return {
       sessionId: sess.sessionId,
       sessionStatus: sess.status,
@@ -233,7 +234,10 @@ const DB = {
       revealedQs,
       lockedQs,
       calcEnabled: sess.calcEnabled,
-      metacognitionEnabled: (sess.config || {}).metacognitionEnabled !== false
+      metacognitionEnabled: cfg.metacognitionEnabled !== false,
+      qTimerSeconds: cfg.qTimerSeconds || 0,
+      qTimerState:   cfg.qTimerState   || null,
+      closeAt:       cfg.closeAt       || null
     };
   },
   endSession(id) {
@@ -254,7 +258,14 @@ const DB = {
     return this.withLock(() => {
       const sess=this.getActiveSession(); if(!sess) return {error:'No active session.'};
       if(sess.code!==code.toUpperCase().trim()) return {error:'Invalid code.'};
-      
+
+      // Enforce access window
+      const _now = new Date();
+      const _openAt  = (sess.config||{}).openAt  ? new Date(sess.config.openAt)  : null;
+      const _closeAt = (sess.config||{}).closeAt ? new Date(sess.config.closeAt) : null;
+      if (_openAt  && _now < _openAt)  return {error: 'This assessment has not opened yet. It opens at ' + _openAt.toLocaleString() + '.'};
+      if (_closeAt && _now > _closeAt) return {error: 'This assessment is closed.'};
+
       const name=(first.trim()+' '+last.trim()).trim();
       const normalizedName=this.normalizeStudentName(name);
       const courseId=(sess.config && sess.config.courseId) || '';
@@ -484,6 +495,9 @@ const DB = {
 
   studentCheckStatus(sessId,stuId) {
     const sess=this.getSessionById(sessId); if(!sess) return {sessionStatus:'ended'};
+    // Enforce access window close time — treat expired window as ended session
+    const _closeAt = (sess.config||{}).closeAt ? new Date(sess.config.closeAt) : null;
+    if (_closeAt && new Date() > _closeAt) return {sessionStatus:'ended'};
     const qSet=this.getQSet(sess.setId);
     const validIds = qSet ? qSet.questions.map(q=>q.id) : [];
     const sessionState = this._normalizeSessionState(sess, validIds);
@@ -672,7 +686,18 @@ const DB = {
       const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
       const maxQ = Math.max(0, qSet.questions.length - 1);
       const q=Math.max(0,Math.min(Number(qIndex)||0,maxQ));
-      this.sh('Sessions').getRange(sess.row,10).setValue(q);
+      const sheet = this.sh('Sessions');
+      sheet.getRange(sess.row,10).setValue(q);
+      // Auto-start question timer for lockstep sessions that have a question time limit
+      const qTimerSeconds = (sess.config||{}).qTimerSeconds;
+      if (qTimerSeconds && sess.mode === 'lockstep') {
+        const qId = qSet.questions[q] ? qSet.questions[q].id : null;
+        if (qId) {
+          const cfg = sess.config || {};
+          cfg.qTimerState = {qId, startedAt: new Date().toISOString(), dismissed: false};
+          sheet.getRange(sess.row,13).setValue(JSON.stringify(cfg));
+        }
+      }
       const updatedSess = this.getSessionById(id);
       return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(qq=>qq.id))};
     });
@@ -707,7 +732,18 @@ const DB = {
       const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
       const maxQ = Math.max(0, qSet.questions.length - 1);
       const nextQ = Math.max(0, Math.min((Number(sess.currentQ)||0) + 1, maxQ));
-      this.sh('Sessions').getRange(sess.row,10).setValue(nextQ);
+      const sheet = this.sh('Sessions');
+      sheet.getRange(sess.row,10).setValue(nextQ);
+      // Auto-start question timer for lockstep sessions that have a question time limit
+      const qTimerSeconds = (sess.config||{}).qTimerSeconds;
+      if (qTimerSeconds && sess.mode === 'lockstep') {
+        const qId = qSet.questions[nextQ] ? qSet.questions[nextQ].id : null;
+        if (qId) {
+          const cfg = sess.config || {};
+          cfg.qTimerState = {qId, startedAt: new Date().toISOString(), dismissed: false};
+          sheet.getRange(sess.row,13).setValue(JSON.stringify(cfg));
+        }
+      }
       const updatedSess = this.getSessionById(id);
       return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(q=>q.id))};
     });
@@ -740,6 +776,17 @@ const DB = {
       const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
       this.sh('Sessions').getRange(sess.row,14).setValue(JSON.stringify(config||{type:'none'}));
       return {ok:true,timer:config||{type:'none'}};
+    });
+  },
+  dismissQuestionTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (cfg.qTimerState) cfg.qTimerState.dismissed = true;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId);
+      const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
     });
   },
   updateSessionConfig(id, key, val) {
