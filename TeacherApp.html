@@ -1586,7 +1586,7 @@
               </select></div>
           </div>
           <div class="fg">
-            <div class="fr"><label>Mode</label><select id="lMode">
+            <div class="fr"><label>Mode</label><select id="lMode" onchange="document.getElementById('lQTimerRow').style.display=this.value==='lockstep'?'flex':'none'">
                 <option value="self-paced">Self-Paced</option>
                 <option value="lockstep" selected>Lockstep (Teacher paced)</option>
                 <option value="randomized">Randomized Questions</option>
@@ -1606,6 +1606,16 @@
               </select></div>
             <div class="fr" id="lTR" style="display:none"><label>Minutes</label><input type="number" id="lTM" value="30"
                 min="1" max="180"></div>
+          </div>
+
+          <div class="fg" id="lQTimerRow" style="display:flex">
+            <div class="fr"><label>Question Time Limit</label><input type="number" id="lQTimerSec" value="60" min="5" max="3600" placeholder="seconds"></div>
+            <div class="fr" style="align-items:center;padding-top:18px"><span style="font-size:12px;color:var(--tx2)">seconds per question (lockstep only)</span></div>
+          </div>
+
+          <div class="fg">
+            <div class="fr"><label>Opens At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lOpenAt"></div>
+            <div class="fr"><label>Closes At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lCloseAt"></div>
           </div>
 
           <div style="display:flex;gap:20px;margin:16px 0 24px;flex-wrap:wrap">
@@ -2560,7 +2570,23 @@
       const courseId = sepIdx !== -1 ? rawBk.substring(0, sepIdx) : '';
       const block = sepIdx !== -1 ? rawBk.substring(sepIdx + 1) : rawBk;
 
-      const cfg = { setId: document.getElementById('lSet').value, courseId: courseId, block: block, mode: document.getElementById('lMode').value, revealMode: document.getElementById('lRev').value, calculatorEnabled: document.getElementById('lCE').checked, metacognitionEnabled: document.getElementById('lME').checked, timer: tt === 'none' ? { type: 'none' } : { type: tt, seconds: +(document.getElementById('lTM').value || 30) * 60 } };
+      const _mode = document.getElementById('lMode').value;
+      const _openAtVal  = document.getElementById('lOpenAt').value;
+      const _closeAtVal = document.getElementById('lCloseAt').value;
+      const _qTimerSec  = parseInt(document.getElementById('lQTimerSec').value, 10);
+      if (_openAtVal && _closeAtVal && new Date(_closeAtVal) <= new Date(_openAtVal)) {
+        toast('Close time must be after open time.', 'err'); return;
+      }
+      const cfg = {
+        setId: document.getElementById('lSet').value, courseId: courseId, block: block,
+        mode: _mode, revealMode: document.getElementById('lRev').value,
+        calculatorEnabled: document.getElementById('lCE').checked,
+        metacognitionEnabled: document.getElementById('lME').checked,
+        timer: tt === 'none' ? { type: 'none' } : { type: tt, seconds: +(document.getElementById('lTM').value || 30) * 60 },
+        openAt:  _openAtVal  ? new Date(_openAtVal).toISOString()  : null,
+        closeAt: _closeAtVal ? new Date(_closeAtVal).toISOString() : null,
+        qTimerSeconds: (_mode === 'lockstep' && _qTimerSec > 0) ? _qTimerSec : null
+      };
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         showLoad('Launching Live Session...');
         google.script.run.withFailureHandler(e => { hideLoad(); toast(e.message, 'err'); }).withSuccessHandler(r => {
@@ -2817,9 +2843,29 @@
               ? `<span style="font-size:12px;padding:4px 8px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--grn);border:1px solid var(--grn)">✓ Graded</span>`
               : '';
 
+            // Question timer pill for lockstep
+            let qTimerHtml = '';
+            const _qts = d.session && d.session.qTimerState;
+            const _qTimerSec = d.session && d.session.qTimerSeconds;
+            const _curQId = d.qStats[curQIdx] && d.qStats[curQIdx].id;
+            if (_qts && _qts.qId === _curQId && _qTimerSec) {
+              if (_qts.dismissed) {
+                qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--grn);border:1px solid var(--grn)">Timer Dismissed</span>`;
+              } else {
+                const _elapsed = Math.floor((Date.now() - new Date(_qts.startedAt).getTime()) / 1000);
+                const _rem = Math.max(0, _qTimerSec - _elapsed);
+                const _mm = String(Math.floor(_rem/60)).padStart(2,'0');
+                const _ss = String(_rem%60).padStart(2,'0');
+                qTimerHtml = `<span id="teacherQTimerPill" data-end="${new Date(_qts.startedAt).getTime() + _qTimerSec*1000}" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;white-space:nowrap">⏱ ${_mm}:${_ss}</span><button class="btn bd" style="font-size:12px" onclick="dismissQTimer()">Dismiss Timer</button>`;
+              }
+            } else if (_qTimerSec && _curQId) {
+              qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(107,114,128,0.1);color:var(--tx2);border:1px solid var(--bd);white-space:nowrap">⏱ ${_qTimerSec}s per Q</span>`;
+            }
+
             document.getElementById('lsActions').innerHTML = `
           <button class="btn bg" onclick="lsPrev()">← Prev</button>
           ${lockBtnHtml}
+          ${qTimerHtml}
           ${gradeIndicator}
           ${gradeBtnHtml}
           <button class="btn bg" onclick="lsReveal()">👁 Reveal</button>
@@ -3324,6 +3370,26 @@
         })
         .toggleLockQuestion(aSid, qId);
     }
+
+    function dismissQTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('Timer dismissed — students may continue answering.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to dismiss timer: ' + (e.message||'Unknown error'), 'err'))
+        .dismissQuestionTimer(aSid);
+    }
+
+    // Tick the teacher-side question timer pill every second (lightweight, DOM-only)
+    setInterval(function() {
+      const pill = document.getElementById('teacherQTimerPill');
+      if (!pill) return;
+      const endMs = parseInt(pill.dataset.end, 10);
+      const rem = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
+      const mm = String(Math.floor(rem/60)).padStart(2,'0');
+      const ss = String(rem%60).padStart(2,'0');
+      pill.textContent = '⏱ ' + mm + ':' + ss;
+      if (rem === 0) pill.style.background = 'rgba(239,68,68,0.3)';
+    }, 500);
 
     function readmitS(sid, stuId) { if ((typeof google !== 'undefined' && google.script && google.script.run)) google.script.run.withSuccessHandler(() => { toast('Student Re-admitted.', 'ok'); refreshLive(); }).readmitStudent(sid, stuId); }
 

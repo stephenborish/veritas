@@ -1210,6 +1210,7 @@
       <div><span class="brand">VERITAS</span><span class="stu-b" id="stuBadge"></span></div>
       <div style="display:flex;align-items:center">
         <span class="timer-pill" id="timerPill" style="display:none">--:--</span>
+        <span class="timer-pill" id="qTimerPill" style="display:none;background:#ef4444;color:#fff;margin-left:6px">--:--</span>
         <span class="prog" id="progTxt"></span>
       </div>
     </div>
@@ -1263,7 +1264,9 @@
       mode: 'self-paced', metaEnabled: true, needsFS: false, accessToken: '', lockedQs: [], revealedQs: [],
       submittedAns: {}, gradeStatus: 'idle',
       // pendingMulti stores in-progress multi-select choices (array) before submission
-      pendingMulti: {}
+      pendingMulti: {},
+      // Lockstep question timer state
+      qTimerInt: null, qTimerActive: false, qTimerEnd: 0, qTimerDismissed: false
     };
 
     const SCI_PUNS = [
@@ -1673,6 +1676,52 @@
       }, 1000);
     }
 
+    function startQTimer() {
+      clearInterval(S.qTimerInt);
+      const pill = document.getElementById('qTimerPill');
+      pill.style.display = 'inline-block';
+      pill.style.background = '#ef4444';
+      S.qTimerInt = setInterval(function () {
+        const rem = Math.max(0, Math.floor((S.qTimerEnd - Date.now()) / 1000));
+        const mm = String(Math.floor(rem / 60)).padStart(2, '0');
+        const ss = String(rem % 60).padStart(2, '0');
+        pill.textContent = '⏱ ' + mm + ':' + ss;
+        if (rem <= 30 && rem > 0) pill.style.background = '#b91c1c';
+        if (rem <= 0) {
+          clearInterval(S.qTimerInt);
+          onQTimerExpired();
+        }
+      }, 500);
+    }
+
+    function onQTimerExpired() {
+      // Auto-save any in-progress short answer
+      const saIn = document.getElementById('saIn');
+      if (saIn && !S.submittedAns[saIn.dataset.qid]) saveSA(saIn.dataset.qid);
+      disableAnswerInput();
+      document.getElementById('qTimerPill').textContent = '⏱ 00:00';
+      // Show time-up overlay
+      if (!document.getElementById('qTimerExpiredOverlay')) {
+        const overlay = document.createElement('div');
+        overlay.id = 'qTimerExpiredOverlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:900;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;';
+        overlay.innerHTML = '<div style="font-size:56px;line-height:1">⏰</div><div style="color:#fff;font-size:24px;font-weight:800;letter-spacing:0.5px">Time\'s Up!</div><div style="color:rgba(255,255,255,0.65);font-size:14px;text-align:center;max-width:280px">Your answer has been saved.<br>Waiting for teacher to continue…</div>';
+        document.body.appendChild(overlay);
+      }
+    }
+
+    function disableAnswerInput() {
+      document.querySelectorAll('#qArea input[type=radio], #qArea input[type=checkbox]').forEach(function(el){ el.disabled = true; });
+      const sa = document.getElementById('saIn');
+      if (sa) { sa.disabled = true; sa.style.opacity = '0.5'; }
+    }
+
+    function enableAnswerInput() {
+      document.querySelectorAll('#qArea input[type=radio], #qArea input[type=checkbox]').forEach(function(el){ el.disabled = false; });
+      const sa = document.getElementById('saIn');
+      if (sa) { sa.disabled = false; sa.style.opacity = ''; }
+    }
+
     function renderQ() {
       const q = S.qs[S.cur]; if (!q) return;
       const total = S.qs.length;
@@ -2067,7 +2116,7 @@
           console.warn('Failed to exit fullscreen:', e);
         }
       }
-      if (S.poll) clearInterval(S.poll); if (S.timerInt) clearInterval(S.timerInt);
+      if (S.poll) clearInterval(S.poll); if (S.timerInt) clearInterval(S.timerInt); if (S.qTimerInt) clearInterval(S.qTimerInt);
 
       function doFinalSync() {
         if (SyncQueue.items.length > 0) {
@@ -2171,10 +2220,48 @@
             if (oldLocked !== newLocked || oldRevealed !== newRevealed) shouldRender = true;
 
             if (shouldRender) {
+              // Reset question timer state when navigating to a new question
+              if (didAdvance) {
+                clearInterval(S.qTimerInt);
+                S.qTimerActive = false;
+                S.qTimerDismissed = false;
+                document.getElementById('qTimerPill').style.display = 'none';
+                var _expOverlay = document.getElementById('qTimerExpiredOverlay');
+                if (_expOverlay) _expOverlay.remove();
+                enableAnswerInput();
+              }
               if (didAdvance && !newLocked && !newRevealed) {
                 triggerGetReadyAnimation(st.currentQ, () => renderQ());
               } else {
                 renderQ();
+              }
+            }
+
+            // Sync question timer state
+            if (st.qTimerSeconds && st.qTimerState) {
+              const _qts = st.qTimerState;
+              const _curQId = S.qs[S.cur] ? S.qs[S.cur].id : null;
+              if (_qts.qId === _curQId) {
+                if (_qts.dismissed) {
+                  if (S.qTimerActive && !S.qTimerDismissed) {
+                    // Teacher dismissed — clear timer and re-enable input
+                    S.qTimerDismissed = true;
+                    S.qTimerActive = false;
+                    clearInterval(S.qTimerInt);
+                    document.getElementById('qTimerPill').style.display = 'none';
+                    var _ov = document.getElementById('qTimerExpiredOverlay');
+                    if (_ov) _ov.remove();
+                    enableAnswerInput();
+                  }
+                } else {
+                  var _endMs = new Date(_qts.startedAt).getTime() + st.qTimerSeconds * 1000;
+                  if (!S.qTimerActive || S.qTimerEnd !== _endMs) {
+                    S.qTimerActive = true;
+                    S.qTimerDismissed = false;
+                    S.qTimerEnd = _endMs;
+                    startQTimer();
+                  }
+                }
               }
             }
           }
