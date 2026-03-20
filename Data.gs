@@ -1414,7 +1414,7 @@ const DB = {
     return { studentCalibration, itemOverconfidence, classSummary };
   },
 
-  getCrossSessionRiskReport(courseId) {
+  getCrossSessionRiskReport(courseId, blockFilter) {
     const archive = this.sh('Archive');
     if (!archive) return { error: 'Archive not found' };
 
@@ -1438,89 +1438,124 @@ const DB = {
 
     if (courseSessions.length === 0) return { error: 'No archived sessions found for this course' };
 
-    // Roster students
-    const allRosterStudents = {};
+    // Determine which blocks to analyze
+    const useBlockFilter = blockFilter && blockFilter !== 'all';
+    const allBlocks = useBlockFilter
+      ? [blockFilter]
+      : [...new Set(courseSessions.map(s => s.block).filter(Boolean))].sort();
+
+    // Build roster map per block for "never accessed" detection
+    const rosterByBlock = {};
     try {
       const rosterData = this.getRostersByCourse(courseId);
       (rosterData || []).forEach(roster => {
+        const bk = roster.block || '';
+        if (!rosterByBlock[bk]) rosterByBlock[bk] = {};
         (roster.students || []).forEach(s => {
           const key = this.normalizeStudentName(s.name);
-          if (!allRosterStudents[key]) allRosterStudents[key] = { name: s.name };
+          if (!rosterByBlock[bk][key]) rosterByBlock[bk][key] = { name: s.name };
         });
       });
     } catch (e) {}
 
-    // Aggregate per-student data
-    const studentData = {};
-    const getOrCreate = (id, name) => {
-      if (!studentData[id]) studentData[id] = { studentId: id, name, sessions: [], violationSessions: [], totalJoined: 0, totalFinished: 0, scores: [] };
-      return studentData[id];
+    // Helper: compute risk categories for a set of sessions
+    const computeBlockRisk = (sessions) => {
+      const studentData = {};
+      const getOrCreate = (id, name) => {
+        if (!studentData[id]) studentData[id] = { studentId: id, name, sessions: [], violationSessions: [], totalJoined: 0, totalFinished: 0, scores: [] };
+        return studentData[id];
+      };
+
+      sessions.forEach(sess => {
+        sess.students.forEach(st => {
+          const sd = getOrCreate(st.studentId, st.studentName);
+          const sr = sess.responses.filter(r => r.studentId === st.studentId);
+          const pts = sr.reduce((a, r) => a + (Number(r.points) || 0), 0);
+          const max = sr.reduce((a, r) => a + (Number(r.maxPoints) || 0), 0);
+          const score = max > 0 ? Math.round((pts / max) * 100) : null;
+          let durationMs = null;
+          if (st.joinedAt && st.finishedAt) durationMs = new Date(st.finishedAt).getTime() - new Date(st.joinedAt).getTime();
+          const stuViolations = sess.violations.filter(v => v.studentId === st.studentId);
+          if (stuViolations.length > 0) sd.violationSessions.push({ sessionId: sess.sessionId, setName: sess.setName, startedAt: sess.startedAt, count: stuViolations.length });
+          const finished = st.status === 'finished';
+          if (st.status !== 'pending') sd.totalJoined++;
+          if (finished) { sd.totalFinished++; if (score !== null) sd.scores.push(score); }
+          sd.sessions.push({ sessionId: sess.sessionId, setName: sess.setName, startedAt: sess.startedAt, block: sess.block, score, finished, joinedAt: st.joinedAt, finishedAt: st.finishedAt, durationMs, timerAlloc: sess.timerAlloc, answerCount: sr.length });
+        });
+      });
+
+      // Class avg/SD for "consistently low" threshold — computed per block
+      const classScores = [];
+      sessions.forEach(sess => {
+        sess.students.forEach(st => {
+          if (st.status !== 'finished') return;
+          const sr = sess.responses.filter(r => r.studentId === st.studentId);
+          const pts = sr.reduce((a, r) => a + (Number(r.points) || 0), 0);
+          const max = sr.reduce((a, r) => a + (Number(r.maxPoints) || 0), 0);
+          if (max > 0) classScores.push((pts / max) * 100);
+        });
+      });
+      const classAvg = classScores.length > 0 ? classScores.reduce((a, b) => a + b, 0) / classScores.length : 50;
+      const classSD = classScores.length > 1 ? Math.sqrt(classScores.reduce((a, x) => a + Math.pow(x - classAvg, 2), 0) / classScores.length) : 15;
+      const lowThreshold = classAvg - classSD;
+
+      const neverAccessed = [], consistentlyLow = [], avoiders = [], violators = [], rapidSubmitters = [];
+
+      const fmtDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+
+      Object.values(studentData).forEach(st => {
+        if (st.totalJoined === 0) {
+          neverAccessed.push({ name: st.name, sessionCount: st.sessions.length, sessions: st.sessions.map(s => ({ setName: s.setName, date: fmtDate(s.startedAt) })) });
+          return;
+        }
+        const joinedNotFinished = st.sessions.filter(s => s.joinedAt && !s.finished).length;
+        if (joinedNotFinished >= 2) avoiders.push({ name: st.name, avoidCount: joinedNotFinished, sessions: st.sessions.map(s => ({ setName: s.setName, date: fmtDate(s.startedAt) })) });
+        if (st.scores.length >= 2) {
+          const stuAvg = st.scores.reduce((a, b) => a + b, 0) / st.scores.length;
+          if (stuAvg < lowThreshold) consistentlyLow.push({ name: st.name, avgScore: Math.round(stuAvg), threshold: Math.round(lowThreshold), classAvg: Math.round(classAvg), scores: st.scores.map(s => Math.round(s)), sessions: st.sessions.filter(s => s.score !== null).map(s => ({ setName: s.setName, date: fmtDate(s.startedAt), score: s.score })) });
+        }
+        if (st.violationSessions.length >= 1) violators.push({ name: st.name, sessionsWithViolations: st.violationSessions.map(v => ({ setName: v.setName, date: fmtDate(v.startedAt), count: v.count })) });
+        const rapidSess = st.sessions.filter(s => s.finished && s.durationMs && s.timerAlloc && s.durationMs < s.timerAlloc * 0.25);
+        if (rapidSess.length >= 2) rapidSubmitters.push({ name: st.name, rapidCount: rapidSess.length, sessions: rapidSess.map(s => ({ setName: s.setName, date: fmtDate(s.startedAt), durationMin: Math.round(s.durationMs / 60000), allocMin: Math.round(s.timerAlloc / 60000) })) });
+      });
+
+      return {
+        sessionCount: sessions.length,
+        classAvg: Math.round(classAvg), classSD: Math.round(classSD), lowThreshold: Math.round(lowThreshold),
+        rosterSize: Object.keys(studentData).length,
+        neverAccessed: neverAccessed.sort((a, b) => a.name.localeCompare(b.name)),
+        consistentlyLow: consistentlyLow.sort((a, b) => a.avgScore - b.avgScore),
+        avoiders: avoiders.sort((a, b) => b.avoidCount - a.avoidCount),
+        violators: violators.sort((a, b) => b.sessionsWithViolations.length - a.sessionsWithViolations.length),
+        rapidSubmitters: rapidSubmitters.sort((a, b) => b.rapidCount - a.rapidCount)
+      };
     };
 
-    courseSessions.forEach(sess => {
-      sess.students.forEach(st => {
-        const sd = getOrCreate(st.studentId, st.studentName);
-        const sr = sess.responses.filter(r => r.studentId === st.studentId);
-        const pts = sr.reduce((a, r) => a + (Number(r.points) || 0), 0);
-        const max = sr.reduce((a, r) => a + (Number(r.maxPoints) || 0), 0);
-        const score = max > 0 ? Math.round((pts / max) * 100) : null;
-        let durationMs = null;
-        if (st.joinedAt && st.finishedAt) durationMs = new Date(st.finishedAt).getTime() - new Date(st.joinedAt).getTime();
-        const stuViolations = sess.violations.filter(v => v.studentId === st.studentId);
-        if (stuViolations.length > 0) sd.violationSessions.push({ sessionId: sess.sessionId, setName: sess.setName, count: stuViolations.length });
-        const finished = st.status === 'finished';
-        if (st.status !== 'pending') sd.totalJoined++;
-        if (finished) { sd.totalFinished++; if (score !== null) sd.scores.push(score); }
-        sd.sessions.push({ sessionId: sess.sessionId, setName: sess.setName, block: sess.block, score, finished, joinedAt: st.joinedAt, finishedAt: st.finishedAt, durationMs, timerAlloc: sess.timerAlloc, answerCount: sr.length });
+    // Compute per-block results
+    const byBlock = {};
+    let totalFlags = 0;
+    let totalSessions = 0;
+    allBlocks.forEach(block => {
+      const blockSessions = courseSessions.filter(s => s.block === block);
+      if (blockSessions.length === 0) return;
+      const result = computeBlockRisk(blockSessions);
+
+      // Add roster-only students who never appeared in any session for this block
+      const blockRoster = rosterByBlock[block] || {};
+      const blockStudentNames = new Set();
+      blockSessions.forEach(sess => sess.students.forEach(st => blockStudentNames.add(this.normalizeStudentName(st.studentName))));
+      Object.values(blockRoster).forEach(rs => {
+        const normName = this.normalizeStudentName(rs.name);
+        if (!blockStudentNames.has(normName)) result.neverAccessed.push({ name: rs.name, sessionCount: 0, sessions: [], fromRoster: true });
       });
+      result.neverAccessed.sort((a, b) => a.name.localeCompare(b.name));
+
+      byBlock[block] = result;
+      totalFlags += result.neverAccessed.length + result.consistentlyLow.length + result.avoiders.length + result.violators.length + result.rapidSubmitters.length;
+      totalSessions += result.sessionCount;
     });
 
-    // Class avg/SD for "consistently low" threshold
-    const classScores = [];
-    courseSessions.forEach(sess => {
-      sess.students.forEach(st => {
-        if (st.status !== 'finished') return;
-        const sr = sess.responses.filter(r => r.studentId === st.studentId);
-        const pts = sr.reduce((a, r) => a + (Number(r.points) || 0), 0);
-        const max = sr.reduce((a, r) => a + (Number(r.maxPoints) || 0), 0);
-        if (max > 0) classScores.push((pts / max) * 100);
-      });
-    });
-    const classAvg = classScores.length > 0 ? classScores.reduce((a, b) => a + b, 0) / classScores.length : 50;
-    const classSD = classScores.length > 1 ? Math.sqrt(classScores.reduce((a, x) => a + Math.pow(x - classAvg, 2), 0) / classScores.length) : 15;
-    const lowThreshold = classAvg - classSD;
-
-    const neverAccessed = [], consistentlyLow = [], avoiders = [], violators = [], rapidSubmitters = [];
-
-    Object.values(studentData).forEach(st => {
-      if (st.totalJoined === 0) { neverAccessed.push({ name: st.name, sessions: st.sessions.map(s => s.setName) }); return; }
-      const joinedNotFinished = st.sessions.filter(s => s.joinedAt && !s.finished).length;
-      if (joinedNotFinished >= 2) avoiders.push({ name: st.name, avoidCount: joinedNotFinished, sessions: st.sessions.map(s => s.setName) });
-      if (st.scores.length >= 2) {
-        const stuAvg = st.scores.reduce((a, b) => a + b, 0) / st.scores.length;
-        if (stuAvg < lowThreshold) consistentlyLow.push({ name: st.name, avgScore: Math.round(stuAvg), threshold: Math.round(lowThreshold), classAvg: Math.round(classAvg), scores: st.scores.map(s => Math.round(s)), sessions: st.sessions.map(s => s.setName) });
-      }
-      if (st.violationSessions.length >= 2) violators.push({ name: st.name, sessionsWithViolations: st.violationSessions });
-      const rapidSess = st.sessions.filter(s => s.finished && s.durationMs && s.timerAlloc && s.durationMs < s.timerAlloc * 0.2);
-      if (rapidSess.length >= 2) rapidSubmitters.push({ name: st.name, rapidCount: rapidSess.length, sessions: rapidSess.map(s => ({ setName: s.setName, durationMin: Math.round(s.durationMs / 60000), allocMin: Math.round(s.timerAlloc / 60000) })) });
-    });
-
-    // Roster-only students who never appeared in any session
-    Object.values(allRosterStudents).forEach(rs => {
-      const normName = this.normalizeStudentName(rs.name);
-      const found = Object.values(studentData).find(st => this.normalizeStudentName(st.name) === normName);
-      if (!found) neverAccessed.push({ name: rs.name, sessions: [], fromRoster: true });
-    });
-
-    return {
-      courseId, sessionCount: courseSessions.length,
-      classAvg: Math.round(classAvg), classSD: Math.round(classSD), lowThreshold: Math.round(lowThreshold),
-      neverAccessed: neverAccessed.sort((a, b) => a.name.localeCompare(b.name)),
-      consistentlyLow: consistentlyLow.sort((a, b) => a.avgScore - b.avgScore),
-      avoiders: avoiders.sort((a, b) => b.avoidCount - a.avoidCount),
-      violators: violators.sort((a, b) => b.sessionsWithViolations.length - a.sessionsWithViolations.length),
-      rapidSubmitters: rapidSubmitters.sort((a, b) => b.rapidCount - a.rapidCount)
-    };
+    return { courseId, blockFilter: blockFilter || 'all', byBlock, totalSessions, totalFlags };
   },
 
   dismissViolation(sessionId, timestamp) {

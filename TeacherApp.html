@@ -1693,18 +1693,27 @@
         <div class="sec-hdr">
           <div>
             <h1>Student Risk Report</h1>
-            <p>Cross-session behavioral flags and at-risk indicators by course</p>
+            <p>Per-block behavioral flags and at-risk indicators across archived sessions</p>
           </div>
         </div>
         <div id="riskContent">
-          <div style="padding:32px; max-width:520px">
+          <div style="padding:32px; max-width:560px">
             <div class="card" style="padding:24px">
-              <div style="font-weight:700; font-size:15px; margin-bottom:12px">Select a Course</div>
-              <p style="font-size:13px; color:var(--tx2); margin-bottom:16px">Choose a course to analyze student patterns across all its archived sessions.</p>
-              <select id="riskCourseSelect" style="width:100%; padding:10px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); color:var(--tx); font-size:14px">
-                <option value="">Loading courses...</option>
-              </select>
-              <button class="btn bp" style="margin-top:16px; width:100%" onclick="loadRiskReport()">Generate Risk Report</button>
+              <div style="font-weight:700; font-size:15px; margin-bottom:12px">Select Course &amp; Block</div>
+              <p style="font-size:13px; color:var(--tx2); margin-bottom:16px">Choose a course and optionally a specific block to analyze student risk patterns across archived sessions.</p>
+              <div style="margin-bottom:12px">
+                <label style="display:block; font-size:12px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-bottom:6px">Course</label>
+                <select id="riskCourseSelect" style="width:100%; padding:10px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); color:var(--tx); font-size:14px" onchange="onRiskCourseChange()">
+                  <option value="">Loading courses...</option>
+                </select>
+              </div>
+              <div style="margin-bottom:16px">
+                <label style="display:block; font-size:12px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-bottom:6px">Block</label>
+                <select id="riskBlockSelect" style="width:100%; padding:10px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); color:var(--tx); font-size:14px">
+                  <option value="all">All Blocks</option>
+                </select>
+              </div>
+              <button class="btn bp" style="width:100%" onclick="loadRiskReport()">Generate Risk Report</button>
             </div>
           </div>
           <div id="riskResult"></div>
@@ -3625,7 +3634,7 @@
         const answered = !!r.answer;
         const ptsNodeColor = answered ? (isC ? 'var(--grn)' : 'var(--red)') : 'var(--tx3)';
 
-        const confLabelMap = { 4: "💯 Guessing", 3: "🤔 Somewhat Sure", 2: "⚠️ Very Sure", 1: "🔥 Highly Confident" };
+        const confLabelMap = { 1: "🤔 Guessing", 2: "🤷 Somewhat Sure", 3: "👍 Very Sure", 4: "💯 Absolutely Certain" };
         const confText = m.confidence ? confLabelMap[Number(m.confidence)] : '';
 
         let displayAns = String(r.answer || '').trim();
@@ -3747,6 +3756,8 @@
 
       const avgClassPct = totalMax > 0 ? Math.round((totalPts / totalMax) * 100) : 0;
       const dStr = new Date(sess.startedAt).toLocaleDateString() + ' ' + new Date(sess.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const finishedCount = students.filter(st => st.status === 'finished').length;
+      const completionPct = students.length > 0 ? Math.round((finishedCount / students.length) * 100) : 0;
 
       let html = `
         <div class="sec-hdr" style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end">
@@ -3765,123 +3776,49 @@
           <div class="card" style="text-align:center">
             <div style="font-size:12px; color:var(--tx3); font-weight:600; text-transform:uppercase; letter-spacing:1px">Class Average</div>
             <div style="font-size:48px; font-weight:800; color:${avgClassPct >= 80 ? 'var(--grn)' : avgClassPct >= 60 ? 'var(--amb)' : 'var(--red)'}">${avgClassPct}%</div>
-            <div style="font-size:12px; color:var(--tx2)">${(totalPts / Math.max(1, students.length)).toFixed(1)} / ${(totalMax / Math.max(1, students.length)).toFixed(1)} avg points</div>
+            <div style="font-size:12px; color:var(--tx2)">${(totalPts / Math.max(1, students.length)).toFixed(1)} / ${(totalMax / Math.max(1, students.length)).toFixed(1)} avg pts per student</div>
           </div>
           <div class="card" style="text-align:center">
-            <div style="font-size:12px; color:var(--tx3); font-weight:600; text-transform:uppercase; letter-spacing:1px">Total Violations</div>
-            <div style="font-size:48px; font-weight:800; color:${viols.length > 0 ? 'var(--red)' : 'var(--tx)'}">${viols.length}</div>
-            <div style="font-size:12px; color:var(--tx2)">Events caught during session</div>
+            <div style="font-size:12px; color:var(--tx3); font-weight:600; text-transform:uppercase; letter-spacing:1px">Completion Rate</div>
+            <div style="font-size:48px; font-weight:800; color:${completionPct >= 80 ? 'var(--grn)' : completionPct >= 50 ? 'var(--amb)' : 'var(--red)'}">${completionPct}%</div>
+            <div style="font-size:12px; color:var(--tx2)">${finishedCount} of ${students.length} students finished</div>
           </div>
-          <div class="card" style="grid-column: 1 / -1; display:flex; flex-direction:column; background:var(--tBg); border-color:var(--tBd)">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-              <div style="display:flex; align-items:center; gap:12px">
-                <span class="ic" style="font-size:24px">✨</span>
-                <div>
-                  <div style="font-size:14px; font-weight:700; color:var(--teal)">AI Deep Analysis Report</div>
-                  <div style="font-size:12px; color:var(--tx2)">Pedagogical insights and misconception breakdowns generated from session data.</div>
-                </div>
-              </div>
-              <button class="btn" style="background:var(--teal); color:#fff; border:none" id="btnRunAiAnalysis" onclick="runAIDeepAnalysis('${sess.id}')">${data.aiReport ? 'Update Report' : 'Generate Report'}</button>
-            </div>
-            <div id="aiAnalysisResult" style="${data.aiReport ? 'display:block;' : 'display:none;'} padding-top:16px; border-top:1px solid rgba(13, 148, 136, 0.2); font-size:14px; color:var(--tx); line-height:1.6">
-              ${data.aiReport ? parseMarkdown(data.aiReport) : '<!-- AI Results inject here -->'}
-            </div>
+          <div class="card" style="text-align:center">
+            <div style="font-size:12px; color:var(--tx3); font-weight:600; text-transform:uppercase; letter-spacing:1px">Integrity Flags</div>
+            <div style="font-size:48px; font-weight:800; color:${viols.length > 0 ? 'var(--red)' : 'var(--tx)'}">${viols.length}</div>
+            <div style="font-size:12px; color:var(--tx2)">Violations caught during session</div>
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:24px">
-          <!-- Student Leaderboard -->
-          <div class="card" style="padding:0; overflow:hidden; align-self:start">
-            <div style="padding:16px; border-bottom:1px solid var(--bd); background:var(--s2); font-weight:700; font-size:15px">🏅 Student Leaderboard</div>
-            <div style="max-height:400px; overflow-y:auto">
-              <table>
-                <tr><th>Student</th><th>Score</th><th>Avg Conf</th><th>Violations</th></tr>
-                ${Object.values(studentMap).sort((a, b) => (b.pts / b.max || 0) - (a.pts / a.max || 0)).map(s => {
+        <!-- Student Results (full-width) -->
+        <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px">
+          <div style="padding:16px; border-bottom:1px solid var(--bd); background:var(--s2); font-weight:700; font-size:15px">👥 Student Results</div>
+          <div>
+            <table>
+              <tr><th>Student</th><th>Score</th><th>Completed</th><th>Avg Conf</th><th>Violations</th></tr>
+              ${Object.values(studentMap).sort((a, b) => (b.pts / b.max || 0) - (a.pts / a.max || 0)).map(s => {
         const pct = s.max > 0 ? Math.round((s.pts / s.max) * 100) : null;
         const avgC = s.confCount > 0 ? (s.confSum / s.confCount).toFixed(1) : '-';
         const pctBadge = pct === null ? `<span class="badge" style="background:var(--bg); color:var(--tx3); font-style:italic">Missing</span>` : `<span class="badge ${pct >= 80 ? 'b-a' : pct >= 60 ? 'b-w' : 'b-l'}">${pct}%</span>`;
-        return `<tr onclick="if(window.renderAnaStudentDetail) renderAnaStudentDetail('${s.id}')" style="cursor:pointer; border-bottom:1px solid var(--bd);" onmouseover="this.style.backgroundColor='var(--s)'" onmouseout="this.style.backgroundColor=''">
+        const stuObj = students.find(st => st.studentId === s.id);
+        const finished = stuObj && stuObj.status === 'finished';
+        return `<tr onclick="if(window.renderAnaStudentDetail) renderAnaStudentDetail('${s.id}')" style="cursor:pointer;" onmouseover="this.style.backgroundColor='var(--s)'" onmouseout="this.style.backgroundColor=''">
                     <td style="font-weight:600; color:var(--teal)">${DOMPurify.sanitize(s.name)}</td>
                     <td>${pctBadge}</td>
+                    <td style="color:${finished ? 'var(--grn)' : 'var(--tx3)'}">${finished ? '✓ Yes' : '— No'}</td>
                     <td>${avgC}</td>
                     <td>${s.viols > 0 ? `<span class="badge b-l">${s.viols}</span>` : '-'}</td>
                   </tr>`;
       }).join('')}
-              </table>
-            </div>
-          </div>
-
-          <!-- Metacognition Trends -->
-          <div class="card" style="padding:0; overflow:hidden">
-            <div style="padding:16px; border-bottom:1px solid var(--bd); background:var(--s2); font-weight:700; font-size:15px">🧠 Metacognition Matrix</div>
-            <div style="padding:16px; font-size:13px; color:var(--tx2); line-height:1.5">
-              <p style="margin-bottom:12px">This matrix compares student accuracy against their reported confidence. Ideally, most answers should fall into "Sure & Right" or "Unsure & Wrong".</p>
-              `;
-      const qMapMatrix = questions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
-      const metaMapMatrix = meta.reduce((acc, m) => { acc[m.studentId + '|' + m.questionId] = m; return acc; }, {});
-
-      const profiles = { sr: [], sw: [], ur: [], uw: [] };
-      Object.keys(studentMap).forEach(sId => {
-        const s = studentMap[sId];
-        let c_sr = 0, c_sw = 0, c_ur = 0, c_uw = 0;
-        s.resps.forEach(r => {
-          const q = qMapMatrix[r.questionId];
-          const eval_ = reEvalMC(r, q);
-          const confMeta = metaMapMatrix[r.studentId + '|' + r.questionId];
-          const confVal = confMeta ? Number(confMeta.confidence) : 0;
-          const isC = eval_.isCorrect;
-          if (confVal >= 3) {
-            if (isC) c_sr++; else c_sw++;
-          } else if (confVal > 0 && confVal < 3) {
-            if (isC) c_ur++; else c_uw++;
-          }
-        });
-
-        let maxLabel = 'sr';
-        let maxVal = c_sr;
-        if (c_sw > maxVal) { maxVal = c_sw; maxLabel = 'sw'; }
-        if (c_ur > maxVal) { maxVal = c_ur; maxLabel = 'ur'; }
-        if (c_uw > maxVal) { maxVal = c_uw; maxLabel = 'uw'; }
-
-        if (maxVal > 0) {
-          if (c_sw > 0 && c_sw >= maxVal) maxLabel = 'sw';
-          else if (c_uw > 0 && c_uw >= maxVal) maxLabel = 'uw';
-          else if (c_ur > 0 && c_ur >= maxVal) maxLabel = 'ur';
-          profiles[maxLabel].push(s.name);
-        }
-      });
-
-      const rSt = (arr) => arr.length > 0 ? arr.map(n => `<div style="padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.05)">${n}</div>`).join('') : '<div style="font-style:italic; opacity:0.6; padding:4px 0">None</div>';
-
-      html += `
-              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px">
-                <div style="padding:12px; background:var(--gBg); border:1px solid rgba(5, 150, 105, .2); border-radius:8px; display:flex; flex-direction:column">
-                  <div style="font-size:11px; font-weight:700; color:var(--grn); text-transform:uppercase; margin-bottom:8px">💯 Sure & Right</div>
-                  <div style="font-size:12px; font-weight:600; color:var(--grn); flex-grow:1">${rSt(profiles.sr)}</div>
-                </div>
-                <div style="padding:12px; background:var(--rBg); border:1px solid rgba(220, 38, 38, .2); border-radius:8px; display:flex; flex-direction:column">
-                  <div style="font-size:11px; font-weight:700; color:var(--red); text-transform:uppercase; margin-bottom:8px">⚠️ Sure & Wrong</div>
-                  <div style="font-size:12px; font-weight:600; color:var(--red); flex-grow:1">${rSt(profiles.sw)}</div>
-                  <div style="font-size:10px; color:var(--red); margin-top:8px; opacity:0.8; font-weight:500">Highest priority for review</div>
-                </div>
-                <div style="padding:12px; background:var(--aBg); border:1px solid rgba(217, 119, 6, .2); border-radius:8px; display:flex; flex-direction:column">
-                  <div style="font-size:11px; font-weight:700; color:var(--amb); text-transform:uppercase; margin-bottom:8px">🤔 Unsure & Right</div>
-                  <div style="font-size:12px; font-weight:600; color:var(--amb); flex-grow:1">${rSt(profiles.ur)}</div>
-                </div>
-                <div style="padding:12px; background:var(--s3); border:1px solid var(--bd); border-radius:8px; display:flex; flex-direction:column">
-                  <div style="font-size:11px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-bottom:8px">🤷‍♂️ Unsure & Wrong</div>
-                  <div style="font-size:12px; font-weight:600; color:var(--tx); flex-grow:1">${rSt(profiles.uw)}</div>
-                </div>
-              </div>
-            </div>
+            </table>
           </div>
         </div>
 
         <!-- Item Analysis -->
-        <div class="card" style="padding:0; overflow:hidden">
+        <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px">
           <div style="padding:16px; border-bottom:1px solid var(--bd); background:var(--s2); font-weight:700; font-size:15px">📈 Item Analysis</div>
           <div style="padding:16px">
-            <p style="font-size:13px; color:var(--tx2); margin-bottom:20px">Breakdown of performance per question to identify class-wide misconceptions.</p>
+            <p style="font-size:13px; color:var(--tx2); margin-bottom:20px">Per-question performance breakdown to identify class-wide misconceptions and strengths.</p>
             `;
 
       // Build Question Stats
@@ -4057,6 +3994,112 @@
       }
 
       html += `
+          </div>
+        </div>
+      `;
+
+      // ── Metacognition Section (full-width, after item analysis) ──
+      {
+        const qMapMatrix = questions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
+        const metaMapMatrix = meta.reduce((acc, m) => { acc[m.studentId + '|' + m.questionId] = m; return acc; }, {});
+
+        let totalMeta = 0, t_sr = 0, t_sw = 0, t_ur = 0, t_uw = 0;
+        const profiles = { sr: [], sw: [], ur: [], uw: [] };
+
+        Object.keys(studentMap).forEach(sId => {
+          const s = studentMap[sId];
+          let c_sr = 0, c_sw = 0, c_ur = 0, c_uw = 0;
+          s.resps.forEach(r => {
+            const q = qMapMatrix[r.questionId];
+            const eval_ = reEvalMC(r, q);
+            const confMeta = metaMapMatrix[r.studentId + '|' + r.questionId];
+            const confVal = confMeta ? Number(confMeta.confidence) : 0;
+            const isC = eval_.isCorrect;
+            if (confVal >= 3) {
+              if (isC) { c_sr++; t_sr++; } else { c_sw++; t_sw++; }
+              totalMeta++;
+            } else if (confVal > 0 && confVal < 3) {
+              if (isC) { c_ur++; t_ur++; } else { c_uw++; t_uw++; }
+              totalMeta++;
+            }
+          });
+
+          const maxVal = Math.max(c_sr, c_sw, c_ur, c_uw);
+          if (maxVal > 0) {
+            let maxLabel = 'sr';
+            if (c_sw > 0 && c_sw >= maxVal) maxLabel = 'sw';
+            else if (c_uw > 0 && c_uw >= maxVal) maxLabel = 'uw';
+            else if (c_ur > 0 && c_ur >= maxVal) maxLabel = 'ur';
+            profiles[maxLabel].push(s.name);
+          }
+        });
+
+        const pct = (n) => totalMeta > 0 ? Math.round((n / totalMeta) * 100) + '%' : '—';
+        const rSt = (arr) => arr.length > 0 ? arr.map(n => `<div style="padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.05); font-size:12px; font-weight:600">${n}</div>`).join('') : '<div style="font-style:italic; opacity:0.6; padding:4px 0; font-size:12px">None</div>';
+
+        html += `
+        <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px">
+          <div style="padding:16px; border-bottom:1px solid var(--bd); background:var(--s2); font-weight:700; font-size:15px">🧠 Confidence Calibration</div>
+          <div style="padding:16px">
+            <p style="font-size:13px; color:var(--tx2); margin-bottom:16px">Compares student accuracy against their reported confidence. Ideally, most responses should fall into "Sure &amp; Right" or "Unsure &amp; Wrong". ${totalMeta > 0 ? `Based on <strong>${totalMeta}</strong> rated responses.` : 'No confidence data recorded for this session.'}</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:20px">
+              <div style="padding:12px; background:var(--gBg); border:1px solid rgba(5,150,105,.2); border-radius:8px; text-align:center">
+                <div style="font-size:22px; font-weight:800; color:var(--grn)">${pct(t_sr)}</div>
+                <div style="font-size:11px; font-weight:700; color:var(--grn); text-transform:uppercase; margin-top:4px">Sure &amp; Right</div>
+              </div>
+              <div style="padding:12px; background:var(--rBg); border:1px solid rgba(220,38,38,.2); border-radius:8px; text-align:center">
+                <div style="font-size:22px; font-weight:800; color:var(--red)">${pct(t_sw)}</div>
+                <div style="font-size:11px; font-weight:700; color:var(--red); text-transform:uppercase; margin-top:4px">Sure &amp; Wrong ⚠️</div>
+              </div>
+              <div style="padding:12px; background:var(--aBg); border:1px solid rgba(217,119,6,.2); border-radius:8px; text-align:center">
+                <div style="font-size:22px; font-weight:800; color:var(--amb)">${pct(t_ur)}</div>
+                <div style="font-size:11px; font-weight:700; color:var(--amb); text-transform:uppercase; margin-top:4px">Unsure &amp; Right</div>
+              </div>
+              <div style="padding:12px; background:var(--s3); border:1px solid var(--bd); border-radius:8px; text-align:center">
+                <div style="font-size:22px; font-weight:800; color:var(--tx2)">${pct(t_uw)}</div>
+                <div style="font-size:11px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-top:4px">Unsure &amp; Wrong</div>
+              </div>
+            </div>
+            <div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:8px">Dominant Profile Per Student</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px">
+              <div style="padding:12px; background:var(--gBg); border:1px solid rgba(5,150,105,.2); border-radius:8px">
+                <div style="font-size:11px; font-weight:700; color:var(--grn); text-transform:uppercase; margin-bottom:8px">Sure &amp; Right</div>
+                ${rSt(profiles.sr)}
+              </div>
+              <div style="padding:12px; background:var(--rBg); border:1px solid rgba(220,38,38,.2); border-radius:8px">
+                <div style="font-size:11px; font-weight:700; color:var(--red); text-transform:uppercase; margin-bottom:8px">Sure &amp; Wrong</div>
+                ${rSt(profiles.sw)}
+                ${profiles.sw.length > 0 ? '<div style="font-size:10px; color:var(--red); margin-top:8px; font-weight:600">Priority: needs review</div>' : ''}
+              </div>
+              <div style="padding:12px; background:var(--aBg); border:1px solid rgba(217,119,6,.2); border-radius:8px">
+                <div style="font-size:11px; font-weight:700; color:var(--amb); text-transform:uppercase; margin-bottom:8px">Unsure &amp; Right</div>
+                ${rSt(profiles.ur)}
+              </div>
+              <div style="padding:12px; background:var(--s3); border:1px solid var(--bd); border-radius:8px">
+                <div style="font-size:11px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-bottom:8px">Unsure &amp; Wrong</div>
+                ${rSt(profiles.uw)}
+              </div>
+            </div>
+          </div>
+        </div>
+        `;
+      }
+
+      // ── AI Deep Analysis Card ──
+      html += `
+        <div class="card" style="display:flex; flex-direction:column; background:var(--tBg); border-color:var(--tBd); margin-bottom:24px">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+            <div style="display:flex; align-items:center; gap:12px">
+              <span class="ic" style="font-size:24px">✨</span>
+              <div>
+                <div style="font-size:14px; font-weight:700; color:var(--teal)">AI Deep Analysis Report</div>
+                <div style="font-size:12px; color:var(--tx2)">Pedagogical insights and misconception breakdowns generated from session data.</div>
+              </div>
+            </div>
+            <button class="btn" style="background:var(--teal); color:#fff; border:none" id="btnRunAiAnalysis" onclick="runAIDeepAnalysis('${sess.id}')">${data.aiReport ? 'Update Report' : 'Generate Report'}</button>
+          </div>
+          <div id="aiAnalysisResult" style="${data.aiReport ? 'display:block;' : 'display:none;'} padding-top:16px; border-top:1px solid rgba(13, 148, 136, 0.2); font-size:14px; color:var(--tx); line-height:1.6">
+            ${data.aiReport ? parseMarkdown(data.aiReport) : '<!-- AI Results inject here -->'}
           </div>
         </div>
       `;
@@ -4519,28 +4562,43 @@
 
     // ── RISK REPORT ──
 
+    window.__riskCourses = [];
+
     function initRiskSection() {
       const sel = document.getElementById('riskCourseSelect');
       if (!sel) return;
       sel.innerHTML = '<option value="">Loading...</option>';
       google.script.run
         .withSuccessHandler(courses => {
+          window.__riskCourses = courses || [];
           if (!courses || !courses.length) { sel.innerHTML = '<option value="">No courses found</option>'; return; }
-          sel.innerHTML = '<option value="">— Select a Course —</option>' + courses.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+          sel.innerHTML = '<option value="">— Select a Course —</option>' + courses.map(c => `<option value="${c.id}">${DOMPurify.sanitize(c.name)}</option>`).join('');
+          document.getElementById('riskBlockSelect').innerHTML = '<option value="all">All Blocks</option>';
         })
         .withFailureHandler(() => { sel.innerHTML = '<option value="">Error loading courses</option>'; })
         .getCourses();
     }
 
+    function onRiskCourseChange() {
+      const courseId = document.getElementById('riskCourseSelect').value;
+      const blockSel = document.getElementById('riskBlockSelect');
+      const course = (window.__riskCourses || []).find(c => c.id === courseId);
+      const blocks = (course && course.blocks) || [];
+      blockSel.innerHTML = '<option value="all">All Blocks</option>' +
+        blocks.map(b => `<option value="${DOMPurify.sanitize(b)}">Block ${DOMPurify.sanitize(b)}</option>`).join('');
+      document.getElementById('riskResult').innerHTML = '';
+    }
+
     function loadRiskReport() {
       const courseId = document.getElementById('riskCourseSelect').value;
       if (!courseId) { alert('Please select a course first.'); return; }
+      const blockFilter = document.getElementById('riskBlockSelect').value || 'all';
       const res = document.getElementById('riskResult');
-      res.innerHTML = '<div style="padding:24px; color:var(--teal); font-style:italic; font-weight:600">⚙️ Scanning all archived sessions across the course…</div>';
+      res.innerHTML = '<div style="padding:24px; color:var(--teal); font-style:italic; font-weight:600">⚙️ Scanning archived sessions…</div>';
       google.script.run
         .withSuccessHandler(data => renderRiskReport(data))
         .withFailureHandler(e => { res.innerHTML = `<div style="padding:24px; color:var(--red)">Error: ${DOMPurify.sanitize(e.message || String(e))}</div>`; })
-        .getCrossSessionRiskReport(courseId);
+        .getCrossSessionRiskReport(courseId, blockFilter);
     }
 
     function renderRiskReport(data) {
@@ -4565,38 +4623,76 @@
           </div>`;
       };
 
-      const stuRow = (name, detail) => `<div style="padding:6px 0; border-bottom:1px solid var(--bd); font-size:12px; display:flex; justify-content:space-between; align-items:center"><span style="font-weight:600">${DOMPurify.sanitize(name)}</span><span style="color:var(--tx3); font-size:11px">${detail}</span></div>`;
+      const stuRow = (name, detail, subDetail) => `
+        <div style="padding:8px 0; border-bottom:1px solid var(--bd); font-size:12px">
+          <div style="display:flex; justify-content:space-between; align-items:center">
+            <span style="font-weight:600">${DOMPurify.sanitize(name)}</span>
+            <span style="color:var(--tx3); font-size:11px">${detail}</span>
+          </div>
+          ${subDetail ? `<div style="font-size:11px; color:var(--tx3); margin-top:3px; padding-left:4px; line-height:1.4">${subDetail}</div>` : ''}
+        </div>`;
+
+      const fmtSessions = (sessions) => (sessions || []).map(s => `${DOMPurify.sanitize(s.setName)}${s.date ? ' (' + DOMPurify.sanitize(s.date) + ')' : ''}`).join(' · ');
+
+      const byBlock = data.byBlock || {};
+      const blockKeys = Object.keys(byBlock).sort();
 
       const summary = `
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:24px">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:32px">
           <div style="border:1px solid var(--bd); border-radius:8px; padding:12px; text-align:center; background:var(--s)">
-            <div style="font-size:22px; font-weight:800; color:var(--teal)">${data.sessionCount}</div>
+            <div style="font-size:22px; font-weight:800; color:var(--teal)">${data.totalSessions}</div>
             <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">Sessions Analyzed</div>
           </div>
           <div style="border:1px solid var(--bd); border-radius:8px; padding:12px; text-align:center; background:var(--s)">
-            <div style="font-size:22px; font-weight:800; color:var(--tx)">${data.classAvg}%</div>
-            <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">Course Avg Score</div>
+            <div style="font-size:22px; font-weight:800; color:var(--tx)">${blockKeys.length}</div>
+            <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">Block${blockKeys.length !== 1 ? 's' : ''} Included</div>
           </div>
           <div style="border:1px solid var(--bd); border-radius:8px; padding:12px; text-align:center; background:var(--s)">
-            <div style="font-size:22px; font-weight:800; color:var(--red)">${data.lowThreshold}%</div>
-            <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">At-Risk Threshold</div>
-          </div>
-          <div style="border:1px solid var(--bd); border-radius:8px; padding:12px; text-align:center; background:var(--s)">
-            <div style="font-size:22px; font-weight:800; color:var(--red)">${(data.neverAccessed || []).length + (data.consistentlyLow || []).length + (data.avoiders || []).length}</div>
+            <div style="font-size:22px; font-weight:800; color:var(--red)">${data.totalFlags}</div>
             <div style="font-size:11px; color:var(--tx3); text-transform:uppercase">Total Flags</div>
           </div>
         </div>`;
 
+      const renderBlockSection = (block, bd) => {
+        const blockFlags = bd.neverAccessed.length + bd.consistentlyLow.length + bd.avoiders.length + bd.violators.length + bd.rapidSubmitters.length;
+        return `
+          <div style="margin-bottom:40px">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px; padding-bottom:12px; border-bottom:2px solid var(--bd)">
+              <div style="background:var(--teal); color:#fff; font-size:12px; font-weight:800; padding:4px 12px; border-radius:20px">Block ${DOMPurify.sanitize(block)}</div>
+              <div style="font-size:13px; color:var(--tx2)">${bd.sessionCount} session${bd.sessionCount !== 1 ? 's' : ''} · Class avg <strong>${bd.classAvg}%</strong> · At-risk threshold <strong style="color:var(--red)">${bd.lowThreshold}%</strong></div>
+              ${blockFlags > 0 ? `<span style="margin-left:auto; background:var(--red); color:#fff; font-size:11px; font-weight:700; border-radius:10px; padding:2px 8px">${blockFlags} Flag${blockFlags !== 1 ? 's' : ''}</span>` : `<span style="margin-left:auto; color:var(--grn); font-size:12px; font-weight:600">✓ No flags</span>`}
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
+              ${flagCard('🔴', 'Never Accessed', 'var(--red)', 'var(--rBg)', bd.neverAccessed,
+                s => stuRow(s.name,
+                  s.fromRoster ? 'On roster — never joined any session' : `${s.sessionCount} session${s.sessionCount !== 1 ? 's' : ''} visible, never joined`,
+                  s.sessions && s.sessions.length ? fmtSessions(s.sessions) : null))}
+              ${flagCard('🟠', 'Consistently Low', 'var(--amb)', 'var(--aBg)', bd.consistentlyLow,
+                s => stuRow(s.name,
+                  `Avg: ${s.avgScore}% (class avg: ${s.classAvg}%, threshold: ${s.threshold}%)`,
+                  s.sessions.map(x => `${DOMPurify.sanitize(x.setName)}: ${x.score}%`).join(' · ')))}
+              ${flagCard('🟡', 'Assessment Avoiders', 'var(--amb)', 'var(--aBg)', bd.avoiders,
+                s => stuRow(s.name,
+                  `Did not finish in ${s.avoidCount} session${s.avoidCount !== 1 ? 's' : ''}`,
+                  fmtSessions(s.sessions)))}
+              ${flagCard('🟣', 'Academic Integrity', '#7c3aed', 'rgba(124,58,237,0.08)', bd.violators,
+                s => stuRow(s.name,
+                  `Violations in ${s.sessionsWithViolations.length} session${s.sessionsWithViolations.length !== 1 ? 's' : ''}`,
+                  s.sessionsWithViolations.map(v => `${DOMPurify.sanitize(v.setName)}${v.date ? ' (' + DOMPurify.sanitize(v.date) + ')' : ''}: ×${v.count}`).join(' · ')))}
+              ${flagCard('⚡', 'Rapid Submitters', 'var(--teal)', 'rgba(13,148,136,0.08)', bd.rapidSubmitters,
+                s => stuRow(s.name,
+                  `Rapid completion in ${s.rapidCount} session${s.rapidCount !== 1 ? 's' : ''}`,
+                  s.sessions.map(v => `${DOMPurify.sanitize(v.setName)}${v.date ? ' (' + DOMPurify.sanitize(v.date) + ')' : ''}: ${v.durationMin}/${v.allocMin} min`).join(' · ')))}
+            </div>
+          </div>`;
+      };
+
+      const blockSectionsHtml = blockKeys.map(bk => renderBlockSection(bk, byBlock[bk])).join('');
+
       const html = `
         <div style="padding:24px; padding-top:0">
           ${summary}
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
-            ${flagCard('🔴', 'Never Accessed', 'var(--red)', 'var(--rBg)', data.neverAccessed, s => stuRow(s.name, s.fromRoster ? 'On roster — never joined' : `${s.sessions.length} sessions, never joined`))}
-            ${flagCard('🟠', 'Consistently Low', 'var(--amb)', 'var(--aBg)', data.consistentlyLow, s => stuRow(s.name, `Avg: ${s.avgScore}% · Threshold: ${s.threshold}% · Scores: ${s.scores.join(', ')}%`))}
-            ${flagCard('🟡', 'Assessment Avoiders', 'var(--amb)', 'var(--aBg)', data.avoiders, s => stuRow(s.name, `Joined but did not finish in ${s.avoidCount} sessions`))}
-            ${flagCard('🟣', 'Repeat Violations', '#7c3aed', 'rgba(124,58,237,0.08)', data.violators, s => stuRow(s.name, `Violations in ${s.sessionsWithViolations.length} sessions: ${s.sessionsWithViolations.map(v => v.setName + ' (×' + v.count + ')').join(', ')}`))}
-            ${flagCard('⚡', 'Rapid Submitters', 'var(--teal)', 'rgba(13,148,136,0.08)', data.rapidSubmitters, s => stuRow(s.name, `Rapid in ${s.rapidCount} sessions: ${s.sessions.map(v => v.setName + ' ' + v.durationMin + '/' + v.allocMin + ' min').join(', ')}`))}
-          </div>
+          ${blockSectionsHtml}
         </div>`;
 
       res.innerHTML = DOMPurify.sanitize(html, { FORCE_BODY: true, ADD_ATTR: ['style', 'onclick'] });
