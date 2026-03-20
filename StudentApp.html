@@ -994,6 +994,172 @@
       70% { transform: scale(0.9); }
       100% { transform: scale(1); opacity: 1; }
     }
+
+    /* ── Holding Room ─────────────────────────────────────────────── */
+    .holding-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--teal);
+      animation: holdingPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes holdingPulse {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+    .holding-quote-text {
+      font-size: 17px;
+      font-style: italic;
+      color: var(--tx);
+      line-height: 1.75;
+      margin-bottom: 12px;
+    }
+
+    /* ── Question Transition Overlay Panels ───────────────────────── */
+    .get-ready-overlay {
+      flex-direction: column;
+      gap: 20px;
+      padding: 40px 24px;
+      box-sizing: border-box;
+    }
+    .tr-panels {
+      display: flex;
+      gap: 20px;
+      width: 100%;
+      max-width: 860px;
+      flex: 1;
+      align-items: stretch;
+    }
+    @media (max-width: 640px) {
+      .tr-panels { flex-direction: column; }
+    }
+    .tr-card {
+      flex: 1;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 28px 24px;
+      backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      opacity: 0;
+    }
+    .tr-card.tr-meme {
+      border-top: 3px solid #4ade80;
+      animation: slideInLeft 0.55s 0.3s cubic-bezier(0.16,1,0.3,1) forwards;
+    }
+    .tr-card.tr-quote {
+      border-top: 3px solid #2dd4bf;
+      animation: slideInRight 0.55s 0.55s cubic-bezier(0.16,1,0.3,1) forwards;
+    }
+    .tr-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.5);
+    }
+    .tr-meme-text {
+      font-size: 18px;
+      line-height: 1.65;
+      color: #f1f5f9;
+      font-style: italic;
+      flex: 1;
+    }
+    .tr-quote-body {
+      font-size: 17px;
+      line-height: 1.75;
+      color: #e2e8f0;
+      font-style: italic;
+      flex: 1;
+      position: relative;
+      padding-left: 18px;
+    }
+    .tr-quote-body::before {
+      content: '"';
+      position: absolute;
+      left: 0;
+      top: -6px;
+      font-size: 48px;
+      line-height: 1;
+      color: rgba(45,212,191,0.35);
+      font-style: normal;
+    }
+    .tr-quote-work {
+      font-size: 12px;
+      color: rgba(255,255,255,0.4);
+      letter-spacing: 0.04em;
+    }
+    .tr-footer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      opacity: 0;
+      animation: fadeInUp 0.5s 0.8s both;
+    }
+    .tr-footer .get-ready-icon { font-size: 36px; margin-bottom: 0; animation: none; }
+    .tr-footer .get-ready-text { font-size: 28px; margin-bottom: 0; }
+    .tr-footer .get-ready-sub  { font-size: 16px; }
+
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-24px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(24px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ── AI Scoring Screen ────────────────────────────────────────── */
+    .scoring-brain {
+      display: inline-block;
+      animation: brainPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes brainPulse {
+      0%, 100% { transform: scale(1) rotate(-3deg); }
+      50% { transform: scale(1.15) rotate(3deg); }
+    }
+    .scoring-dots {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+    .scoring-dots span {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--teal);
+      animation: scoringBounce 1.3s ease-in-out infinite;
+    }
+    .scoring-dots span:nth-child(2) { animation-delay: 0.22s; }
+    .scoring-dots span:nth-child(3) { animation-delay: 0.44s; }
+    @keyframes scoringBounce {
+      0%, 80%, 100% { transform: scale(0.65); opacity: 0.45; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+    .scoring-bar-track {
+      width: 100%;
+      max-width: 320px;
+      height: 4px;
+      background: rgba(13,148,136,0.15);
+      border-radius: 99px;
+      overflow: hidden;
+      margin: 0 auto;
+    }
+    .scoring-bar-fill {
+      height: 100%;
+      width: 40%;
+      background: linear-gradient(to right, #0D9488, #2dd4bf);
+      border-radius: 99px;
+      animation: scoringBar 2s ease-in-out infinite;
+    }
+    @keyframes scoringBar {
+      0%   { width: 15%; margin-left: 0; }
+      50%  { width: 55%; margin-left: 30%; }
+      100% { width: 15%; margin-left: 85%; }
+    }
   </style>
 </head>
 
@@ -1068,9 +1234,22 @@
   </div>
 
   <div class="get-ready-overlay" id="getReadyOverlay">
-    <div class="get-ready-icon">🚀</div>
-    <div class="get-ready-text">Get Ready!</div>
-    <div class="get-ready-sub" id="getReadySub">The next question is starting...</div>
+    <div class="tr-panels">
+      <div class="tr-card tr-meme" id="trMemeCard">
+        <div class="tr-label">⚗️ Science Corner</div>
+        <div class="tr-meme-text" id="trMemeText"></div>
+      </div>
+      <div class="tr-card tr-quote" id="trQuoteCard">
+        <div class="tr-label">✦ St. Augustine</div>
+        <div class="tr-quote-body" id="trQuoteText"></div>
+        <div class="tr-quote-work" id="trQuoteWork"></div>
+      </div>
+    </div>
+    <div class="tr-footer" id="trFooter">
+      <div class="get-ready-icon">🚀</div>
+      <div class="get-ready-text">Get Ready!</div>
+      <div class="get-ready-sub" id="getReadySub">The next question is starting...</div>
+    </div>
   </div>
 
   <div id="bootData" data-prefilled-code="" data-student-token="" data-prefilled-first="" data-prefilled-last="" hidden>
@@ -1082,7 +1261,7 @@
       sid: null, stuId: null, qs: [], cur: 0, ans: {}, conf: {}, correct: {},
       locked: false, done: false, poll: null, timerInt: null, endTime: 0,
       mode: 'self-paced', metaEnabled: true, needsFS: false, accessToken: '', lockedQs: [], revealedQs: [],
-      submittedAns: {},
+      submittedAns: {}, gradeStatus: 'idle',
       // pendingMulti stores in-progress multi-select choices (array) before submission
       pendingMulti: {}
     };
@@ -1155,6 +1334,24 @@
       "What falls, but never needs a bandage? The rain."
     ];
     function getPun() { return SCI_PUNS[Math.floor(Math.random() * SCI_PUNS.length)]; }
+
+    const AUGUSTINE_QUOTES = [
+      { text: "Our heart is restless, until it repose in Thee.", work: "Confessions, I.1" },
+      { text: "Seek not to understand that you may believe, but believe that you may understand.", work: "Sermon 43" },
+      { text: "The truth is like a lion; you don't have to defend it. Let it loose; it will defend itself.", work: "Attr." },
+      { text: "Love, and do what you will.", work: "Homily on 1 John 7" },
+      { text: "Too late have I loved you, O Beauty so ancient and so new, too late have I loved you!", work: "Confessions, X.27" },
+      { text: "Understanding is the reward of faith.", work: "Tractates on John 29" },
+      { text: "Thou hast made us for thyself, and our heart is restless until it rests in thee.", work: "Confessions, I.1" },
+      { text: "Take up and read. Take up and read.", work: "Confessions, VIII.12" },
+      { text: "He who created us without our help will not save us without our consent.", work: "Sermon 169" },
+      { text: "To fall in love with God is the greatest romance; to seek him the greatest adventure; to find him, the greatest human achievement.", work: "Attr." },
+      { text: "To be united in truth is the greatest bond of friendship.", work: "Confessions" },
+      { text: "The measure of love is to love without measure.", work: "Attr." },
+      { text: "Our soul is restless until it finds its rest in Thee.", work: "Confessions" },
+      { text: "What we are in your sight, O Lord, that we are, and nothing more.", work: "Attr." }
+    ];
+    function getAugustineQuote() { return AUGUSTINE_QUOTES[Math.floor(Math.random() * AUGUSTINE_QUOTES.length)]; }
 
     const SyncQueue = {
       items: [],
@@ -1568,12 +1765,34 @@
         });
         html += '</div></div>';
       } else if (S.cur === -1 && S.mode === 'lockstep') {
-        // STATE -1: Initial Lockstep Holding Pen
-        html += '<div class="q-card" style="text-align:center; padding: 80px 40px">';
-        html += '<div style="font-size:56px; margin-bottom:24px">👋</div>';
-        html += '<h2 style="font-size:32px; font-weight:800; margin-bottom:16px">Welcome to the Session!</h2>';
-        html += '<div style="color:var(--tx2); font-size:18px">Please wait here. The assessment will begin shortly when the teacher starts the session.</div>';
-        html += '<div style="margin-top:40px; display:flex; justify-content:center"><div class="spinner border-teal" style="width:32px; height:32px; border-width:3px"></div></div>';
+        // STATE -1: Strict Lockstep Holding Room
+        const hq = getAugustineQuote();
+        html += '<div class="q-card glass-pulse" style="text-align:center; padding:72px 48px; position:relative; overflow:hidden">';
+        html += '<div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(to right,#0D9488,#2dd4bf,#4ade80)"></div>';
+        html += '<div style="font-size:54px; margin-bottom:20px; animation:bounceIn 0.6s cubic-bezier(0.175,0.885,0.32,1.275)">📖</div>';
+        html += '<h2 style="font-size:36px;font-weight:800;letter-spacing:-1px;margin-bottom:10px;font-family:\'Outfit\',sans-serif;background:linear-gradient(135deg,#0D9488,#2dd4bf);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Veritas</h2>';
+        html += '<div style="font-size:18px;color:var(--tx2);margin-bottom:40px;max-width:420px;margin-left:auto;margin-right:auto">Please wait — your teacher will begin the session shortly.</div>';
+        html += '<div style="display:flex;justify-content:center;gap:10px;margin-bottom:52px">';
+        html += '<div class="holding-dot" style="animation-delay:0s"></div>';
+        html += '<div class="holding-dot" style="animation-delay:0.2s"></div>';
+        html += '<div class="holding-dot" style="animation-delay:0.4s"></div>';
+        html += '</div>';
+        html += '<div style="border-top:1px solid var(--brd);padding-top:32px;max-width:480px;margin:0 auto">';
+        html += '<div style="font-size:20px;color:var(--teal);margin-bottom:12px;letter-spacing:0.05em">✦</div>';
+        html += '<div class="holding-quote-text">"' + hq.text + '"</div>';
+        html += '<div style="font-size:12px;color:var(--tx3);letter-spacing:0.08em;text-transform:uppercase">— St. Augustine&ensp;·&ensp;' + hq.work + '</div>';
+        html += '</div>';
+        html += '</div>';
+      } else if (isDone && S.mode === 'lockstep' && (S.gradeStatus === 'running' || S.gradeStatus === 'queued')) {
+        // SCORING STATE: AI grading is active
+        html += '<div class="q-card" style="text-align:center; padding:64px 48px; position:relative; overflow:hidden">';
+        html += '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#0D9488 0%,#2dd4bf 40%,#4ade80 70%,#0D9488 100%);background-size:200%;animation:scoringBar 2s linear infinite"></div>';
+        html += '<div class="scoring-brain" style="font-size:54px; margin-bottom:20px">🧠</div>';
+        html += '<h2 style="font-size:28px;font-weight:800;margin-bottom:12px;font-family:\'Outfit\',sans-serif">Responses Being Scored</h2>';
+        html += '<div style="color:var(--tx2);font-size:17px;max-width:400px;margin:0 auto 32px">The AI is carefully evaluating your response. Sit tight!</div>';
+        html += '<div class="scoring-dots"><span></span><span></span><span></span></div>';
+        html += '<div style="margin-top:28px"><div class="scoring-bar-track"><div class="scoring-bar-fill"></div></div></div>';
+        html += '<div style="margin-top:40px;padding-top:28px;border-top:1px solid var(--brd);font-size:14px;color:var(--tx3);font-style:italic;max-width:400px;margin-left:auto;margin-right:auto">"Understanding is the reward of faith."<br><span style="letter-spacing:0.06em;font-style:normal;font-size:12px">— ST. AUGUSTINE</span></div>';
         html += '</div>';
       } else if (isDone && S.mode === 'lockstep') {
         // STATE 3: Lockstep Waiting Phase
@@ -1801,26 +2020,33 @@
       if (S.isTransitioning) return;
       S.isTransitioning = true;
 
-      const overlay = document.getElementById('getReadyOverlay');
-      const sub = document.getElementById('getReadySub');
-      const total = S.qs.length;
+      // Populate meme content
+      const meme = getPun();
+      const quote = getAugustineQuote();
+      document.getElementById('trMemeText').textContent = meme;
+      document.getElementById('trQuoteText').textContent = quote.text;
+      document.getElementById('trQuoteWork').textContent = quote.work;
+      document.getElementById('getReadySub').textContent = `Question ${targetQIndex + 1} of ${S.qs.length}`;
 
-      sub.textContent = `Question ${targetQIndex + 1} of ${total}`;
+      // Reset card animations by forcing reflow
+      ['trMemeCard', 'trQuoteCard', 'trFooter'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) { el.style.animation = 'none'; el.offsetHeight; el.style.animation = ''; }
+      });
 
-      // Hide main UI briefly
+      // Hide main content, show overlay
       document.getElementById('qArea').style.opacity = '0';
+      document.getElementById('getReadyOverlay').classList.add('show');
 
-      overlay.classList.add('show');
-
-      setTimeout(() => {
-        overlay.classList.remove('show');
+      setTimeout(function() {
+        document.getElementById('getReadyOverlay').classList.remove('show');
         callback();
-        setTimeout(() => {
-           document.getElementById('qArea').style.opacity = '1';
-           document.getElementById('qArea').style.transition = 'opacity 0.5s ease';
-           S.isTransitioning = false;
+        setTimeout(function() {
+          document.getElementById('qArea').style.opacity = '1';
+          document.getElementById('qArea').style.transition = 'opacity 0.5s ease';
+          S.isTransitioning = false;
         }, 100);
-      }, 1500); // Overlay display duration
+      }, 4000); // 4 seconds — enough time to read meme + quote
     }
 
     function executeSubmit() {
@@ -1897,6 +2123,14 @@
             // Teacher has unlocked them, explicitly trigger fsPrompt again
             document.getElementById('lockOverlay').classList.remove('show');
             document.getElementById('fsPrompt').classList.add('show');
+          }
+
+          // Sync grading status (all modes)
+          if (st.gradeStatus !== undefined) {
+            const prevGradeStatus = S.gradeStatus;
+            S.gradeStatus = st.gradeStatus;
+            // Re-render if scoring state changed while student is waiting
+            if (prevGradeStatus !== S.gradeStatus && S.mode === 'lockstep' && !S.isTransitioning) renderQ();
           }
 
           // Lockstep syncing logic
