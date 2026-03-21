@@ -47,7 +47,8 @@ const DB = {
       'StudentSessions':['SessionID','StudentID','StudentName','Email','Status','JoinedAt','FinishedAt','ViolationCount','LockedOut','QOrder','NeedsFullscreen', 'ClientToken', 'NormalizedName', 'IdentityKey'],
       'Violations':['SessionID','StudentID','StudentName','Type','Timestamp','Resolved'],
       'AIGrades':['SessionID','StudentID','StudentName','QuestionID','Score','MaxScore','Feedback','Answer','GradedAt','Overridden','OverrideScore','OverrideFeedback','Context'],
-      'Archive':['SessionID','Code','SetName','Block','StartedAt','EndedAt','StudentCount','AvgPct','DataJSON']
+      'Archive':['SessionID','Code','SetName','Block','StartedAt','EndedAt','StudentCount','AvgPct','DataJSON'],
+      'AuditLog':['Timestamp','Action','Target','Details']
     };
     for (const [name, headers] of Object.entries(sheets)) {
       let s = ss.getSheetByName(name);
@@ -70,20 +71,47 @@ const DB = {
     const w = ['PHOTON','NEURON','PROTON','ENZYME','GENOME','PLASMA','QUASAR','MITOSIS','ATOMIC','BORON','CARBON','HELIUM','KELVIN','NEUTRO','ORBITAL','REDOX','SOLUTE','TENSOR','VECTOR','VOLTAGE'];
     return w[Math.floor(Math.random()*w.length)] + String(Math.floor(Math.random()*90)+10);
   },
-  
+
+  // Returns an error string if name is invalid, or null if valid.
+  validateName_(name) {
+    const s = String(name || '').trim();
+    if (!s) return 'Name cannot be empty.';
+    if (s.length > 200) return 'Name too long (max 200 characters).';
+    return null;
+  },
+
+  // Appends a row to the AuditLog sheet. Fire-and-forget — no lock needed for
+  // append-only operations (Sheets appends are atomic at the row level).
+  logAuditEvent(action, target, details) {
+    try {
+      const sheet = this.sh('AuditLog');
+      if (!sheet) return;
+      sheet.appendRow([new Date().toISOString(), String(action || ''), String(target || ''), String(details || '')]);
+    } catch (e) {
+      Logger.log('logAuditEvent error: ' + e.toString());
+    }
+  },
+
   // ── COURSES, QSETS, ROSTERS (Standard CRUD) ──
   createCourse(name, blocks) {
+    const nameErr = this.validateName_(name);
+    if (nameErr) return { error: nameErr };
+    const safeName = String(name).trim();
     const s = this.sh('Courses'); const id = 'crs_'+Utilities.getUuid().slice(0,8);
-    s.appendRow([id, name, JSON.stringify(blocks||[]), new Date().toISOString()]);
-    return {id, name, blocks};
+    s.appendRow([id, safeName, JSON.stringify(blocks||[]), new Date().toISOString()]);
+    return {id, name: safeName, blocks};
   },
   getCourses() {
     const d = this.sh('Courses').getDataRange().getValues();
     return d.slice(1).map(r => ({id:r[0], name:r[1], blocks:JSON.parse(r[2]||'[]'), createdAt:r[3]}));
   },
   updateCourse(id, name, blocks) {
+    if (name !== undefined && name !== null) {
+      const nameErr = this.validateName_(name);
+      if (nameErr) return { error: nameErr };
+    }
     const s=this.sh('Courses'); const d=s.getDataRange().getValues();
-    for(let i=1;i<d.length;i++) if(d[i][0]===id){if(name!==undefined&&name!==null&&String(name).trim()!=='')s.getRange(i+1,2).setValue(name);if(blocks!==undefined)s.getRange(i+1,3).setValue(JSON.stringify(blocks));return true;}
+    for(let i=1;i<d.length;i++) if(d[i][0]===id){if(name!==undefined&&name!==null&&String(name).trim()!=='')s.getRange(i+1,2).setValue(String(name).trim());if(blocks!==undefined)s.getRange(i+1,3).setValue(JSON.stringify(blocks));return true;}
     return false;
   },
   updateCourseBlocks(id, blocks) {
@@ -91,14 +119,19 @@ const DB = {
   },
   deleteCourse(id) {
     const s=this.sh('Courses'); const d=s.getDataRange().getValues();
-    for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);return true;}
+    for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);this.logAuditEvent('DELETE_COURSE', id, '');return true;}
     return false;
   },
   createQSet(name, courseId, questions, stimuli) {
+    const nameErr = this.validateName_(name);
+    if (nameErr) return { error: nameErr };
+    if (!Array.isArray(questions)) return { error: 'Questions must be an array.' };
+    if (questions.length > 100) return { error: 'Question set cannot exceed 100 questions.' };
+    const safeName = String(name).trim();
     const s=this.sh('QSets'); const id='qs_'+Utilities.getUuid().slice(0,8); const now=new Date().toISOString();
     questions.forEach((q,i)=>{if(!q.id)q.id='q'+(i+1)+'_'+Date.now().toString(36)});
-    s.appendRow([id,name,courseId||'',now,now,JSON.stringify(questions),JSON.stringify(stimuli||[])]);
-    return {id,name,questionCount:questions.length};
+    s.appendRow([id,safeName,courseId||'',now,now,JSON.stringify(questions),JSON.stringify(stimuli||[])]);
+    return {id,name:safeName,questionCount:questions.length};
   },
   getQSets(courseId) {
     const d=this.sh('QSets').getDataRange().getValues();
@@ -113,16 +146,21 @@ const DB = {
     return null;
   },
   updateQSet(id,name,courseId,questions,stimuli) {
+    const nameErr = this.validateName_(name);
+    if (nameErr) return { error: nameErr };
+    if (!Array.isArray(questions)) return { error: 'Questions must be an array.' };
+    if (questions.length > 100) return { error: 'Question set cannot exceed 100 questions.' };
+    const safeName = String(name).trim();
     const s=this.sh('QSets'); const d=s.getDataRange().getValues();
     for(let i=1;i<d.length;i++) if(d[i][0]===id){
-      s.getRange(i+1,2).setValue(name); s.getRange(i+1,3).setValue(courseId||'');
+      s.getRange(i+1,2).setValue(safeName); s.getRange(i+1,3).setValue(courseId||'');
       s.getRange(i+1,5).setValue(new Date().toISOString());
       s.getRange(i+1,6).setValue(JSON.stringify(questions)); s.getRange(i+1,7).setValue(JSON.stringify(stimuli||[]));
-      return {id,name};
+      return {id,name:safeName};
     }
     return null;
   },
-  deleteQSet(id) { const s=this.sh('QSets'); const d=s.getDataRange().getValues(); for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);return true;} return false; },
+  deleteQSet(id) { const s=this.sh('QSets'); const d=s.getDataRange().getValues(); for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);this.logAuditEvent('DELETE_QSET', id, '');return true;} return false; },
   saveRoster(block, courseId, students) {
     const s=this.sh('Rosters'); const d=s.getDataRange().getValues(); const now=new Date().toISOString();
     for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block) && String(d[i][1])===String(courseId||'')){s.getRange(i+1,3).setValue(JSON.stringify(students));s.getRange(i+1,4).setValue(now);return {block,count:students.length};}
@@ -247,6 +285,7 @@ const DB = {
         s.getRange(i+1,9).setValue('ended');s.getRange(i+1,12).setValue(new Date().toISOString());this.archiveSession(id);
         const ss=this.sh('StudentSessions'); const sd=ss.getDataRange().getValues();
         for(let j=1;j<sd.length;j++) if(sd[j][0]===id&&(sd[j][8]===true||sd[j][8]==='TRUE')){ss.getRange(j+1,9).setValue(false);}
+        this.logAuditEvent('END_SESSION', id, '');
         return true;
       }
       return false;
@@ -489,6 +528,7 @@ const DB = {
       for(let i=1;i<vd.length;i++) if(vd[i][0]===sessId&&vd[i][1]===stuId&&!vd[i][5]){
         v.getRange(i+1,6).setValue(true);
       }
+      this.logAuditEvent('READMIT_STUDENT', sessId, 'stuId=' + stuId);
       return {readmitted:true};
     });
   },

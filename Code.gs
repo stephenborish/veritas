@@ -152,10 +152,31 @@ function signStudentAccessPayload_(payloadSegment) {
   return base64UrlEncode_(sigBytes);
 }
 
+// Rotate the HMAC signing secret — immediately invalidates ALL existing student tokens.
+// Run from the Apps Script editor when the secret may have been compromised.
+function rotateStudentLinkSecret() {
+  const props = PropertiesService.getScriptProperties();
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    props.deleteProperty('STUDENT_LINK_SECRET');
+    const newSecret = getStudentLinkSecret_(); // auto-regenerates
+    DB.logAuditEvent('ROTATE_STUDENT_LINK_SECRET', 'STUDENT_LINK_SECRET', 'Secret rotated at ' + new Date().toISOString());
+    Logger.log('rotateStudentLinkSecret: new secret generated. All existing student tokens are now invalid.');
+    return { ok: true, message: 'Student link secret rotated. All previously issued student tokens are now invalid.' };
+  } catch (e) {
+    Logger.log('rotateStudentLinkSecret error: ' + e.toString());
+    return { error: 'Failed to rotate secret: ' + e.message };
+  } finally {
+    try { lock.releaseLock(); } catch (e) { Logger.log('Error releasing lock in rotateStudentLinkSecret: ' + e.toString()); }
+  }
+}
+
 function createStudentAccessToken(session, student) {
   const email = normalizeStudentEmail_((student && student.email) || '');
   const nameParts = getStudentNameParts_(student);
   const fullName = nameParts.fullName || String((student && student.name) || '').trim();
+  const now = new Date();
   const payload = {
     v: 1,
     sid: String((session && session.sessionId) || ''),
@@ -166,7 +187,8 @@ function createStudentAccessToken(session, student) {
     firstName: nameParts.firstName,
     lastName: nameParts.lastName,
     normalizedName: normalizeStudentIdentityName_(fullName),
-    issuedAt: new Date().toISOString()
+    issuedAt: now.toISOString(),
+    expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
   };
   const payloadSegment = base64UrlEncode_(JSON.stringify(payload));
   return payloadSegment + '.' + signStudentAccessPayload_(payloadSegment);
@@ -187,6 +209,7 @@ function verifyStudentAccessToken(token) {
   try {
     const payload = JSON.parse(base64UrlDecodeToString_(payloadSegment));
     if (!payload || Number(payload.v) !== 1 || !payload.sid) return null;
+    if (payload.expiresAt && new Date() > new Date(payload.expiresAt)) return null;
     payload.code = normalizeStudentCode(payload.code || '');
     payload.email = normalizeStudentEmail_(payload.email || '');
     payload.name = String(payload.name || '').trim();
@@ -243,7 +266,21 @@ function getArchivedSessions() { return DB.getArchivedSessions(); }
 function getArchivedSessionData(id) { return DB.getArchivedSessionData(id); }
 function rescoreQuestion(sessId, qId, newAnswerText) { return DB.rescoreQuestion(sessId, qId, newAnswerText); }
 function rescoreQuestionFull(sessId, qId, qJsonStr) { return DB.rescoreQuestionFull(sessId, qId, qJsonStr); }
-function deleteArchiveSession(id) { const a = DB.sh('Archive'); if(!a) return false; const d=a.getDataRange().getValues(); for(let i=1;i<d.length;i++) if(d[i][0]===id){a.deleteRow(i+1);return true;} return false; }
+function deleteArchiveSession(id) {
+  return DB.withLock(() => {
+    const a = DB.sh('Archive');
+    if (!a) return false;
+    const d = a.getDataRange().getValues();
+    for (let i = 1; i < d.length; i++) {
+      if (d[i][0] === id) {
+        a.deleteRow(i + 1);
+        DB.logAuditEvent('DELETE_ARCHIVE_SESSION', id, '');
+        return true;
+      }
+    }
+    return false;
+  });
+}
 function dismissViolation(sessId, timestamp) { return DB.dismissViolation(sessId, timestamp); }
 
 // ── Live ──
@@ -353,9 +390,18 @@ function overrideScore(sessId, stuId, qId, score, fb) { return Grader.overrideSc
 function regradeWithContext(sessId, qId, ctx) { return Grader.regradeWithContext(sessId, qId, ctx); }
 
 // ── Drive Image Uploads ──
+const ALLOWED_IMAGE_MIME_TYPES_ = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_IMAGE_BASE64_LENGTH_ = 6700000; // ≈5 MB after base64 encoding overhead
+
 function uploadImage(base64, filename, mimeType) {
   try {
+    if (!ALLOWED_IMAGE_MIME_TYPES_.includes(String(mimeType || ''))) {
+      return { error: 'Invalid image type. Allowed types: JPEG, PNG, GIF, WebP.' };
+    }
     const rawBase64 = base64.split(',')[1] || base64;
+    if (rawBase64.length > MAX_IMAGE_BASE64_LENGTH_) {
+      return { error: 'Image too large. Maximum size is 5 MB.' };
+    }
     const blob = Utilities.newBlob(Utilities.base64Decode(rawBase64), mimeType, filename);
     const folder = getOrCreateImageFolder();
     const file = folder.createFile(blob);
