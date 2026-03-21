@@ -108,14 +108,18 @@ Student entry links embed a signed token (`?studentToken=...`). The token is a B
 Token format: `<base64url_payload>.<base64url_signature>`
 
 Key functions in `Code.gs`:
-* `createStudentAccessToken(session, student)` — issues a token
-* `verifyStudentAccessToken(token)` — validates signature, returns decoded payload or `null`
+* `createStudentAccessToken(session, student)` — issues a signed token (valid 7 days)
+* `verifyStudentAccessToken(token)` — validates signature AND expiry, returns decoded payload or `null`
 * `constantTimeEquals_(a, b)` — timing-safe string comparison (prevents timing attacks on HMAC verification)
 * `signStudentAccessPayload_(payloadSegment)` — HMAC signing
+* `rotateStudentLinkSecret()` — immediately invalidates ALL existing tokens by regenerating `STUDENT_LINK_SECRET`; run from Apps Script editor if secret is compromised
 
-The token payload includes: `v`, `sid`, `code`, `block`, `email`, `name`, `firstName`, `lastName`, `normalizedName`, `issuedAt`.
+The token payload includes: `v`, `sid`, `code`, `block`, `email`, `name`, `firstName`, `lastName`, `normalizedName`, `issuedAt`, `expiresAt` (7 days from issue).
 
 🛑 **NEVER** use `===` for HMAC comparison — always use `constantTimeEquals_()`.
+🛑 **NEVER** remove the `expiresAt` check in `verifyStudentAccessToken` — expired tokens must be rejected server-side.
+
+Legacy tokens without `expiresAt` are accepted for backward-compatibility (they pass the check because `payload.expiresAt` is falsy).
 
 ### Identity Normalization
 Student names are normalized via `normalizeStudentIdentityName_()` (lowercased, whitespace-collapsed) for fuzzy roster matching. This normalization is stored in the token payload itself (`normalizedName` field) so re-computation is consistent.
@@ -134,6 +138,33 @@ The student view enforces exam integrity by:
 Because UI rendering relies heavily on template literals injecting server-provided strings (question text, student names, answer choices, AI feedback), **all user-controlled data must be wrapped in `DOMPurify.sanitize(variable)`** before being injected into the DOM. DOMPurify is loaded via CDN in both HTML files.
 
 🛑 This is non-negotiable. Missing a single sanitization call on question text or student answers is a critical XSS vulnerability.
+
+### Input Validation for Teacher Data (`Data.gs`)
+* `DB.validateName_(name)` — validates course/question-set names: rejects empty, whitespace-only, and names >200 characters. Called at the top of `createCourse`, `updateCourse`, `createQSet`, `updateQSet`. Returns an error string on failure or `null` if valid.
+* Question arrays in `createQSet` / `updateQSet` are capped at **100 questions** to prevent oversized payloads from being stored in Sheets cells.
+* `overrideScore(sessId, stuId, qId, score, fb)` — validates: `score` must be a finite non-negative number ≤ `maxPoints`; `fb` is truncated to 2000 chars. Invalid scores return `{ error: '...' }` before touching any data.
+* `regradeWithContext(sessId, qId, ctx)` — the teacher-supplied context string is capped at **500 characters** to prevent API abuse and prompt injection via the Gemini context field.
+
+### Image Upload Security (`Code.gs`)
+* `uploadImage(base64, filename, mimeType)` enforces a **MIME type whitelist**: only `image/jpeg`, `image/png`, `image/gif`, `image/webp` are accepted. Any other type returns `{ error: 'Invalid image type...' }`.
+* Base64 payload is capped at **~5 MB** (`MAX_IMAGE_BASE64_LENGTH_ = 6_700_000` chars) to prevent Drive quota exhaustion.
+
+### Audit Log (`Data.gs`)
+All irreversible teacher operations are logged to an `AuditLog` sheet (columns: `Timestamp | Action | Target | Details`). The sheet is created by `initSystem()`.
+
+Logged actions:
+| Action | Trigger |
+|--------|---------|
+| `DELETE_COURSE` | `DB.deleteCourse()` |
+| `DELETE_QSET` | `DB.deleteQSet()` |
+| `DELETE_ARCHIVE_SESSION` | `deleteArchiveSession()` in Code.gs |
+| `END_SESSION` | `DB.endSession()` |
+| `READMIT_STUDENT` | `DB.readmitStudent()` |
+| `OVERRIDE_SCORE` | `Grader.overrideScore()` |
+| `REGRADE_WITH_CONTEXT` | `Grader.regradeWithContext()` |
+| `ROTATE_STUDENT_LINK_SECRET` | `rotateStudentLinkSecret()` |
+
+🛑 Do not remove audit log calls from these functions — they are the only server-side record of destructive operations.
 
 ---
 
