@@ -424,6 +424,59 @@
       padding: 48px 0 160px;
     }
 
+    /* Stimulus panel */
+    .stim-card {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: var(--r);
+      box-shadow: var(--sh);
+      border: 1.5px solid rgba(5, 150, 105, 0.25);
+      border-left: 5px solid var(--grn);
+      padding: 36px 48px;
+      margin-bottom: 20px;
+    }
+
+    .stim-hdr {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .stim-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--grn);
+      background: rgba(5, 150, 105, 0.08);
+      border: 1px solid rgba(5, 150, 105, 0.3);
+      padding: 4px 12px;
+      border-radius: 20px;
+    }
+
+    .stim-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--tx);
+    }
+
+    .stim-body {
+      font-size: 17px;
+      line-height: 1.85;
+      color: var(--tx);
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .stim-body img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 6px;
+      margin: 10px 0;
+    }
+
     .q-card {
       background: rgba(255, 255, 255, 0.85);
       backdrop-filter: blur(16px);
@@ -524,6 +577,65 @@
       border-color: var(--red) !important;
       background: var(--rBg) !important;
       box-shadow: 0 8px 24px rgba(225, 29, 72, 0.12);
+    }
+
+    .mc-opt.elim {
+      opacity: 0.45;
+      border-color: var(--bd) !important;
+      background: rgba(241, 245, 249, 0.4) !important;
+      box-shadow: none !important;
+      transform: none !important;
+    }
+
+    .mc-opt.elim .ctxt {
+      text-decoration: line-through;
+      text-decoration-color: var(--tx3);
+      color: var(--tx3);
+    }
+
+    .mc-opt.elim .ltr {
+      background: var(--s2);
+      color: var(--tx3);
+      border-color: var(--bd);
+      box-shadow: none;
+    }
+
+    .elim-btn {
+      margin-left: auto;
+      flex-shrink: 0;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1.5px solid var(--bd);
+      background: transparent;
+      color: var(--tx3);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: var(--tr);
+      line-height: 1;
+    }
+
+    .elim-btn:hover {
+      border-color: var(--red);
+      color: var(--red);
+      background: var(--rBg);
+    }
+
+    .mc-opt.elim .elim-btn {
+      border-color: var(--tx3);
+      color: var(--tx3);
+      opacity: 0.7;
+    }
+
+    .mc-opt.elim .elim-btn:hover {
+      border-color: var(--teal);
+      color: var(--teal);
+      background: var(--tBg);
+      opacity: 1;
     }
 
     .mc-opt .ltr {
@@ -1265,6 +1377,10 @@
       submittedAns: {}, gradeStatus: 'idle',
       // pendingMulti stores in-progress multi-select choices (array) before submission
       pendingMulti: {},
+      // eliminated tracks crossed-out choice indices per question: { [qId]: Set<choiceIndex> }
+      eliminated: {},
+      // stimuli stores passage/figure material keyed by id
+      stimuli: [],
       // Lockstep question timer state
       qTimerInt: null, qTimerActive: false, qTimerEnd: 0, qTimerDismissed: false
     };
@@ -1631,6 +1747,7 @@
             return;
           }
           S.qs = d.questions;
+          if (d.stimuli) S.stimuli = d.stimuli;
           if (d.existing) {
             Object.assign(S.ans, d.existing);
             for (let k in d.existing) {
@@ -1753,6 +1870,18 @@
 
       if (isRevealed) {
         // STATE 5: Revealed Phase (Anti-Screenshot)
+
+        // Show stimulus if linked
+        if (q.stimulusId) {
+          const stim = S.stimuli.find(function (s) { return s.id === q.stimulusId; });
+          if (stim) {
+            html += '<div class="stim-card">';
+            html += '<div class="stim-hdr"><span class="stim-label">Stimulus</span><span class="stim-title">' + DOMPurify.sanitize(stim.title) + '</span></div>';
+            html += '<div class="stim-body">' + DOMPurify.sanitize(stim.content) + '</div>';
+            html += '</div>';
+          }
+        }
+
         html += '<div class="q-card" style="padding: 40px">';
         html += '<div class="q-hdr"><span class="q-num">Question ' + (S.cur + 1) + ' Revealed</span><span class="q-pts">' + (q.points || 1) + ' Points</span></div>';
 
@@ -1861,38 +1990,67 @@
         html += '</div>';
       } else {
         // STATE 1: Question Phase
+
+        // Render shared stimulus if this question has one
+        if (q.stimulusId) {
+          const stim = S.stimuli.find(function (s) { return s.id === q.stimulusId; });
+          if (stim) {
+            html += '<div class="stim-card fade-in-up">';
+            html += '<div class="stim-hdr"><span class="stim-label">Stimulus</span><span class="stim-title">' + DOMPurify.sanitize(stim.title) + '</span></div>';
+            html += '<div class="stim-body">' + DOMPurify.sanitize(stim.content) + '</div>';
+            html += '</div>';
+          }
+        }
+
         html += '<div class="q-card fade-in-up"><div class="q-hdr"><span class="q-num">Question ' + (S.cur + 1) + '</span><span class="q-pts">' + (q.points || 1) + ' Points</span></div>';
         html += '<div class="q-text">' + DOMPurify.sanitize(q.text) + '</div>';
         if (isMC) {
           // Detect multi-select: question has more than 1 correct answer
           const isMultiSelect = !!q.multiSelect;
           let mcHtml = '';
+          const elimSet = S.eliminated[q.id] || new Set();
+          const isSubmitted = !!S.submittedAns[q.id];
 
           if (isMultiSelect) {
             // Multi-select: show all choices as toggleable, with explicit Submit button
             const pending = S.pendingMulti[q.id] || [];
             q.choices.forEach(function (c, i) {
               const isChecked = pending.includes(c);
+              const isElim = elimSet.has(i);
               const payload = encodeURIComponent(JSON.stringify(c));
               const ltr = String.fromCharCode(65 + i);
-              mcHtml += '<div class="mc-opt ' + (isChecked ? 'sel' : '') + '" data-choice-payload="' + payload + '" data-multiselect="1">';
+              let cls = 'mc-opt' + (isChecked ? ' sel' : '') + (isElim ? ' elim' : '');
+              mcHtml += '<div class="' + cls + '" data-choice-payload="' + payload + '" data-choice-idx="' + i + '" data-multiselect="1">';
               mcHtml += '<div class="ltr">' + ltr + '</div><div class="ctxt">' + DOMPurify.sanitize(c) + '</div>';
-              mcHtml += '<div style="margin-left:auto;font-size:18px">' + (isChecked ? '☑' : '☐') + '</div>';
+              mcHtml += '<div style="margin-left:auto;display:flex;align-items:center;gap:10px">';
+              mcHtml += '<span style="font-size:18px">' + (isChecked ? '☑' : '☐') + '</span>';
+              if (!isSubmitted) {
+                mcHtml += '<button class="elim-btn" data-elim-qid="' + q.id + '" data-elim-idx="' + i + '" title="' + (isElim ? 'Restore choice' : 'Cross out choice') + '">' + (isElim ? '↩' : '✕') + '</button>';
+              }
+              mcHtml += '</div>';
               mcHtml += '</div>';
             });
             html += '<div class="mc-list">' + mcHtml + '</div>';
-            html += '<div style="margin-top:16px;font-size:13px;color:var(--tx3);text-align:center">Select all that apply, then click Submit.</div>';
+            html += '<div style="margin-top:16px;font-size:13px;color:var(--tx3);text-align:center">Select all that apply, then click Submit. Right-click or use ✕ to cross out choices.</div>';
             html += '<div style="margin-top:16px;text-align:right"><button class="nbtn nbtn-next" style="display:inline-flex" onclick="submitMCMulti(\'' + q.id + '\')">Submit Answer</button></div>';
           } else {
             // Single-select: click to auto-submit (existing behavior)
             q.choices.forEach(function (c, i) {
+              const isElim = elimSet.has(i);
               const selStr = S.ans[q.id] === c ? 'sel' : '';
               const payload = encodeURIComponent(JSON.stringify(c));
               const ltr = String.fromCharCode(65 + i);
-              mcHtml += '<div class="mc-opt ' + selStr + '" data-choice-payload="' + payload + '">';
-              mcHtml += '<div class="ltr">' + ltr + '</div><div class="ctxt">' + DOMPurify.sanitize(c) + '</div></div>';
+              mcHtml += '<div class="mc-opt ' + selStr + (isElim ? ' elim' : '') + '" data-choice-payload="' + payload + '" data-choice-idx="' + i + '">';
+              mcHtml += '<div class="ltr">' + ltr + '</div><div class="ctxt">' + DOMPurify.sanitize(c) + '</div>';
+              if (!isSubmitted) {
+                mcHtml += '<button class="elim-btn" data-elim-qid="' + q.id + '" data-elim-idx="' + i + '" title="' + (isElim ? 'Restore choice' : 'Cross out choice') + '">' + (isElim ? '↩' : '✕') + '</button>';
+              }
+              mcHtml += '</div>';
             });
             html += '<div class="mc-list">' + mcHtml + '</div>';
+            if (!isSubmitted) {
+              html += '<div style="margin-top:12px;font-size:13px;color:var(--tx3);text-align:right">Use ✕ to cross out a choice without selecting it</div>';
+            }
           }
         } else {
           html += '<div class="sa"><textarea id="saIn" data-qid="' + q.id + '" placeholder="Type your detailed response here...">' + (S.ans[q.id] || '') + '</textarea></div>';
@@ -1945,6 +2103,16 @@
         return;
       }
 
+      // Handle elimination button click
+      const elimBtn = evt.target.closest('.elim-btn');
+      if (elimBtn) {
+        evt.stopPropagation();
+        const qId = elimBtn.dataset.elimQid;
+        const idx = Number(elimBtn.dataset.elimIdx);
+        if (qId !== undefined && !isNaN(idx)) toggleElim(qId, idx);
+        return;
+      }
+
       const opt = evt.target.closest('.mc-opt');
       if (!opt) return;
 
@@ -1958,6 +2126,13 @@
         // Block if fully submitted (meta done or no meta)
         if (S.submittedAns[q.id] && S.metaEnabled && S.conf[q.id]) return;
         if (S.submittedAns[q.id] && !S.metaEnabled) return;
+        // If the choice is crossed out, clicking restores it
+        const msIdx = Number(opt.dataset.choiceIdx);
+        const msElimSet = S.eliminated[q.id] || new Set();
+        if (!isNaN(msIdx) && msElimSet.has(msIdx)) {
+          toggleElim(q.id, msIdx);
+          return;
+        }
         try {
           const choice = JSON.parse(decodeURIComponent(opt.dataset.choicePayload));
           toggleMCMulti(q.id, choice);
@@ -1969,6 +2144,14 @@
       if (S.submittedAns[q.id] && S.metaEnabled && S.conf[q.id]) return;
       if (S.submittedAns[q.id] && !S.metaEnabled) return;
 
+      // If the choice is crossed out, clicking the choice body restores it instead of selecting it
+      const choiceIdx = Number(opt.dataset.choiceIdx);
+      const elimSet = S.eliminated[q.id] || new Set();
+      if (!isNaN(choiceIdx) && elimSet.has(choiceIdx)) {
+        toggleElim(q.id, choiceIdx);
+        return;
+      }
+
       const payload = opt.dataset.choicePayload;
       if (!payload) return;
 
@@ -1979,6 +2162,15 @@
         console.error('Unable to parse MC choice payload', e);
       }
     });
+
+    // Toggle elimination (cross-out) for a choice by index
+    function toggleElim(qId, idx) {
+      if (!S.eliminated[qId]) S.eliminated[qId] = new Set();
+      const set = S.eliminated[qId];
+      if (set.has(idx)) set.delete(idx);
+      else set.add(idx);
+      renderQ();
+    }
 
     // Single-answer MC: auto-submit on click
     function pickMC(qId, c) {

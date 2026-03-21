@@ -1559,6 +1559,18 @@
           </div>
         </div>
 
+        <!-- STIMULI MANAGER -->
+        <div class="card" style="margin-bottom:24px; border-left:5px solid var(--grn)">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+            <div>
+              <div style="font-size:17px; font-weight:700; color:var(--tx)">Shared Stimulus Materials</div>
+              <div style="font-size:13px; color:var(--tx3); margin-top:4px">Create passages, figures, or images that multiple questions can share. Link them to questions below.</div>
+            </div>
+            <button class="btn bg" style="flex-shrink:0" onclick="addStim()">+ Add Stimulus</button>
+          </div>
+          <div id="stimEdList"></div>
+        </div>
+
         <div id="qEdList"></div>
 
         <div
@@ -1865,7 +1877,7 @@
     }
 
     let liveInt = null, aSid = null, liveTab = 'students', curQIdx = 0;
-    let edQ = [], curSetId = null, uploadCallback = null;
+    let edQ = [], edStimuli = [], curSetId = null, uploadCallback = null;
     let authChecked = false;
     let __gradingActive = false; // true while AI grading is running — drives faster poll rate
     let __renderFP = {};         // fingerprints of last-rendered sections for diff-skipping
@@ -2411,9 +2423,9 @@
         if (id) {
           document.getElementById('qEdList').innerHTML = '<div class="loading"><div class="spinner"></div>Loading...</div>';
           google.script.run.withSuccessHandler(s => {
-            if (!s) return; document.getElementById('qN').value = s.name; document.getElementById('qCourse').value = s.courseId || ''; edQ = s.questions; renderEdQ();
+            if (!s) return; document.getElementById('qN').value = s.name; document.getElementById('qCourse').value = s.courseId || ''; edQ = s.questions; edStimuli = s.stimuli || []; renderEdQ();
           }).getQuestionSet(id);
-        } else renderEdQ();
+        } else { edStimuli = []; renderEdQ(); }
       } else {
         toast('Google Apps Script API not available.', 'err');
         renderEdQ();
@@ -2435,10 +2447,17 @@
     }
 
     function renderEdQ() {
+      renderEdStimuli();
       const el = document.getElementById('qEdList');
       el.innerHTML = edQ.map((q, i) => {
         const ctrl = `<div class="q-ed-handle"><button class="btn bg bs" onclick="mvQ(${i},-1)">↑</button><button class="btn bg bs" onclick="mvQ(${i},1)">↓</button><button class="btn bd bs" onclick="rmQ(${i})">✕ Delete</button></div>`;
         let body = '';
+
+        // Build stimulus link dropdown
+        const stimOpts = edStimuli.length
+          ? `<option value="">— None —</option>` + edStimuli.map(s => `<option value="${s.id}" ${q.stimulusId === s.id ? 'selected' : ''}>${DOMPurify.sanitize(s.title)}</option>`).join('')
+          : `<option value="">— No stimuli defined —</option>`;
+        const stimRow = `<div class="fr" style="max-width:340px"><label>Shared Stimulus</label><select onchange="edQ[${i}].stimulusId=this.value||undefined">${stimOpts}</select></div>`;
 
         if (q.type === 'mc') {
           body = `
@@ -2459,7 +2478,10 @@
           `).join('')}
           ${q.choices.length < 6 ? `<button class="btn bg bs" onclick="addCh(${i})">+ Add Answer Choice</button>` : ''}
         </div>
-        <div style="width:120px" class="fr"><label>Points</label><input type="number" value="${q.points}" min="1" max="100" onchange="edQ[${i}].points=+this.value"></div>`;
+        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start">
+          <div style="width:120px" class="fr"><label>Points</label><input type="number" value="${q.points}" min="1" max="100" onchange="edQ[${i}].points=+this.value"></div>
+          ${stimRow}
+        </div>`;
         } else {
           body = `
         <div class="fr"><label>Question Text</label><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${DOMPurify.sanitize(q.text)}</div></div></div>
@@ -2467,12 +2489,15 @@
           <div class="fr"><label>Grading Rubric (Used by AI)</label><textarea onchange="edQ[${i}].rubric=this.value" style="min-height:160px" placeholder="Explain the specific requirements the student must meet to receive full credit...">${q.rubric || ''}</textarea></div>
           <div class="fr"><label>Ideal Answer (Used by AI)</label><textarea onchange="edQ[${i}].sampleAnswer=this.value" style="min-height:160px" placeholder="Provide an exemplar response...">${q.sampleAnswer || ''}</textarea></div>
         </div>
-        <div style="width:120px" class="fr"><label>Points</label><input type="number" value="${q.points}" min="1" max="100" onchange="edQ[${i}].points=+this.value"></div>`;
+        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:flex-start">
+          <div style="width:120px" class="fr"><label>Points</label><input type="number" value="${q.points}" min="1" max="100" onchange="edQ[${i}].points=+this.value"></div>
+          ${stimRow}
+        </div>`;
         }
 
         return `<div class="q-ed-card" style="border-left:5px solid ${q.type === 'mc' ? 'var(--blue)' : 'var(--pur)'}">
       ${ctrl}
-      <div style="margin-bottom:20px"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}" style="font-size:14px; padding:6px 14px">Question ${i + 1} — ${q.type.toUpperCase()}</span></div>
+      <div style="margin-bottom:20px"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}" style="font-size:14px; padding:6px 14px">Question ${i + 1} — ${q.type.toUpperCase()}</span>${q.stimulusId ? `<span style="font-size:12px; color:var(--grn); margin-left:12px; font-weight:600">📎 ${(edStimuli.find(s=>s.id===q.stimulusId)||{title:'Stimulus'}).title}</span>` : ''}</div>
       ${body}
     </div>`;
       }).join('');
@@ -2502,6 +2527,44 @@
     function addCh(i) { edQ[i].choices.push(''); renderEdQ(); }
     function rmCh(qi, ci) { edQ[qi].choices.splice(ci, 1); edQ[qi].correctIndices = (edQ[qi].correctIndices || []).filter(x => x !== ci).map(x => x > ci ? x - 1 : x); if (!edQ[qi].correctIndices.length) edQ[qi].correctIndices = [0]; renderEdQ(); }
 
+    // ── STIMULI ──
+    function addStim() {
+      const id = 'stim_' + Date.now().toString(36);
+      edStimuli.push({ id, title: 'Stimulus ' + (edStimuli.length + 1), content: '' });
+      renderEdStimuli();
+      renderEdQ(); // refresh question dropdowns
+    }
+
+    function rmStim(si) {
+      const stimId = edStimuli[si] && edStimuli[si].id;
+      edStimuli.splice(si, 1);
+      // Unlink any questions that referenced this stimulus
+      if (stimId) edQ.forEach(q => { if (q.stimulusId === stimId) delete q.stimulusId; });
+      renderEdStimuli();
+      renderEdQ();
+    }
+
+    function renderEdStimuli() {
+      const el = document.getElementById('stimEdList');
+      if (!el) return;
+      if (!edStimuli.length) {
+        el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--tx3);font-size:14px">No stimuli yet. Add one above to share passages or figures across multiple questions.</div>';
+        return;
+      }
+      el.innerHTML = edStimuli.map((stim, si) => `
+        <div style="border:1px solid var(--bd); border-radius:var(--rs); padding:20px; margin-bottom:16px; background:var(--s2)">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
+            <div style="display:flex; align-items:center; gap:12px; flex:1">
+              <span style="font-size:13px; font-weight:700; color:var(--grn); background:rgba(5,150,105,0.1); padding:4px 10px; border-radius:20px; border:1px solid var(--grn); flex-shrink:0">STIMULUS ${si + 1}</span>
+              <input type="text" value="${DOMPurify.sanitize(stim.title)}" placeholder="Stimulus title (e.g. Passage 1, Figure A)" style="flex:1; font-weight:600; font-size:15px; padding:6px 10px;" onchange="edStimuli[${si}].title=this.value; renderEdQ()">
+            </div>
+            <button class="btn bd bs" style="padding:8px 12px; margin-left:12px" onclick="rmStim(${si})">✕ Remove</button>
+          </div>
+          <div class="fr"><label>Stimulus Content (text, images, figures)</label><div class="rte"><div class="rte-tb">${rteTB(`rte_stim_${si}`)}</div><div class="rte-bd" contenteditable id="rte_stim_${si}" onblur="edStimuli[${si}].content=this.innerHTML" style="min-height:120px">${DOMPurify.sanitize(stim.content)}</div></div></div>
+        </div>
+      `).join('');
+    }
+
     function saveQS() {
       const name = document.getElementById('qN').value.trim(); if (!name) return toast('Assessment Title required', 'err'); if (!edQ.length) return toast('Please add at least one question', 'err');
 
@@ -2514,6 +2577,9 @@
           });
         }
       });
+      edStimuli.forEach((stim, si) => {
+        const el = document.getElementById(`rte_stim_${si}`); if (el) stim.content = el.innerHTML;
+      });
 
       const cid = document.getElementById('qCourse').value;
       showLoad('Saving Question Set...');
@@ -2521,8 +2587,8 @@
       const failCb = (e) => { hideLoad(); toast('⚠ ' + (e.message || e), 'err'); };
 
       if (typeof google !== 'undefined' && google.script && google.script.run) {
-        if (curSetId) google.script.run.withFailureHandler(failCb).withSuccessHandler(cb).updateQuestionSet(curSetId, name, cid, edQ, []);
-        else google.script.run.withFailureHandler(failCb).withSuccessHandler(cb).createQuestionSet(name, cid, edQ, []);
+        if (curSetId) google.script.run.withFailureHandler(failCb).withSuccessHandler(cb).updateQuestionSet(curSetId, name, cid, edQ, edStimuli);
+        else google.script.run.withFailureHandler(failCb).withSuccessHandler(cb).createQuestionSet(name, cid, edQ, edStimuli);
       } else {
         hideLoad();
         toast('Google Apps Script API not available. Cannot save.', 'err');
