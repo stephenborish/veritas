@@ -73,7 +73,6 @@
     h4,
     .brand,
     .code-in,
-    .q-num,
     .timer-pill {
       font-family: 'Outfit', sans-serif;
     }
@@ -437,32 +436,6 @@
       margin-bottom: 20px;
     }
 
-    .stim-hdr {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
-    }
-
-    .stim-label {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--grn);
-      background: rgba(5, 150, 105, 0.08);
-      border: 1px solid rgba(5, 150, 105, 0.3);
-      padding: 4px 12px;
-      border-radius: 20px;
-    }
-
-    .stim-title {
-      font-size: 17px;
-      font-weight: 700;
-      color: var(--tx);
-    }
-
     .stim-body {
       font-size: 17px;
       line-height: 1.85;
@@ -491,30 +464,6 @@
 
     .q-card:hover {
       box-shadow: var(--sh2);
-    }
-
-    .q-hdr {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px
-    }
-
-    .q-num {
-      font-family: 'Outfit', sans-serif;
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--tx2);
-      background: rgba(241, 245, 249, 0.8);
-      padding: 6px 16px;
-      border-radius: 8px;
-      border: 1px solid var(--bd);
-    }
-
-    .q-pts {
-      font-size: 15px;
-      color: var(--tx3);
-      font-weight: 600
     }
 
     .q-text {
@@ -1876,14 +1825,12 @@
           const stim = S.stimuli.find(function (s) { return s.id === q.stimulusId; });
           if (stim) {
             html += '<div class="stim-card">';
-            html += '<div class="stim-hdr"><span class="stim-label">Stimulus</span><span class="stim-title">' + DOMPurify.sanitize(stim.title) + '</span></div>';
             html += '<div class="stim-body">' + DOMPurify.sanitize(stim.content) + '</div>';
             html += '</div>';
           }
         }
 
         html += '<div class="q-card" style="padding: 40px">';
-        html += '<div class="q-hdr"><span class="q-num">Question ' + (S.cur + 1) + ' Revealed</span><span class="q-pts">' + (q.points || 1) + ' Points</span></div>';
 
         html += '<div style="margin-bottom:24px; text-align:center; font-weight:700; color:var(--red); font-size:14px; text-transform:uppercase; letter-spacing:1px;">HOVER OVER A SECTION TO REVEAL IT.</div>';
 
@@ -1996,13 +1943,12 @@
           const stim = S.stimuli.find(function (s) { return s.id === q.stimulusId; });
           if (stim) {
             html += '<div class="stim-card fade-in-up">';
-            html += '<div class="stim-hdr"><span class="stim-label">Stimulus</span><span class="stim-title">' + DOMPurify.sanitize(stim.title) + '</span></div>';
             html += '<div class="stim-body">' + DOMPurify.sanitize(stim.content) + '</div>';
             html += '</div>';
           }
         }
 
-        html += '<div class="q-card fade-in-up"><div class="q-hdr"><span class="q-num">Question ' + (S.cur + 1) + '</span><span class="q-pts">' + (q.points || 1) + ' Points</span></div>';
+        html += '<div class="q-card fade-in-up">';
         html += '<div class="q-text">' + DOMPurify.sanitize(q.text) + '</div>';
         if (isMC) {
           // Detect multi-select: question has more than 1 correct answer

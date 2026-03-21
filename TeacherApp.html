@@ -2457,12 +2457,12 @@
         const stimOpts = edStimuli.length
           ? `<option value="">— None —</option>` + edStimuli.map(s => `<option value="${s.id}" ${q.stimulusId === s.id ? 'selected' : ''}>${DOMPurify.sanitize(s.title)}</option>`).join('')
           : `<option value="">— No stimuli defined —</option>`;
-        const stimRow = `<div class="fr" style="max-width:340px"><label>Shared Stimulus</label><select onchange="edQ[${i}].stimulusId=this.value||undefined">${stimOpts}</select></div>`;
+        const stimRow = `<div class="fr" style="max-width:340px"><select onchange="edQ[${i}].stimulusId=this.value||undefined">${stimOpts}</select></div>`;
 
         if (q.type === 'mc') {
           body = `
-        <div class="fr"><label>Question Text</label><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${DOMPurify.sanitize(q.text)}</div></div></div>
-        <div class="fr"><label>Answer Choices (Select Correct Answers)</label>
+        <div class="fr"><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${DOMPurify.sanitize(q.text)}</div></div></div>
+        <div class="fr">
           ${q.choices.map((c, ci) => `
             <div class="ch-row">
               <div style="display:flex; flex-direction:column; align-items:center; gap:8px; margin-top:10px">
@@ -2484,7 +2484,7 @@
         </div>`;
         } else {
           body = `
-        <div class="fr"><label>Question Text</label><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${DOMPurify.sanitize(q.text)}</div></div></div>
+        <div class="fr"><div class="rte"><div class="rte-tb">${rteTB(`rte_q_${i}`)}</div><div class="rte-bd" contenteditable id="rte_q_${i}" onblur="edQ[${i}].text=this.innerHTML">${DOMPurify.sanitize(q.text)}</div></div></div>
         <div class="fg">
           <div class="fr"><label>Grading Rubric (Used by AI)</label><textarea onchange="edQ[${i}].rubric=this.value" style="min-height:160px" placeholder="Explain the specific requirements the student must meet to receive full credit...">${q.rubric || ''}</textarea></div>
           <div class="fr"><label>Ideal Answer (Used by AI)</label><textarea onchange="edQ[${i}].sampleAnswer=this.value" style="min-height:160px" placeholder="Provide an exemplar response...">${q.sampleAnswer || ''}</textarea></div>
@@ -2555,12 +2555,11 @@
         <div style="border:1px solid var(--bd); border-radius:var(--rs); padding:20px; margin-bottom:16px; background:var(--s2)">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
             <div style="display:flex; align-items:center; gap:12px; flex:1">
-              <span style="font-size:13px; font-weight:700; color:var(--grn); background:rgba(5,150,105,0.1); padding:4px 10px; border-radius:20px; border:1px solid var(--grn); flex-shrink:0">STIMULUS ${si + 1}</span>
               <input type="text" value="${DOMPurify.sanitize(stim.title)}" placeholder="Stimulus title (e.g. Passage 1, Figure A)" style="flex:1; font-weight:600; font-size:15px; padding:6px 10px;" onchange="edStimuli[${si}].title=this.value; renderEdQ()">
             </div>
             <button class="btn bd bs" style="padding:8px 12px; margin-left:12px" onclick="rmStim(${si})">✕ Remove</button>
           </div>
-          <div class="fr"><label>Stimulus Content (text, images, figures)</label><div class="rte"><div class="rte-tb">${rteTB(`rte_stim_${si}`)}</div><div class="rte-bd" contenteditable id="rte_stim_${si}" onblur="edStimuli[${si}].content=this.innerHTML" style="min-height:120px">${DOMPurify.sanitize(stim.content)}</div></div></div>
+          <div class="fr"><div class="rte"><div class="rte-tb">${rteTB(`rte_stim_${si}`)}</div><div class="rte-bd" contenteditable id="rte_stim_${si}" onblur="edStimuli[${si}].content=this.innerHTML" style="min-height:120px">${DOMPurify.sanitize(stim.content)}</div></div></div>
         </div>
       `).join('');
     }
