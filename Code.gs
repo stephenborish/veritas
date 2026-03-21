@@ -72,6 +72,17 @@ function normalizeStudentEmail_(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function generateInvisibleNonce_() {
+  // Invisible Unicode zero-width chars — visually identical but unique per send.
+  // Prevents Gmail from threading repeated session link emails together.
+  const zwChars = ['\u200B', '\u200C', '\u200D', '\u2060'];
+  let nonce = '';
+  for (let i = 0; i < 8; i++) {
+    nonce += zwChars[Math.floor(Math.random() * 4)];
+  }
+  return nonce;
+}
+
 function getStudentNameParts_(student) {
   const firstName = String((student && student.firstName) || '').trim();
   const lastName = String((student && student.lastName) || '').trim();
@@ -380,17 +391,17 @@ function sendAssessmentEmails(sessId, clientBaseUrl) {
   if (!studentUrl) return { error: 'System could not identify the student landing URL.' };
   
   let sent = 0, skipped = 0, errors = [];
-  
+  const subject = 'Your VERITAS Assess Link – ' + new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) + generateInvisibleNonce_();
+
   roster.forEach(student => {
-    if (!student.email || !student.email.includes('@')) { 
-      skipped++; return; 
+    if (!student.email || !student.email.includes('@')) {
+      skipped++; return;
     }
     try {
       const fname = student.firstName || student.name.split(' ')[0] || 'Student';
       const studentToken = createStudentAccessToken(sess, student);
       const joinUrl = buildStudentJoinUrl(studentUrl, sess.code, studentToken);
       const html = buildAssessmentEmail(fname, joinUrl, student.email, sess.setName, sess.code);
-      const subject = 'Your VERITAS Assess Link – ' + new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
       
       // Using MailApp. It handles EDU restrictions much better than GmailApp
       MailApp.sendEmail({
@@ -436,15 +447,15 @@ function sendIndividualAssessmentEmail(sessId, stuId, clientBaseUrl) {
     const studentToken = createStudentAccessToken(sess, student);
     const joinUrl = buildStudentJoinUrl(studentUrl, sess.code, studentToken);
     const html = buildAssessmentEmail(fname, joinUrl, student.email, sess.setName, sess.code);
-    const subject = 'Your VERITAS Assess Link – ' + new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
-    
+    const subject = 'Your VERITAS Assess Link – ' + new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) + generateInvisibleNonce_();
+
     MailApp.sendEmail({
       to: student.email,
       subject: subject,
       htmlBody: html,
       name: 'VERITAS Assess'
     });
-    
+
     return { ok: true, sentTo: student.email };
   } catch(e) {
     Logger.log('Email error for single student ' + student.email + ': ' + e.toString());
