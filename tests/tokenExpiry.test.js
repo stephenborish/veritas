@@ -193,15 +193,21 @@ test('verifyStudentAccessToken rejects an empty token', () => {
   assert.strictEqual(verifyStudentAccessToken('notavalidtoken'), null);
 });
 
-test('rotateStudentLinkSecret invalidates old tokens', () => {
+test('rotateStudentLinkSecret returns { ok: true } and invalidates old tokens', () => {
   // Capture a valid token with the current secret.
   const token = createStudentAccessToken(VALID_SESSION, VALID_STUDENT);
   assert.ok(verifyStudentAccessToken(token), 'token valid before rotation');
 
-  // Rotate the secret.
-  ctx.rotateStudentLinkSecret();
+  // Rotate the secret — must succeed (not return { error } due to a reentrant lock).
+  const rotateResult = ctx.rotateStudentLinkSecret();
+  assert.strictEqual(rotateResult.ok, true, 'rotateStudentLinkSecret must return { ok: true }; an { error } here usually means a reentrant lock deadlock');
+  assert.strictEqual(rotateResult.error, undefined, 'rotateStudentLinkSecret must not return an error');
 
   // The old token must now be invalid because the HMAC secret changed.
   const result = verifyStudentAccessToken(token);
   assert.strictEqual(result, null, 'old token must be invalid after secret rotation');
+
+  // A newly issued token with the new secret must be valid.
+  const newToken = createStudentAccessToken(VALID_SESSION, VALID_STUDENT);
+  assert.ok(verifyStudentAccessToken(newToken), 'new token issued after rotation must be valid');
 });

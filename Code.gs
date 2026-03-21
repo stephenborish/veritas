@@ -159,8 +159,11 @@ function rotateStudentLinkSecret() {
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(5000);
+    // Generate inline — do NOT call getStudentLinkSecret_() here because it would
+    // attempt to re-acquire the same script lock (GAS locks are not reentrant).
     props.deleteProperty('STUDENT_LINK_SECRET');
-    const newSecret = getStudentLinkSecret_(); // auto-regenerates
+    const newSecret = Utilities.getUuid() + '.' + new Date().getTime().toString(36);
+    props.setProperty('STUDENT_LINK_SECRET', newSecret);
     DB.logAuditEvent('ROTATE_STUDENT_LINK_SECRET', 'STUDENT_LINK_SECRET', 'Secret rotated at ' + new Date().toISOString());
     Logger.log('rotateStudentLinkSecret: new secret generated. All existing student tokens are now invalid.');
     return { ok: true, message: 'Student link secret rotated. All previously issued student tokens are now invalid.' };
