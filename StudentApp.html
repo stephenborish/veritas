@@ -1955,7 +1955,6 @@
           const isMultiSelect = !!q.multiSelect;
           let mcHtml = '';
           const elimSet = S.eliminated[q.id] || new Set();
-          const isSubmitted = !!S.submittedAns[q.id];
 
           if (isMultiSelect) {
             // Multi-select: show all choices as toggleable, with explicit Submit button
@@ -2113,8 +2112,17 @@
     function toggleElim(qId, idx) {
       if (!S.eliminated[qId]) S.eliminated[qId] = new Set();
       const set = S.eliminated[qId];
-      if (set.has(idx)) set.delete(idx);
-      else set.add(idx);
+      if (set.has(idx)) {
+        set.delete(idx);
+      } else {
+        set.add(idx);
+        // Deselect from multi-select pending if it was checked
+        const q = S.qs.find(function (x) { return x.id === qId; });
+        if (q && S.pendingMulti[qId] && q.choices[idx] !== undefined) {
+          const pi = S.pendingMulti[qId].indexOf(q.choices[idx]);
+          if (pi > -1) S.pendingMulti[qId].splice(pi, 1);
+        }
+      }
       renderQ();
     }
 
@@ -2131,8 +2139,17 @@
       if (!S.pendingMulti[qId]) S.pendingMulti[qId] = [];
       const arr = S.pendingMulti[qId];
       const idx = arr.indexOf(choice);
-      if (idx > -1) arr.splice(idx, 1);
-      else arr.push(choice);
+      if (idx > -1) {
+        arr.splice(idx, 1);
+      } else {
+        arr.push(choice);
+        // Re-checking a crossed-out choice restores it
+        const q = S.qs.find(function (x) { return x.id === qId; });
+        if (q && S.eliminated[qId]) {
+          const ci = q.choices.indexOf(choice);
+          if (ci > -1) S.eliminated[qId].delete(ci);
+        }
+      }
       renderQ(); // re-render to show updated checkboxes
     }
 
