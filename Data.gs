@@ -233,7 +233,7 @@ const DB = {
     const qSet=this.getQSet(config.setId); if(!qSet) throw new Error('Question set not found');
     const id='sess_'+Utilities.getUuid().slice(0,8); const code=this.makeCode(); const now=new Date().toISOString();
     const mode = config.mode || 'self-paced';
-    const initialQ = mode === 'lockstep' ? -1 : 0;
+    const initialQ = -1;
     s.appendRow([id,code,config.setId,qSet.name,config.block,mode,config.randomizeQuestions||false,config.randomizeChoices||false,'active',initialQ,now,'',JSON.stringify(config),JSON.stringify(config.timer||{type:'none'}),config.revealMode||'end',JSON.stringify(config.summaryConfig||{showScore:true}),'[]',config.calculatorEnabled||false]);
     return {sessionId:id,code,setName:qSet.name,block:config.block,mode:config.mode,questionCount:qSet.questions.length};
   },
@@ -254,7 +254,7 @@ const DB = {
     const ids = Array.isArray(questionIds) ? questionIds : [];
     const maxQ = Math.max(0, ids.length - 1);
     const requestedQ = Number(sess.currentQ);
-    const minBound = sess.mode === 'lockstep' ? -1 : 0;
+    const minBound = -1;
     const currentQ = Number.isFinite(requestedQ) ? Math.max(minBound, Math.min(requestedQ, maxQ)) : 0;
     const revealMode = sess.revealMode || 'end';
     let revealedQs = Array.isArray(sess.revealedQs) ? sess.revealedQs.filter(qId => ids.indexOf(qId) !== -1) : [];

@@ -2938,7 +2938,14 @@
         `;
           }
         } else {
-          document.getElementById('lockstepControls').style.display = 'none';
+          if (curQIdx === -1) {
+            document.getElementById('lockstepControls').style.display = 'flex';
+            document.getElementById('lsQText').textContent = 'Session Not Started';
+            document.getElementById('lsParticipation').style.display = 'none';
+            document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Start Session</button>`;
+          } else {
+            document.getElementById('lockstepControls').style.display = 'none';
+          }
         }
       }
 

@@ -1889,8 +1889,8 @@
           html += `<div class="conf-opt ${activeStr}" data-qid="${q.id}" data-conf="${x.n}" style="padding:12px 20px; font-size:16px; min-width:unset; align-items:center"><span style="font-size:22px; margin-right:8px">${x.e}</span>${x.l}</div>`;
         });
         html += '</div></div>';
-      } else if (S.cur === -1 && S.mode === 'lockstep') {
-        // STATE -1: Strict Lockstep Holding Room
+      } else if (S.cur === -1) {
+        // STATE -1: Holding Room (all modes — session not yet started by teacher)
         const hq = getAugustineQuote();
         html += '<div class="q-card glass-pulse" style="text-align:center; padding:72px 48px; position:relative; overflow:hidden">';
         html += '<div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(to right,#0D9488,#2dd4bf,#4ade80)"></div>';
@@ -2419,6 +2419,12 @@
                 }
               }
             }
+          }
+
+          // Detect session start for non-lockstep modes (waiting room → first question)
+          if (S.mode !== 'lockstep' && S.cur === -1 && st.currentQ >= 0) {
+            S.cur = 0;
+            renderQ();
           }
         }).studentCheckStatus(S.sid, S.stuId);
       }, 4000);
