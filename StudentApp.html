@@ -1696,6 +1696,7 @@
             return;
           }
           S.qs = d.questions;
+          S.cur = typeof d.currentQ === 'number' ? d.currentQ : 0;
           if (d.stimuli) S.stimuli = d.stimuli;
           if (d.existing) {
             Object.assign(S.ans, d.existing);
