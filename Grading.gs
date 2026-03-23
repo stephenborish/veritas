@@ -17,8 +17,8 @@
 
 const Grader = {
   MODEL: 'gemini-2.5-flash',
-  BATCH_SIZE: 10,
-  SYSTEM_INSTRUCTION: 'You are a rigorous, fair science teacher grading student short-answer responses. Your feedback style is direct, specific, and concise — like margin notes from an expert. Never restate the question. Never use filler phrases like "Great job" or "Good effort." Focus exclusively on the scientific accuracy of what the student wrote. Ignore spelling, grammar, and punctuation unless they change the factual meaning of a science concept.',
+  BATCH_SIZE: 5,
+  SYSTEM_INSTRUCTION: 'You are a rigorous, fair science teacher grading student short-answer responses. Your feedback style is direct, specific, and concise — like margin notes from an expert. Never restate the question. Never use filler phrases like "Great job" or "Good effort." Focus exclusively on the scientific accuracy of what the student wrote. Ignore spelling, grammar, and punctuation unless they change the factual meaning of a science concept. Only reference concepts the student actually wrote — never infer, assume, or fabricate content not present in the answer. If the answer is blank or nonsensical, score 0 and say so. Grade every student with equal care regardless of their position in the list.',
   QUEUE_KEY: 'VA_GRADE_QUEUE',
 
   statusKey(sessId) { return 'VA_GRADE_STATUS_' + sessId; },
@@ -300,19 +300,20 @@ const Grader = {
     if (question.sampleAnswer) rubricText += '\nIDEAL ANSWER:\n' + question.sampleAnswer;
     if (extraContext) rubricText += '\nADDITIONAL TEACHER CONTEXT:\n' + extraContext;
 
-    let studentsText = responses.map(r => `ID: ${r.studentId}\nANSWER: "${r.answer}"`).join('\n\n');
+    const total = responses.length;
+    let studentsText = responses.map((r, idx) => `[${idx + 1}/${total}] ID: ${r.studentId}\nANSWER: "${r.answer}"`).join('\n\n');
 
     const prompt = 'QUESTION (' + maxPts + ' pt' + (maxPts > 1 ? 's' : '') + '):\n' +
       question.text + '\n' +
       rubricText + '\n\n' +
-      'STUDENT RESPONSES:\n' + studentsText + '\n\n' +
+      'STUDENT RESPONSES (' + total + ' total):\n' + studentsText + '\n\n' +
       'GRADING INSTRUCTIONS:\n' +
       '1. Compare each answer against the rubric and ideal answer above.\n' +
       '2. Award points only for correct scientific content that addresses the question.\n' +
-      '3. For each student, write 1 sentence of feedback: name the specific concept they got right or wrong. No filler.\n' +
-      '4. You MUST return results for every student ID listed above. Do NOT cut off mid-sentence.\n\n' +
+      '3. For each student, write brief, specific feedback (1-3 sentences or fragments): name the exact concept correct, partially correct, or missing. No filler.\n' +
+      '4. You MUST return results for ALL ' + total + ' student IDs listed above. Do NOT skip any student. Do NOT cut off mid-sentence.\n\n' +
       'Reply with ONLY a JSON array (no markdown, no code fences, no commentary):\n' +
-      '[{"id":"<student_id>","score":<0-' + maxPts + '>,"feedback":"<1 sentence>"}]';
+      '[{"id":"<student_id>","score":<0-' + maxPts + '>,"feedback":"<brief specific feedback>"}]';
 
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + this.MODEL + ':generateContent?key=' + key;
 
@@ -397,9 +398,9 @@ const Grader = {
       'GRADING INSTRUCTIONS:\n' +
       '1. Compare the answer against the rubric and ideal answer.\n' +
       '2. Award points only for correct scientific content.\n' +
-      '3. Write 1 sentence of feedback: name the specific concept correct or missing.\n\n' +
+      '3. Write brief, specific feedback (1-3 sentences or fragments): name the exact concept correct, partially correct, or missing.\n\n' +
       'Reply with ONLY this JSON (no markdown, no code fences):\n' +
-      '{"score":<0-' + maxPts + '>,"feedback":"<1 sentence>"}';
+      '{"score":<0-' + maxPts + '>,"feedback":"<brief specific feedback>"}';
 
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + this.MODEL + ':generateContent?key=' + key;
 
@@ -409,7 +410,7 @@ const Grader = {
       payload: JSON.stringify({
         systemInstruction: { parts: [{ text: Grader.SYSTEM_INSTRUCTION }] },
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
       }),
       muteHttpExceptions: true
     });
