@@ -209,7 +209,6 @@
     }
 
     /* -- SCREEN STATES (SOLID BACKGROUNDS TO FIX OVERLAPS) -- */
-    .fsp,
     .lock {
       display: none;
       position: fixed;
@@ -224,10 +223,21 @@
       color: var(--tx)
     }
 
-    .fsp.show,
-    .lock.show {
-      display: flex
+    .fsp {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 14, 28, 0.97);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
     }
+
+    .fsp.show { display: flex; }
+    .lock.show { display: flex; }
 
     .modal-bg {
       display: none;
@@ -251,7 +261,6 @@
       color: #fff;
     }
 
-    .fsp h2,
     .lock h2 {
       font-size: 40px;
       font-weight: 800;
@@ -259,7 +268,6 @@
       letter-spacing: -1.5px
     }
 
-    .fsp p,
     .lock p {
       font-size: 18px;
       max-width: 500px;
@@ -927,25 +935,33 @@
 
     .done {
       display: none;
-      max-width: 800px;
-      margin: 10vh auto;
-      padding: 72px 40px;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 24px;
+    }
+
+    .done.show { display: flex; }
+
+    .done-card {
+      position: relative;
+      width: 100%;
+      max-width: 640px;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: var(--r);
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.08);
+      padding: 64px 48px;
       text-align: center;
-      background: transparent;
+      overflow: hidden;
     }
 
-    .done .ic {
-      font-size: 80px;
-      margin-bottom: 32px;
-      filter: drop-shadow(0 8px 16px rgba(13, 148, 136, 0.2));
-    }
-
-    .done h2 {
-      font-size: 48px;
-      font-weight: 800;
-      margin-bottom: 16px;
-      letter-spacing: -1.5px;
-      font-family: 'Outfit', sans-serif;
+    @keyframes checkPop {
+      0%   { transform: scale(0.5) rotate(-10deg); opacity: 0; }
+      70%  { transform: scale(1.15) rotate(3deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
     }
 
     .score-big {
@@ -1322,9 +1338,13 @@
   </div>
 
   <div class="fsp" id="fsPrompt">
-    <h2>Fullscreen Required</h2>
-    <p>This assessment utilizes the full desktop view and must be taken in fullscreen mode.</p>
-    <button class="fsbtn" id="enterFsBtn">Enter Fullscreen & Begin</button>
+    <div style="position:relative; width:100%; max-width:520px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:28px; padding:52px 48px; overflow:hidden; text-align:center; box-shadow:0 24px 64px rgba(0,0,0,0.4); animation:cardIn 0.5s cubic-bezier(0.16,1,0.3,1) both">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;border-radius:28px 28px 0 0;background:linear-gradient(to right,#0D9488,#2dd4bf,#0D9488);background-size:200%;animation:holdingBarShift 3s linear infinite"></div>
+      <div style="font-size:64px; margin-bottom:20px; animation:brainPulse 2s ease-in-out infinite">🖥️</div>
+      <h2 style="font-size:32px;font-weight:800;margin-bottom:16px;letter-spacing:-0.8px;color:#fff;font-family:'Outfit',sans-serif">Fullscreen Required</h2>
+      <p style="font-size:17px;color:rgba(255,255,255,0.7);max-width:380px;margin:0 auto 32px;line-height:1.6">This assessment utilizes the full desktop view and must be taken in fullscreen mode.</p>
+      <button class="fsbtn" id="enterFsBtn">Enter Fullscreen &amp; Begin</button>
+    </div>
   </div>
 
   <div class="lock" id="lockOverlay">
@@ -1370,10 +1390,14 @@
   </div>
 
   <div class="done" id="doneScreen">
-    <div class="ic">&#x2705;</div>
-    <h2>Assessment Complete</h2>
-    <div style="font-size:20px; color:var(--tx2); margin-bottom:40px">Your responses have been securely submitted.</div>
-    <div id="sumContent"></div>
+    <div class="done-card">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--r) var(--r) 0 0;background:linear-gradient(to right,#059669,#10b981,#34d399,#059669);background-size:200%;animation:holdingBarShift 3s linear infinite"></div>
+      <div style="font-size:80px; margin-bottom:28px; animation:checkPop 0.7s cubic-bezier(0.175,0.885,0.32,1.275) both; filter:drop-shadow(0 8px 16px rgba(5,150,105,0.25))">&#x2705;</div>
+      <h2 style="font-size:40px;font-weight:800;margin-bottom:16px;letter-spacing:-1px;font-family:'Outfit',sans-serif">Assessment Complete</h2>
+      <div style="font-size:18px; color:var(--tx2); margin-bottom:40px; line-height:1.6">Your responses have been securely submitted.</div>
+      <div id="sumContent"></div>
+      <div style="margin-top:40px;padding-top:28px;border-top:1px solid var(--brd);font-size:14px;color:var(--tx3);font-style:italic">&ldquo;Seek not to understand that you may believe, but believe that you may understand.&rdquo;<br><span style="letter-spacing:0.06em;font-style:normal;font-size:12px">&mdash; ST. AUGUSTINE</span></div>
+    </div>
   </div>
 
   <div class="get-ready-overlay" id="getReadyOverlay">
@@ -2039,19 +2063,27 @@
         html += '</div>';
       } else if (isDone && S.mode === 'lockstep') {
         // STATE 3: Lockstep Waiting Phase
-        html += '<div class="q-card" style="text-align:center; padding: 64px 40px">';
-        html += '<div style="font-size:48px; margin-bottom:16px">⏳</div>';
-        html += '<h2 style="font-size:28px; font-weight:800; margin-bottom:12px">Waiting for Teacher</h2>';
+        html += '<div class="q-card" style="text-align:center; padding:64px 48px; position:relative; overflow:hidden">';
+        html += '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(to right,#0D9488,#2dd4bf,#4ade80,#0D9488);background-size:200%;animation:holdingBarShift 3s linear infinite"></div>';
+        html += '<div class="scoring-brain" style="font-size:54px; margin-bottom:20px">⏳</div>';
+        html += '<h2 style="font-size:28px;font-weight:800;margin-bottom:12px;font-family:\'Outfit\',sans-serif">Waiting for Teacher</h2>';
         html += isLocked
-          ? '<div style="color:var(--tx2); font-size:18px">The teacher has locked this question. Please wait to advance.</div>'
-          : '<div style="color:var(--tx2); font-size:18px">Your response has been recorded. Please wait to advance.</div>';
+          ? '<div style="color:var(--tx2);font-size:17px;max-width:400px;margin:0 auto 32px">The teacher has locked this question. Please wait to advance.</div>'
+          : '<div style="color:var(--tx2);font-size:17px;max-width:400px;margin:0 auto 32px">Your response has been recorded. Please wait to advance.</div>';
+        html += '<div class="scoring-dots"><span></span><span></span><span></span></div>';
+        html += '<div style="margin-top:28px"><div class="scoring-bar-track"><div class="scoring-bar-fill"></div></div></div>';
+        html += '<div style="margin-top:40px;padding-top:28px;border-top:1px solid var(--brd);font-size:14px;color:var(--tx3);font-style:italic;max-width:400px;margin-left:auto;margin-right:auto">&ldquo;Patience is the companion of wisdom.&rdquo;<br><span style="letter-spacing:0.06em;font-style:normal;font-size:12px">&mdash; ST. AUGUSTINE</span></div>';
         html += '</div>';
       } else if (isDone && S.mode !== 'lockstep') {
         // STATE 4: Self-Paced Done Phase
-        html += '<div class="q-card" style="text-align:center; padding: 64px 40px">';
-        html += '<div style="font-size:48px; margin-bottom:16px">✅</div>';
-        html += '<h2 style="font-size:28px; font-weight:800; margin-bottom:12px">Response Recorded</h2>';
-        html += '<div style="color:var(--tx2); font-size:18px">Click "Next Question" below to continue.</div>';
+        html += '<div class="q-card" style="text-align:center; padding:64px 48px; position:relative; overflow:hidden">';
+        html += '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(to right,#059669,#10b981,#34d399,#059669);background-size:200%;animation:holdingBarShift 3s linear infinite"></div>';
+        html += '<div class="scoring-brain" style="font-size:54px; margin-bottom:20px">✅</div>';
+        html += '<h2 style="font-size:28px;font-weight:800;margin-bottom:12px;font-family:\'Outfit\',sans-serif">Response Recorded</h2>';
+        html += '<div style="color:var(--tx2);font-size:17px;max-width:400px;margin:0 auto 32px">Click &ldquo;Next Question&rdquo; below to continue.</div>';
+        html += '<div class="scoring-dots"><span></span><span></span><span></span></div>';
+        html += '<div style="margin-top:28px"><div class="scoring-bar-track"><div class="scoring-bar-fill"></div></div></div>';
+        html += '<div style="margin-top:40px;padding-top:28px;border-top:1px solid var(--brd);font-size:14px;color:var(--tx3);font-style:italic;max-width:400px;margin-left:auto;margin-right:auto">&ldquo;Our heart is restless, until it repose in Thee.&rdquo;<br><span style="letter-spacing:0.06em;font-style:normal;font-size:12px">&mdash; ST. AUGUSTINE</span></div>';
         html += '</div>';
       } else {
         // STATE 1: Question Phase
@@ -2391,7 +2423,7 @@
       document.getElementById('assessUI').style.display = 'none';
       document.getElementById('calcBtn').style.display = 'none';
       document.getElementById('calcWin').classList.remove('show');
-      document.getElementById('doneScreen').style.display = 'block';
+      document.getElementById('doneScreen').classList.add('show');
 
       if (document.exitFullscreen) {
         try {
