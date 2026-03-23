@@ -373,17 +373,29 @@ const DB = {
       
       // New Join
       let qOrder='';
+      const _newJoinQSet=this.getQSet(sess.setId);
       if((sess.randQ||sess.mode==='randomized') && sess.mode !== 'lockstep'){
-        const qSet=this.getQSet(sess.setId);
-        if(qSet){
-          const idx=qSet.questions.map((_,i)=>i);
+        if(_newJoinQSet){
+          const idx=_newJoinQSet.questions.map((_,i)=>i);
           for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
           qOrder=JSON.stringify(idx);
         }
       }
-      ssSheet.appendRow([sess.sessionId, stuId, storedName, rosterEmail, 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken, storedNormalizedName, identityKey]);
-      const qSet=this.getQSet(sess.setId);
-      return {sessionId:sess.sessionId,studentId:stuId,studentName:storedName,mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
+      // Generate per-student shuffled choice order for all MC questions (stable across page reloads)
+      let choiceOrders='';
+      if(_newJoinQSet){
+        const co={};
+        _newJoinQSet.questions.forEach(q=>{
+          if(q.type==='mc'&&q.choices&&q.choices.length>1){
+            const idx=q.choices.map((_,i)=>i);
+            for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+            co[q.id]=idx;
+          }
+        });
+        choiceOrders=JSON.stringify(co);
+      }
+      ssSheet.appendRow([sess.sessionId, stuId, storedName, rosterEmail, 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken, storedNormalizedName, identityKey, choiceOrders]);
+      return {sessionId:sess.sessionId,studentId:stuId,studentName:storedName,mode:sess.mode,questionCount:_newJoinQSet?_newJoinQSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
     });
   },
 
@@ -391,19 +403,31 @@ const DB = {
     const sess=this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
     const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Questions not found'};
     let questions=JSON.parse(JSON.stringify(qSet.questions)); const stimuli=qSet.stimuli||[];
-    const sd=this.sh('StudentSessions').getDataRange().getValues(); let qOrder=null;
+    const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues(); let qOrder=null; let choiceOrders=null; let stuRowIdx=-1;
     for(let i=1;i<sd.length;i++) {
-      if(sd[i][0]===sessId&&sd[i][1]===stuId&&sd[i][9]){
-        try {
-          qOrder = JSON.parse(sd[i][9]);
-        } catch (e) {
-          Logger.log('Error parsing qOrder for student ' + stuId + ': ' + e.toString());
-        }
+      if(sd[i][0]===sessId&&sd[i][1]===stuId){
+        stuRowIdx=i+1;
+        if(sd[i][9]){try{qOrder=JSON.parse(sd[i][9]);}catch(e){Logger.log('Error parsing qOrder for student '+stuId+': '+e.toString());}}
+        if(sd[i][14]){try{choiceOrders=JSON.parse(sd[i][14]);}catch(e){Logger.log('Error parsing choiceOrders for student '+stuId+': '+e.toString());}}
         break;
       }
     }
+    // If no choiceOrders yet (student joined before this feature), generate and persist now
+    if(!choiceOrders && stuRowIdx>0){
+      const co={};
+      qSet.questions.forEach(q=>{
+        if(q.type==='mc'&&q.choices&&q.choices.length>1){
+          const idx=q.choices.map((_,i)=>i);
+          for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+          co[q.id]=idx;
+        }
+      });
+      choiceOrders=co;
+      try{ssSheet.getRange(stuRowIdx,15).setValue(JSON.stringify(co));}catch(e){Logger.log('Error saving choiceOrders: '+e.toString());}
+    }
     if(qOrder && qOrder.length && sess.mode !== 'lockstep') questions=qOrder.map(idx=>questions[idx]);
-    if(sess.randC) questions.forEach(q=>{if(q.type==='mc'&&q.choices){const ci=q.correctIndices||[q.correctIndex];const ca=ci.map(x=>q.choices[x]);for(let i=q.choices.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[q.choices[i],q.choices[j]]=[q.choices[j],q.choices[i]];}q.correctIndices=ca.map(c=>q.choices.indexOf(c));if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
+    // Apply per-student persisted choice order (generated once at join time for consistency across reloads)
+    if(choiceOrders) questions.forEach(q=>{if(q.type==='mc'&&q.choices&&choiceOrders[q.id]){const order=choiceOrders[q.id];const orig=q.choices.slice();const origCi=q.correctIndices||[q.correctIndex];const correctTexts=origCi.map(i=>orig[i]);q.choices=order.map(i=>orig[i]);q.correctIndices=correctTexts.map(ca=>q.choices.indexOf(ca));if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
     const studentQs=questions.map(q=>{const sq={...q};
       // Mark multi-answer questions BEFORE stripping correctIndices
       if(q.type==='mc'){const ci=q.correctIndices||[q.correctIndex];sq.multiSelect=Array.isArray(ci)&&ci.length>1;}
