@@ -2914,14 +2914,21 @@
             const _qTimerSec = d.session && d.session.qTimerSeconds;
             const _curQId = d.qStats[curQIdx] && d.qStats[curQIdx].id;
             if (_qts && _qts.qId === _curQId && _qTimerSec) {
-              if (_qts.dismissed) {
-                qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--grn);border:1px solid var(--grn)">Timer Dismissed</span>`;
+              if (_qts.cancelled) {
+                qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(107,114,128,0.1);color:var(--tx2);border:1px solid var(--bd)">Timer Cancelled</span><button class="btn bd" style="font-size:12px" onclick="resetQTimer()">↺ Restart</button>`;
+              } else if (_qts.dismissed) {
+                qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--grn);border:1px solid var(--grn)">Timer Dismissed</span><button class="btn bd" style="font-size:12px" onclick="resetQTimer()">↺ Restart</button>`;
+              } else if (_qts.paused) {
+                const _pausedRem = Math.max(0, Math.floor((_qts.pausedRemaining || 0) / 1000));
+                const _pmm = String(Math.floor(_pausedRem/60)).padStart(2,'0');
+                const _pss = String(_pausedRem%60).padStart(2,'0');
+                qTimerHtml = `<span id="teacherQTimerPill" data-end="0" data-paused="1" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(217,119,6,0.12);color:#d97706;border:1px solid #d97706;white-space:nowrap">⏸ ${_pmm}:${_pss}</span><button class="btn bd" style="font-size:12px" onclick="resumeQTimer()">▶ Resume</button><button class="btn bd" style="font-size:12px" onclick="extendQTimer(30)">+30s</button><button class="btn bd" style="font-size:12px" onclick="extendQTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="extendQTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="resetQTimer()">↺ Reset</button><button class="btn bd" style="font-size:12px" onclick="cancelQTimer()">✕ Cancel</button>`;
               } else {
-                const _elapsed = Math.floor((Date.now() - new Date(_qts.startedAt).getTime()) / 1000);
-                const _rem = Math.max(0, _qTimerSec - _elapsed);
+                const _endMs = _qts.endTime || (new Date(_qts.startedAt).getTime() + _qTimerSec*1000);
+                const _rem = Math.max(0, Math.floor((_endMs - Date.now()) / 1000));
                 const _mm = String(Math.floor(_rem/60)).padStart(2,'0');
                 const _ss = String(_rem%60).padStart(2,'0');
-                qTimerHtml = `<span id="teacherQTimerPill" data-end="${new Date(_qts.startedAt).getTime() + _qTimerSec*1000}" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;white-space:nowrap">⏱ ${_mm}:${_ss}</span><button class="btn bd" style="font-size:12px" onclick="dismissQTimer()">Dismiss Timer</button>`;
+                qTimerHtml = `<span id="teacherQTimerPill" data-end="${_endMs}" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;white-space:nowrap">⏱ ${_mm}:${_ss}</span><button class="btn bd" style="font-size:12px" onclick="pauseQTimer()">⏸ Pause</button><button class="btn bd" style="font-size:12px" onclick="extendQTimer(30)">+30s</button><button class="btn bd" style="font-size:12px" onclick="extendQTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="extendQTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="resetQTimer()">↺ Reset</button><button class="btn bd" style="font-size:12px" onclick="dismissQTimer()">Dismiss</button>`;
               }
             } else if (_qTimerSec && _curQId) {
               qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(107,114,128,0.1);color:var(--tx2);border:1px solid var(--bd);white-space:nowrap">⏱ ${_qTimerSec}s per Q</span>`;
@@ -3450,12 +3457,49 @@
         .withFailureHandler(e => toast('Failed to dismiss timer: ' + (e.message||'Unknown error'), 'err'))
         .dismissQuestionTimer(aSid);
     }
+    function pauseQTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('Timer paused.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to pause timer: ' + (e.message||'Unknown error'), 'err'))
+        .pauseQuestionTimer(aSid);
+    }
+    function resumeQTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('Timer resumed.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to resume timer: ' + (e.message||'Unknown error'), 'err'))
+        .resumeQuestionTimer(aSid);
+    }
+    function extendQTimer(seconds) {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('+' + seconds + 's added to timer.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to extend timer: ' + (e.message||'Unknown error'), 'err'))
+        .extendQuestionTimer(aSid, seconds);
+    }
+    function resetQTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('Timer reset to full duration.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to reset timer: ' + (e.message||'Unknown error'), 'err'))
+        .resetQuestionTimer(aSid);
+    }
+    function cancelQTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('Timer cancelled — students may continue answering.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to cancel timer: ' + (e.message||'Unknown error'), 'err'))
+        .cancelQuestionTimer(aSid);
+    }
 
-    // Tick the teacher-side question timer pill every second (lightweight, DOM-only)
+    // Tick the teacher-side question timer pill every 500ms (lightweight, DOM-only)
     setInterval(function() {
       const pill = document.getElementById('teacherQTimerPill');
       if (!pill) return;
+      if (pill.dataset.paused === '1') return; // frozen while paused
       const endMs = parseInt(pill.dataset.end, 10);
+      if (!endMs) return;
       const rem = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
       const mm = String(Math.floor(rem/60)).padStart(2,'0');
       const ss = String(rem%60).padStart(2,'0');
