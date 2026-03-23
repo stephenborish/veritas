@@ -1007,57 +1007,26 @@
       }
     }
 
-    /* Focus Mode Overlay for Get Ready */
+    /* ── Question Transition Overlay ──────────────────────────────── */
     .get-ready-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(15, 23, 42, 0.9);
-      backdrop-filter: blur(16px);
       z-index: 10002;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
+      padding: 24px;
+      background: rgba(9, 14, 28, 0.96);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       color: white;
-      text-align: center;
       opacity: 0;
       pointer-events: none;
-      transition: opacity 0.3s ease;
+      transition: opacity 0.35s ease;
     }
-
     .get-ready-overlay.show {
       opacity: 1;
       pointer-events: auto;
-    }
-
-    .get-ready-icon {
-      font-size: 80px;
-      margin-bottom: 24px;
-      animation: bounceIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    .get-ready-text {
-      font-size: 48px;
-      font-weight: 800;
-      font-family: 'Outfit', sans-serif;
-      margin-bottom: 16px;
-      background: linear-gradient(to right, #4ade80, #2dd4bf);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      animation: fadeInUp 0.5s 0.2s both;
-    }
-
-    .get-ready-sub {
-      font-size: 20px;
-      color: #cbd5e1;
-      animation: fadeInUp 0.5s 0.4s both;
-    }
-
-    @keyframes bounceIn {
-      0% { transform: scale(0.3); opacity: 0; }
-      50% { transform: scale(1.05); opacity: 1; }
-      70% { transform: scale(0.9); }
-      100% { transform: scale(1); opacity: 1; }
     }
 
     /* ── Holding Room ─────────────────────────────────────────────── */
@@ -1080,101 +1049,195 @@
       margin-bottom: 12px;
     }
 
-    /* ── Question Transition Overlay Panels ───────────────────────── */
-    .get-ready-overlay {
-      flex-direction: column;
-      gap: 20px;
-      padding: 40px 24px;
-      box-sizing: border-box;
-    }
-    .tr-panels {
-      display: flex;
-      gap: 20px;
-      width: 100%;
-      max-width: 860px;
-      flex: 1;
-      align-items: stretch;
-    }
-    @media (max-width: 640px) {
-      .tr-panels { flex-direction: column; }
-    }
-    .tr-card {
-      flex: 1;
-      background: rgba(255,255,255,0.07);
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 20px;
-      padding: 28px 24px;
-      backdrop-filter: blur(8px);
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      opacity: 0;
-    }
-    .tr-card.tr-meme {
-      border-top: 3px solid #4ade80;
-      animation: slideInLeft 0.55s 0.3s cubic-bezier(0.16,1,0.3,1) forwards;
-    }
-    .tr-card.tr-quote {
-      border-top: 3px solid #2dd4bf;
-      animation: slideInRight 0.55s 0.55s cubic-bezier(0.16,1,0.3,1) forwards;
-    }
-    .tr-label {
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: rgba(255,255,255,0.5);
-    }
-    .tr-meme-text {
-      font-size: 18px;
-      line-height: 1.65;
-      color: #f1f5f9;
-      font-style: italic;
-      flex: 1;
-    }
-    .tr-quote-body {
-      font-size: 17px;
-      line-height: 1.75;
-      color: #e2e8f0;
-      font-style: italic;
-      flex: 1;
+    /* ── Question Transition Stage ────────────────────────────────── */
+
+    /* Centered stage card */
+    .tr-stage {
       position: relative;
-      padding-left: 18px;
-    }
-    .tr-quote-body::before {
-      content: '"';
-      position: absolute;
-      left: 0;
-      top: -6px;
-      font-size: 48px;
-      line-height: 1;
-      color: rgba(45,212,191,0.35);
-      font-style: normal;
-    }
-    .tr-quote-work {
-      font-size: 12px;
-      color: rgba(255,255,255,0.4);
-      letter-spacing: 0.04em;
-    }
-    .tr-footer {
+      width: 100%;
+      max-width: 600px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 28px;
+      padding: 52px 48px 0;
+      overflow: hidden;
       display: flex;
+      flex-direction: column;
+      min-height: 320px;
+    }
+
+    /* Mode-driven top accent line */
+    .tr-stage::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 28px 28px 0 0;
+      transition: background 0.4s ease;
+    }
+    .tr-stage[data-mode="joke"]::before {
+      background: linear-gradient(to right, #d97706, #fbbf24);
+    }
+    .tr-stage[data-mode="quote"]::before {
+      background: linear-gradient(to right, #7c3aed, #a78bfa);
+    }
+
+    /* Mode-driven ambient glow */
+    .tr-stage[data-mode="joke"] {
+      box-shadow: 0 0 80px rgba(217, 119, 6, 0.18), 0 24px 64px rgba(0,0,0,0.4);
+    }
+    .tr-stage[data-mode="quote"] {
+      box-shadow: 0 0 80px rgba(124, 58, 237, 0.2), 0 24px 64px rgba(0,0,0,0.4);
+    }
+
+    /* Content slots — only the active mode's slot is shown */
+    .tr-slot {
+      display: none;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
+      text-align: center;
+      flex: 1;
+      padding-bottom: 36px;
       opacity: 0;
-      animation: fadeInUp 0.5s 0.8s both;
     }
-    .tr-footer .get-ready-icon { font-size: 36px; margin-bottom: 0; animation: none; }
-    .tr-footer .get-ready-text { font-size: 28px; margin-bottom: 0; }
-    .tr-footer .get-ready-sub  { font-size: 16px; }
+    .tr-stage[data-mode="joke"]  .tr-slot--joke,
+    .tr-stage[data-mode="quote"] .tr-slot--quote {
+      display: flex;
+    }
+    .get-ready-overlay.show .tr-slot {
+      animation: trSlotIn 0.6s 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes trSlotIn {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
 
-    @keyframes slideInLeft {
-      from { opacity: 0; transform: translateX(-24px); }
-      to   { opacity: 1; transform: translateX(0); }
+    /* Eyebrow label */
+    .tr-slot__eyebrow {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      transition: color 0.4s ease;
     }
-    @keyframes slideInRight {
-      from { opacity: 0; transform: translateX(24px); }
-      to   { opacity: 1; transform: translateX(0); }
+    .tr-stage[data-mode="joke"]  .tr-slot__eyebrow { color: #fbbf24; }
+    .tr-stage[data-mode="quote"] .tr-slot__eyebrow { color: #a78bfa; }
+
+    /* Joke icon */
+    .tr-slot__icon {
+      font-size: 56px;
+      line-height: 1;
+      margin-bottom: 28px;
+      animation: trIconBounce 0.7s 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+    }
+    @keyframes trIconBounce {
+      from { opacity: 0; transform: scale(0.55); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    /* Quote decorative mark */
+    .tr-slot__deco-mark {
+      font-family: Georgia, 'Times New Roman', serif;
+      font-size: 96px;
+      line-height: 0.7;
+      margin-bottom: 20px;
+      color: rgba(167, 139, 250, 0.3);
+      user-select: none;
+      animation: trIconBounce 0.55s 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    /* Body text */
+    .tr-slot__body {
+      font-family: 'Outfit', sans-serif;
+      font-size: clamp(18px, 3vw, 24px);
+      font-weight: 500;
+      line-height: 1.6;
+      color: #f1f5f9;
+      margin: 0 0 20px;
+      max-width: 480px;
+    }
+    .tr-slot--joke .tr-slot__body {
+      font-style: italic;
+      color: #fef3c7;
+    }
+    .tr-slot--quote .tr-slot__body {
+      font-style: italic;
+      color: #ede9fe;
+      font-size: clamp(17px, 2.8vw, 22px);
+    }
+
+    /* Quote source */
+    .tr-slot__source {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      color: rgba(167, 139, 250, 0.55);
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+
+    /* Footer: counter + progress bar */
+    .tr-stage__footer {
+      margin: 0 -48px;
+      padding: 18px 48px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      opacity: 0;
+      animation: trFooterIn 0.4s 0.55s ease forwards;
+    }
+    @keyframes trFooterIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    .tr-stage__meta {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .tr-stage__qcounter {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    /* Progress bar */
+    .tr-stage__bar-track {
+      height: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 0 0 28px 28px;
+      margin: 0 -48px;
+      overflow: hidden;
+    }
+    .tr-stage__bar-fill {
+      height: 100%;
+      width: 100%;
+      border-radius: 0 0 28px 28px;
+      transform-origin: left center;
+      transform: scaleX(1);
+      transition: none;
+    }
+    .tr-stage[data-mode="joke"]  .tr-stage__bar-fill {
+      background: linear-gradient(to right, #d97706, #fbbf24);
+    }
+    .tr-stage[data-mode="quote"] .tr-stage__bar-fill {
+      background: linear-gradient(to right, #7c3aed, #a78bfa);
+    }
+    .tr-stage__bar-fill.draining {
+      transform: scaleX(0);
+      transition: transform 4s linear;
+    }
+
+    @media (max-width: 480px) {
+      .tr-stage {
+        padding: 40px 28px 0;
+        border-radius: 20px;
+        min-height: 280px;
+      }
+      .tr-stage__footer { margin: 0 -28px; padding: 14px 28px 0; }
+      .tr-stage__bar-track { margin: 0 -28px; border-radius: 0 0 20px 20px; }
+      .tr-slot__deco-mark { font-size: 72px; }
     }
 
     /* ── AI Scoring Screen ────────────────────────────────────────── */
@@ -1302,21 +1365,33 @@
   </div>
 
   <div class="get-ready-overlay" id="getReadyOverlay">
-    <div class="tr-panels">
-      <div class="tr-card tr-meme" id="trMemeCard">
-        <div class="tr-label">⚗️ Science Corner</div>
-        <div class="tr-meme-text" id="trMemeText"></div>
+    <div class="tr-stage" id="trStage">
+
+      <!-- Joke slot (shown when data-mode="joke") -->
+      <div class="tr-slot tr-slot--joke" id="trSlotJoke">
+        <div class="tr-slot__eyebrow">Science Corner</div>
+        <div class="tr-slot__icon" aria-hidden="true">⚗️</div>
+        <p class="tr-slot__body" id="trJokeText"></p>
       </div>
-      <div class="tr-card tr-quote" id="trQuoteCard">
-        <div class="tr-label">✦ St. Augustine</div>
-        <div class="tr-quote-body" id="trQuoteText"></div>
-        <div class="tr-quote-work" id="trQuoteWork"></div>
+
+      <!-- Quote slot (shown when data-mode="quote") -->
+      <div class="tr-slot tr-slot--quote" id="trSlotQuote">
+        <div class="tr-slot__eyebrow">St. Augustine</div>
+        <div class="tr-slot__deco-mark" aria-hidden="true">&ldquo;</div>
+        <p class="tr-slot__body" id="trQuoteText"></p>
+        <div class="tr-slot__source" id="trQuoteWork"></div>
       </div>
-    </div>
-    <div class="tr-footer" id="trFooter">
-      <div class="get-ready-icon">🚀</div>
-      <div class="get-ready-text">Get Ready!</div>
-      <div class="get-ready-sub" id="getReadySub">The next question is starting...</div>
+
+      <!-- Shared footer -->
+      <div class="tr-stage__footer">
+        <div class="tr-stage__meta">
+          <span class="tr-stage__qcounter" id="getReadySub">Question 1 of 10</span>
+        </div>
+        <div class="tr-stage__bar-track" aria-hidden="true">
+          <div class="tr-stage__bar-fill" id="trBarFill"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -2244,23 +2319,35 @@
       if (S.isTransitioning) return;
       S.isTransitioning = true;
 
-      // Populate meme content
-      const meme = getPun();
-      const quote = getAugustineQuote();
-      document.getElementById('trMemeText').textContent = meme;
-      document.getElementById('trQuoteText').textContent = quote.text;
-      document.getElementById('trQuoteWork').textContent = quote.work;
-      document.getElementById('getReadySub').textContent = `Question ${targetQIndex + 1} of ${S.qs.length}`;
+      var mode = Math.random() < 0.5 ? 'joke' : 'quote';
+      var stage = document.getElementById('trStage');
+      var barFill = document.getElementById('trBarFill');
 
-      // Reset card animations by forcing reflow
-      ['trMemeCard', 'trQuoteCard', 'trFooter'].forEach(function(id) {
-        var el = document.getElementById(id);
-        if (el) { el.style.animation = 'none'; el.offsetHeight; el.style.animation = ''; }
-      });
+      if (mode === 'joke') {
+        document.getElementById('trJokeText').textContent = getPun();
+      } else {
+        var quote = getAugustineQuote();
+        document.getElementById('trQuoteText').textContent = quote.text;
+        document.getElementById('trQuoteWork').textContent = '\u2014 St. Augustine, ' + quote.work;
+      }
+      document.getElementById('getReadySub').textContent =
+        'Question ' + (targetQIndex + 1) + ' of ' + S.qs.length;
 
-      // Hide main content, show overlay
+      stage.setAttribute('data-mode', mode);
+
+      // Reset bar to full (no transition), then drain after paint commits
+      barFill.classList.remove('draining');
+      barFill.style.transform = 'scaleX(1)';
+
       document.getElementById('qArea').style.opacity = '0';
       document.getElementById('getReadyOverlay').classList.add('show');
+
+      // Double rAF ensures reset paint commits before drain transition fires
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          barFill.classList.add('draining');
+        });
+      });
 
       setTimeout(function() {
         document.getElementById('getReadyOverlay').classList.remove('show');
@@ -2270,7 +2357,7 @@
           document.getElementById('qArea').style.transition = 'opacity 0.5s ease';
           S.isTransitioning = false;
         }, 100);
-      }, 4000); // 4 seconds — enough time to read meme + quote
+      }, 4000);
     }
 
     function executeSubmit() {
