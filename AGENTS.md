@@ -196,8 +196,33 @@ Each student's email contains a **unique, pre-signed `studentToken`** embedded i
 
 All calls use `UrlFetchApp.fetch()` to the `v1beta` REST endpoint with `muteHttpExceptions: true`. Always check `response.getResponseCode()` before parsing.
 
-### Batch Grading (Primary Path)
-`Grader.callGeminiBatch()` sends up to **15 student responses per API call** (the `BATCH_SIZE` constant) in a single prompt. The model is asked to return a JSON **array** of `{ id, score, feedback }` objects. This dramatically reduces API call count versus per-student calls.
+### System Instruction (Grading Persona)
+Both `callGeminiBatch` and `callGemini` use the Gemini API's `systemInstruction` field (same pattern as `generateAIClassReport` in Code.gs) to separate the grading persona from the task prompt. The persona is defined once as `Grader.SYSTEM_INSTRUCTION` and enforces:
+* Direct, specific, concise feedback — "like margin notes from an expert."
+* No filler phrases ("Great job", "Good effort") — these waste tokens and add no pedagogical value.
+* Never restate the question in feedback.
+* Focus exclusively on scientific accuracy; ignore spelling/grammar unless it changes factual meaning.
+* **Anti-hallucination:** "Only reference concepts the student actually wrote — never infer, assume, or fabricate content not present in the answer."
+* **Anti-confabulation:** "If the answer is blank or nonsensical, score 0 and say so."
+* **Anti-Lost-in-Middle:** "Grade every student with equal care regardless of their position in the list."
+
+🛑 These directives are critical for grading accuracy. Do not weaken or remove them.
+
+### Prompt Design Principles
+The grading prompts use numbered `GRADING INSTRUCTIONS` to enforce structured evaluation:
+1. Compare answer against rubric and ideal answer.
+2. Award points only for correct scientific content.
+3. Write **brief, specific feedback (1-3 sentences or fragments)** naming the exact concept correct, partially correct, or missing.
+4. (Batch only) Return results for ALL student IDs listed — reinforced with explicit count.
+
+Feedback length is flexible (1-3 sentences or fragments) to allow the AI to be as helpful as appropriate for each answer. The key constraint is specificity — the model must name the actual concept rather than hedging with generalities.
+
+### Batch Grading (Primary Path) & Lost-in-Middle Mitigation
+`Grader.callGeminiBatch()` sends up to **5 student responses per API call** (`Grader.BATCH_SIZE`) in a single prompt. The model returns a JSON **array** of `{ id, score, feedback }` objects.
+
+**Batch size history:** 15 (original) → 10 → **5** (current). The aggressive reduction to 5 mitigates the "Lost in the Middle" phenomenon (Liu et al., 2023) where LLMs allocate attention in a U-shaped curve — students in the middle of larger batches receive measurably less accurate grading. At batch size 5, the attention curve is effectively flat. The cost is more API calls (6 for a class of 30 instead of 2), which is an acceptable tradeoff for grading accuracy and consistency.
+
+**Positional anchoring:** Each student in the batch is prefixed with `[N/total]` markers (e.g., `[1/5]`, `[2/5]`) and the prompt header includes the explicit total count (`STUDENT RESPONSES (5 total)`). This gives the model explicit positional awareness and anchors equal attention across all students.
 
 ### Single-Response Fallback (Secondary Path)
 If a batch call fails (network error, malformed JSON) or a student ID is missing from the batch result, the grader falls back to `Grader.callGemini()` for individual student re-grading. This fallback-within-fallback is intentional for resilience.
@@ -210,7 +235,20 @@ For batch calls, the parser attempts:
 2. If that fails, parse the full `text` as JSON directly.
 3. If both fail, throw to trigger the per-student fallback path.
 
-### Token Budget Strategy
+### MAX_TOKENS Truncation Handling
+When the Gemini API returns `finishReason: 'MAX_TOKENS'` for a **batch** call, the `_salvageBatchJSON(text, maxPts)` helper uses regex to extract all complete `{id, score, feedback}` objects from the truncated response. Successfully extracted entries are returned as partial results; student IDs missing from the partial results naturally fall back to single grading via the existing `resultMap` check in `gradeSession()`. If zero entries can be salvaged, an error is thrown to trigger the full per-student fallback path.
+
+For **single** calls, the existing partial-extraction regex fallback (lines 449-456) already handles truncated JSON gracefully — no additional handling needed.
+
+🛑 **Do not remove `_salvageBatchJSON`** — it is critical for preventing total data loss when batches are truncated.
+
+### Token Budget Configuration
+| Call Type | `maxOutputTokens` | Temperature | Rationale |
+|-----------|-------------------|-------------|-----------|
+| Batch grading | 8192 | 0.1 | ~1600 tokens per student (5 students), generous headroom for multi-sentence feedback + JSON |
+| Single grading | 4096 | 0.1 | Ample room for 1-3 sentence feedback; ensures feedback is never truncated |
+| Class report | 8192 | 0.2 | Longer analytical output with multiple sections |
+
 Before sending data to `generateAIClassReport()`, strip the full session config (which contains bloated question-set metadata) and send only clean arrays of `questions`, `responses`, `metacognition`, and `violations`. This prevents token exhaustion and reduces latency.
 
 ### Regrade with Context
