@@ -247,7 +247,7 @@
     }
 
     .lock {
-      background: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+      background: linear-gradient(145deg, #0f172a 0%, #1e293b 60%, #0f172a 100%);
       color: #fff;
     }
 
@@ -268,46 +268,46 @@
       opacity: 0.9;
     }
 
-    /* Polished Session Ended card */
-    @keyframes sessionEndedIn {
-      from { opacity: 0; transform: translateY(28px) scale(0.96); }
-      to   { opacity: 1; transform: translateY(0)   scale(1);    }
+    /* Violation & Session End shared card */
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(24px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
     }
 
-    .session-ended-card {
-      background: rgba(255, 255, 255, 0.13);
-      backdrop-filter: blur(28px);
-      -webkit-backdrop-filter: blur(28px);
-      border: 1px solid rgba(255, 255, 255, 0.25);
+    .violation-card {
+      background: rgba(255, 255, 255, 0.07);
+      backdrop-filter: blur(32px);
+      -webkit-backdrop-filter: blur(32px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 28px;
-      padding: 64px 56px;
-      max-width: 560px;
+      padding: 56px 52px;
+      max-width: 520px;
       width: calc(100% - 48px);
       text-align: center;
-      animation: sessionEndedIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.12);
+      animation: cardIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.4), 0 4px 20px rgba(0, 0, 0, 0.2);
     }
 
-    .session-ended-icon {
-      font-size: 72px;
-      margin-bottom: 20px;
+    .violation-icon {
+      font-size: 64px;
+      margin-bottom: 24px;
       display: block;
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3));
     }
 
-    .session-ended-title {
+    .violation-title {
       font-family: 'Outfit', sans-serif;
-      font-size: 36px;
+      font-size: 34px;
       font-weight: 800;
       color: #fff;
       margin-bottom: 14px;
-      letter-spacing: -1px;
-      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      letter-spacing: -0.8px;
     }
 
-    .session-ended-msg {
-      font-size: 17px;
-      color: rgba(255, 255, 255, 0.82);
-      line-height: 1.65;
+    .violation-msg {
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.7;
       max-width: 380px;
       margin: 0 auto;
     }
@@ -1253,9 +1253,11 @@
   </div>
 
   <div class="lock" id="lockOverlay">
-    <h2>&#x26A0; Session Locked</h2>
-    <p>You exited fullscreen or switched tabs. This action has been recorded. Please wait for your teacher to review and
-      re-admit you.</p>
+    <div class="violation-card">
+      <span class="violation-icon">🔒</span>
+      <div class="violation-title">Session Locked</div>
+      <div class="violation-msg">You exited fullscreen or switched tabs. This action has been recorded. Please wait for your teacher to review and re-admit you.</div>
+    </div>
   </div>
 
   <!-- Custom Submit Confirm Modal avoids triggering browser fullscreen exit -->
@@ -1654,11 +1656,18 @@
 
       const lo = document.getElementById('lockOverlay');
       if (type === 'session_ended') {
+        // Auto-exit fullscreen so student isn't trapped after session ends
+        if (document.fullscreenElement && document.exitFullscreen) {
+          try { document.exitFullscreen(); } catch (e) {}
+        } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+          try { document.webkitExitFullscreen(); } catch (e) {}
+        }
+
         lo.innerHTML = `
-          <div class="session-ended-card">
-            <span class="session-ended-icon">🛑</span>
-            <div class="session-ended-title">Session Ended</div>
-            <div class="session-ended-msg">The teacher has officially ended this session. You can no longer submit responses or view questions.</div>
+          <div class="violation-card">
+            <span class="violation-icon">🏁</span>
+            <div class="violation-title">Session Ended</div>
+            <div class="violation-msg">The teacher has officially ended this session. You can no longer submit responses or view questions.</div>
           </div>
         `;
         lo.classList.add('show');
