@@ -2328,7 +2328,7 @@
       } else {
         var quote = getAugustineQuote();
         document.getElementById('trQuoteText').textContent = quote.text;
-        document.getElementById('trQuoteWork').textContent = quote.work;
+        document.getElementById('trQuoteWork').textContent = '\u2014 St. Augustine, ' + quote.work;
       }
       document.getElementById('getReadySub').textContent =
         'Question ' + (targetQIndex + 1) + ' of ' + S.qs.length;
