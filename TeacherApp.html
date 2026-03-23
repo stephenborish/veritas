@@ -1043,7 +1043,7 @@
       color: var(--tx2);
       font-weight: 600;
       font-size: 13px;
-      font-family: 'DM Sans';
+      font-family: 'Inter', system-ui, sans-serif;
       transition: var(--tr);
     }
 
@@ -1236,7 +1236,7 @@
       border: 1px solid var(--bd);
       border-radius: 8px;
       font-size: 15px;
-      font-family: 'DM Sans';
+      font-family: 'Inter', system-ui, sans-serif;
       margin-bottom: 24px;
     }
 
@@ -1252,7 +1252,7 @@
       border: 1px solid var(--bd);
       border-radius: 8px;
       font-size: 14px;
-      font-family: 'DM Sans';
+      font-family: 'Inter', system-ui, sans-serif;
       min-height: 160px;
       margin-bottom: 24px;
       resize: vertical;
@@ -2828,7 +2828,7 @@
         banner:   d.session.code + ':' + curQIdx,
         stats:    d.totalJoined + ':' + d.totalFinished + ':' + (d.totalActiveNow || 0) + ':' + _violCount,
         controls: isLS ? curQIdx + ':' + _lockedQs + ':' + _gsState + ':' + _gsCounts : 'off',
-        left:     isLS ? _lockedQs + ':' + _answerFP : _answerFP,
+        left:     isLS ? curQIdx + ':' + _lockedQs + ':' + _answerFP : _answerFP,
         students: liveTab === 'students' ? _answerFP + ':' + _violCount : null,
         details:  liveTab === 'details'  ? _answerFP : null,
         grading:  liveTab === 'grading'  ? _gsState + ':' + _gsCounts + ':' + _answerFP : null,
