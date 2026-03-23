@@ -17,6 +17,8 @@
 
 const Grader = {
   MODEL: 'gemini-2.5-flash',
+  BATCH_SIZE: 10,
+  SYSTEM_INSTRUCTION: 'You are a rigorous, fair science teacher grading student short-answer responses. Your feedback style is direct, specific, and concise — like margin notes from an expert. Never restate the question. Never use filler phrases like "Great job" or "Good effort." Focus exclusively on the scientific accuracy of what the student wrote. Ignore spelling, grammar, and punctuation unless they change the factual meaning of a science concept.',
   QUEUE_KEY: 'VA_GRADE_QUEUE',
 
   statusKey(sessId) { return 'VA_GRADE_STATUS_' + sessId; },
@@ -145,7 +147,7 @@ const Grader = {
     for (const q of saQs) {
       const qResps = resps.filter(r => r.questionId === q.id && r.answer && String(r.answer).length > 3);
       const pendingResps = qResps.filter(r => !done.has(r.studentId + '|' + q.id));
-      const BATCH_SIZE = 15;
+      const BATCH_SIZE = this.BATCH_SIZE;
 
       for (let i = 0; i < pendingResps.length; i += BATCH_SIZE) {
         if (Date.now() - startTime > TIMEOUT_LIMIT) {
@@ -294,18 +296,23 @@ const Grader = {
 
     const maxPts = question.points || 1;
     let rubricText = '';
-    if (question.rubric) rubricText += '\\nRUBRIC:\\n' + question.rubric;
-    if (question.sampleAnswer) rubricText += '\\nIDEAL ANSWER:\\n' + question.sampleAnswer;
-    if (extraContext) rubricText += '\\nADDITIONAL TEACHER CONTEXT:\\n' + extraContext;
+    if (question.rubric) rubricText += '\nRUBRIC:\n' + question.rubric;
+    if (question.sampleAnswer) rubricText += '\nIDEAL ANSWER:\n' + question.sampleAnswer;
+    if (extraContext) rubricText += '\nADDITIONAL TEACHER CONTEXT:\n' + extraContext;
 
-    let studentsText = responses.map(r => `ID: ${r.studentId}\\nANSWER: "${r.answer}"`).join('\\n\\n');
+    let studentsText = responses.map(r => `ID: ${r.studentId}\nANSWER: "${r.answer}"`).join('\n\n');
 
-    const prompt = 'You are a science teacher grading student responses. Be precise, fair, and direct. Focus entirely on the factual core of their answers. Ignore spelling, grammar, and punctuation mistakes unless they explicitly change the factual meaning of the science concept.\\n\\n' +
-      'QUESTION (' + maxPts + ' pt' + (maxPts > 1 ? 's' : '') + '):\\n' + question.text + '\\n' +
-      rubricText + '\\n\\nSTUDENT RESPONSES:\\n' + studentsText + '\\n\\n' +
-      'For each student, provide your evaluation in 1-2 brief, complete sentences. Do NOT cut off mid-sentence. You MUST include every student ID provided above.\\n\\n' +
-      'Reply with ONLY a JSON array of objects (no markdown, no prose, no code blocks):\\n' +
-      '[{"id":"<student_id>","score":<0–' + maxPts + '>,"feedback":"<exact notes>"}, ...]';
+    const prompt = 'QUESTION (' + maxPts + ' pt' + (maxPts > 1 ? 's' : '') + '):\n' +
+      question.text + '\n' +
+      rubricText + '\n\n' +
+      'STUDENT RESPONSES:\n' + studentsText + '\n\n' +
+      'GRADING INSTRUCTIONS:\n' +
+      '1. Compare each answer against the rubric and ideal answer above.\n' +
+      '2. Award points only for correct scientific content that addresses the question.\n' +
+      '3. For each student, write 1 sentence of feedback: name the specific concept they got right or wrong. No filler.\n' +
+      '4. You MUST return results for every student ID listed above. Do NOT cut off mid-sentence.\n\n' +
+      'Reply with ONLY a JSON array (no markdown, no code fences, no commentary):\n' +
+      '[{"id":"<student_id>","score":<0-' + maxPts + '>,"feedback":"<1 sentence>"}]';
 
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + this.MODEL + ':generateContent?key=' + key;
 
@@ -313,6 +320,7 @@ const Grader = {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify({
+        systemInstruction: { parts: [{ text: Grader.SYSTEM_INSTRUCTION }] },
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
       }),
@@ -332,11 +340,17 @@ const Grader = {
 
     const candidate = data.candidates[0];
     const finishReason = candidate.finishReason || '';
-    if (finishReason === 'MAX_TOKENS') {
-      Logger.log('⚠ Gemini hit MAX_TOKENS for: ' + question.text.substring(0, 60));
-    }
-
     let text = ((candidate.content && candidate.content.parts && candidate.content.parts[0].text) || '').trim();
+
+    if (finishReason === 'MAX_TOKENS') {
+      Logger.log('⚠ Gemini hit MAX_TOKENS for batch on: ' + question.text.substring(0, 60));
+      const salvaged = this._salvageBatchJSON(text, maxPts);
+      if (salvaged.length > 0) {
+        Logger.log('Salvaged ' + salvaged.length + '/' + responses.length + ' results from truncated batch');
+        return salvaged;
+      }
+      throw new Error('MAX_TOKENS: batch response fully truncated');
+    }
     // Strip markdown fences
     text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
@@ -376,12 +390,16 @@ const Grader = {
     if (question.sampleAnswer) rubricText += '\nIDEAL ANSWER:\n' + question.sampleAnswer;
     if (extraContext) rubricText += '\nADDITIONAL TEACHER CONTEXT:\n' + extraContext;
 
-    const prompt = 'You are a science teacher grading a student response. Be precise, fair, and direct. Focus entirely on the factual core of their answer. Ignore spelling, grammar, and punctuation mistakes unless they explicitly change the factual meaning of the science concept.\n\n' +
-      'QUESTION (' + maxPts + ' pt' + (maxPts > 1 ? 's' : '') + '):\n' + question.text + '\n' +
-      rubricText + '\n\nSTUDENT ANSWER:\n"' + answer + '"\n\n' +
-      'Provide your evaluation in 1-2 brief, complete sentences. Do NOT cut off mid-sentence.\n\n' +
-      'Reply with ONLY this JSON (no markdown, no prose):\n' +
-      '{"score":<0–' + maxPts + '>,"feedback":"<exact notes: succinct complete sentences on what they got right and key missing concepts>"}';
+    const prompt = 'QUESTION (' + maxPts + ' pt' + (maxPts > 1 ? 's' : '') + '):\n' +
+      question.text + '\n' +
+      rubricText + '\n\n' +
+      'STUDENT ANSWER:\n"' + answer + '"\n\n' +
+      'GRADING INSTRUCTIONS:\n' +
+      '1. Compare the answer against the rubric and ideal answer.\n' +
+      '2. Award points only for correct scientific content.\n' +
+      '3. Write 1 sentence of feedback: name the specific concept correct or missing.\n\n' +
+      'Reply with ONLY this JSON (no markdown, no code fences):\n' +
+      '{"score":<0-' + maxPts + '>,"feedback":"<1 sentence>"}';
 
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + this.MODEL + ':generateContent?key=' + key;
 
@@ -389,8 +407,9 @@ const Grader = {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify({
+        systemInstruction: { parts: [{ text: Grader.SYSTEM_INSTRUCTION }] },
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 }
+        generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
       }),
       muteHttpExceptions: true
     });
@@ -409,7 +428,7 @@ const Grader = {
     const candidate = data.candidates[0];
     const finishReason = candidate.finishReason || '';
     if (finishReason === 'MAX_TOKENS') {
-      Logger.log('⚠ Gemini hit MAX_TOKENS for: ' + question.text.substring(0, 60));
+      Logger.log('WARNING: Gemini hit MAX_TOKENS for single grading: ' + question.text.substring(0, 60) + ' — attempting partial extraction');
     }
 
     let text = ((candidate.content && candidate.content.parts && candidate.content.parts[0].text) || '').trim();
@@ -480,7 +499,7 @@ const Grader = {
     let updated = 0;
     let newGradeRows = [];
 
-    const BATCH_SIZE = 15;
+    const BATCH_SIZE = this.BATCH_SIZE;
     for (let i = 0; i < resps.length; i += BATCH_SIZE) {
       const batch = resps.slice(i, i + BATCH_SIZE);
       let resultMap = {};
@@ -551,6 +570,23 @@ const Grader = {
     const out = { ok: true, updated, message: 'Regraded ' + updated + ' responses.' };
     this.setStatus(sessId, Object.assign({ state: 'done', sessionId: sessId }, out));
     return out;
+  },
+
+  _salvageBatchJSON(text, maxPts) {
+    // Extract complete JSON objects from a truncated batch response.
+    // Each valid {id, score, feedback} entry is returned; missing student IDs
+    // will naturally fall back to single grading via the existing resultMap check.
+    const results = [];
+    const regex = /\{\s*"id"\s*:\s*"([^"]+)"\s*,\s*"score"\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"feedback"\s*:\s*"([^"]*)"\s*\}/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      results.push({
+        studentId: match[1],
+        score: Math.min(Math.max(Number(match[2]) || 0, 0), maxPts),
+        feedback: match[3] || 'No feedback generated.'
+      });
+    }
+    return results;
   },
 
   _batchAppendRows(sheet, rows) {

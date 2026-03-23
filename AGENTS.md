@@ -196,8 +196,24 @@ Each student's email contains a **unique, pre-signed `studentToken`** embedded i
 
 All calls use `UrlFetchApp.fetch()` to the `v1beta` REST endpoint with `muteHttpExceptions: true`. Always check `response.getResponseCode()` before parsing.
 
+### System Instruction (Grading Persona)
+Both `callGeminiBatch` and `callGemini` use the Gemini API's `systemInstruction` field (same pattern as `generateAIClassReport` in Code.gs) to separate the grading persona from the task prompt. The persona is defined once as `Grader.SYSTEM_INSTRUCTION` and enforces:
+* Direct, specific, concise feedback — "like margin notes from an expert."
+* No filler phrases ("Great job", "Good effort") — these waste tokens and add no pedagogical value.
+* Never restate the question in feedback.
+* Focus exclusively on scientific accuracy; ignore spelling/grammar unless it changes factual meaning.
+
+### Prompt Design Principles
+The grading prompts use numbered `GRADING INSTRUCTIONS` to enforce structured evaluation:
+1. Compare answer against rubric and ideal answer.
+2. Award points only for correct scientific content.
+3. Write exactly **1 sentence** of feedback naming the specific concept correct or missing.
+4. (Batch only) Return results for every student ID listed.
+
+This structured approach improves grading consistency and reduces vague or generic feedback. The 1-sentence constraint keeps feedback concise and forces specificity — the model must name the actual concept rather than hedging with generalities.
+
 ### Batch Grading (Primary Path)
-`Grader.callGeminiBatch()` sends up to **15 student responses per API call** (the `BATCH_SIZE` constant) in a single prompt. The model is asked to return a JSON **array** of `{ id, score, feedback }` objects. This dramatically reduces API call count versus per-student calls.
+`Grader.callGeminiBatch()` sends up to **10 student responses per API call** (`Grader.BATCH_SIZE`, previously 15) in a single prompt. The model returns a JSON **array** of `{ id, score, feedback }` objects. The batch size was reduced from 15 to 10 to prevent token exhaustion on longer student answers, which caused truncated/incomplete grading results.
 
 ### Single-Response Fallback (Secondary Path)
 If a batch call fails (network error, malformed JSON) or a student ID is missing from the batch result, the grader falls back to `Grader.callGemini()` for individual student re-grading. This fallback-within-fallback is intentional for resilience.
@@ -210,7 +226,20 @@ For batch calls, the parser attempts:
 2. If that fails, parse the full `text` as JSON directly.
 3. If both fail, throw to trigger the per-student fallback path.
 
-### Token Budget Strategy
+### MAX_TOKENS Truncation Handling
+When the Gemini API returns `finishReason: 'MAX_TOKENS'` for a **batch** call, the `_salvageBatchJSON(text, maxPts)` helper uses regex to extract all complete `{id, score, feedback}` objects from the truncated response. Successfully extracted entries are returned as partial results; student IDs missing from the partial results naturally fall back to single grading via the existing `resultMap` check in `gradeSession()`. If zero entries can be salvaged, an error is thrown to trigger the full per-student fallback path.
+
+For **single** calls, the existing partial-extraction regex fallback (lines 449-456) already handles truncated JSON gracefully — no additional handling needed.
+
+🛑 **Do not remove `_salvageBatchJSON`** — it is critical for preventing total data loss when batches are truncated.
+
+### Token Budget Configuration
+| Call Type | `maxOutputTokens` | Temperature | Rationale |
+|-----------|-------------------|-------------|-----------|
+| Batch grading | 8192 | 0.1 | ~800 tokens per student (10 students), sufficient for 1-sentence feedback + JSON overhead |
+| Single grading | 2048 | 0.1 | A single JSON object with 1-sentence feedback needs far fewer tokens |
+| Class report | 8192 | 0.2 | Longer analytical output with multiple sections |
+
 Before sending data to `generateAIClassReport()`, strip the full session config (which contains bloated question-set metadata) and send only clean arrays of `questions`, `responses`, `metacognition`, and `violations`. This prevents token exhaustion and reduces latency.
 
 ### Regrade with Context
