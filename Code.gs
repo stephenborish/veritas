@@ -262,6 +262,11 @@ function revealAnswer(id, qId) { return DB.revealAnswer(id, qId); }
 function revealAllAnswers(id) { return DB.revealAllAnswers(id); }
 function setTimer(id, config) { return DB.setTimer(id, config); }
 function dismissQuestionTimer(sessId) { try { return DB.dismissQuestionTimer(sessId); } catch(e) { return {error:e.message}; } }
+function pauseQuestionTimer(sessId) { try { return DB.pauseQTimer(sessId); } catch(e) { return {error:e.message}; } }
+function resumeQuestionTimer(sessId) { try { return DB.resumeQTimer(sessId); } catch(e) { return {error:e.message}; } }
+function extendQuestionTimer(sessId, additionalSeconds) { try { return DB.extendQTimer(sessId, additionalSeconds); } catch(e) { return {error:e.message}; } }
+function resetQuestionTimer(sessId) { try { return DB.resetQTimer(sessId); } catch(e) { return {error:e.message}; } }
+function cancelQuestionTimer(sessId) { try { return DB.cancelQTimer(sessId); } catch(e) { return {error:e.message}; } }
 function updateSessionConfig(id, key, val) { return DB.updateSessionConfig(id, key, val); }
 function updateSummaryConfig(id, cfg) { return DB.updateSummaryConfig(id, cfg); }
 function archiveSession(id) { return DB.archiveSession(id); }

@@ -735,7 +735,8 @@ const DB = {
         const qId = qSet.questions[q] ? qSet.questions[q].id : null;
         if (qId) {
           const cfg = sess.config || {};
-          cfg.qTimerState = {qId, startedAt: new Date().toISOString(), dismissed: false};
+          const _now = Date.now();
+          cfg.qTimerState = {qId, startedAt: new Date(_now).toISOString(), endTime: _now + qTimerSeconds * 1000, originalSeconds: qTimerSeconds, paused: false, pausedRemaining: null, dismissed: false, cancelled: false};
           sheet.getRange(sess.row,13).setValue(JSON.stringify(cfg));
         }
       }
@@ -781,7 +782,8 @@ const DB = {
         const qId = qSet.questions[nextQ] ? qSet.questions[nextQ].id : null;
         if (qId) {
           const cfg = sess.config || {};
-          cfg.qTimerState = {qId, startedAt: new Date().toISOString(), dismissed: false};
+          const _now2 = Date.now();
+          cfg.qTimerState = {qId, startedAt: new Date(_now2).toISOString(), endTime: _now2 + qTimerSeconds * 1000, originalSeconds: qTimerSeconds, paused: false, pausedRemaining: null, dismissed: false, cancelled: false};
           sheet.getRange(sess.row,13).setValue(JSON.stringify(cfg));
         }
       }
@@ -823,7 +825,85 @@ const DB = {
     return this.withLock(() => {
       const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
       const cfg = sess.config || {};
-      if (cfg.qTimerState) cfg.qTimerState.dismissed = true;
+      if (cfg.qTimerState) { cfg.qTimerState.dismissed = true; cfg.qTimerState.paused = false; cfg.qTimerState.cancelled = false; }
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId);
+      const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  pauseQTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.qTimerState || cfg.qTimerState.dismissed || cfg.qTimerState.cancelled) return {error:'No active timer'};
+      if (cfg.qTimerState.paused) return {ok:true};
+      cfg.qTimerState.pausedRemaining = Math.max(0, (cfg.qTimerState.endTime || Date.now()) - Date.now());
+      cfg.qTimerState.paused = true;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId);
+      const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  resumeQTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.qTimerState || !cfg.qTimerState.paused) return {error:'Timer not paused'};
+      cfg.qTimerState.endTime = Date.now() + (cfg.qTimerState.pausedRemaining || 0);
+      cfg.qTimerState.paused = false;
+      cfg.qTimerState.pausedRemaining = null;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId);
+      const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  extendQTimer(sessId, additionalSeconds) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.qTimerState) return {error:'No timer active'};
+      const addMs = (Number(additionalSeconds) || 0) * 1000;
+      if (cfg.qTimerState.paused) {
+        cfg.qTimerState.pausedRemaining = (cfg.qTimerState.pausedRemaining || 0) + addMs;
+      } else {
+        cfg.qTimerState.endTime = (cfg.qTimerState.endTime || Date.now()) + addMs;
+        // If timer had expired (cancelled/dismissed), restart it
+        if (cfg.qTimerState.cancelled || cfg.qTimerState.dismissed) {
+          cfg.qTimerState.cancelled = false;
+          cfg.qTimerState.dismissed = false;
+        }
+      }
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId);
+      const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  resetQTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.qTimerState) return {error:'No timer active'};
+      const origSec = cfg.qTimerState.originalSeconds || cfg.qTimerSeconds || 60;
+      cfg.qTimerState.endTime = Date.now() + origSec * 1000;
+      cfg.qTimerState.paused = false;
+      cfg.qTimerState.pausedRemaining = null;
+      cfg.qTimerState.dismissed = false;
+      cfg.qTimerState.cancelled = false;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId);
+      const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  cancelQTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (cfg.qTimerState) { cfg.qTimerState.cancelled = true; cfg.qTimerState.dismissed = true; cfg.qTimerState.paused = false; }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const qSet = this.getQSet(sess.setId);
       const updated = this.getSessionById(sessId);

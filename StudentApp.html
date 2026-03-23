@@ -1335,7 +1335,7 @@
       // stimuli stores passage/figure material keyed by id
       stimuli: [],
       // Lockstep question timer state
-      qTimerInt: null, qTimerActive: false, qTimerEnd: 0, qTimerDismissed: false
+      qTimerInt: null, qTimerActive: false, qTimerEnd: 0, qTimerDismissed: false, qTimerPaused: false
     };
 
     const SCI_PUNS = [
@@ -1766,9 +1766,13 @@
     }
 
     function onQTimerExpired() {
-      // Auto-save any in-progress short answer
+      // Auto-save any in-progress short answer and mark as submitted
       const saIn = document.getElementById('saIn');
-      if (saIn && !S.submittedAns[saIn.dataset.qid]) saveSA(saIn.dataset.qid);
+      if (saIn && !S.submittedAns[saIn.dataset.qid]) {
+        const _expiredQId = saIn.dataset.qid;
+        saveSA(_expiredQId);
+        S.submittedAns[_expiredQId] = true;
+      }
       disableAnswerInput();
       document.getElementById('qTimerPill').textContent = '⏱ 00:00';
       // Show time-up overlay
@@ -1878,7 +1882,9 @@
         html += '<h2 style="font-size:28px; font-weight:800; margin-bottom:12px; color:var(--red)">Question Locked</h2>';
         html += '<div style="color:var(--tx2); font-size:18px">The teacher has locked this question. You can no longer submit a response.</div>';
       } else if (needsMeta) {
-        // STATE 2: Metacognition Phase
+        // STATE 2: Metacognition Phase — remove any timer overlay so student can respond
+        var _metaOv = document.getElementById('qTimerExpiredOverlay');
+        if (_metaOv) _metaOv.remove();
         html += '<div class="q-card" style="padding: 48px 40px">';
         html += '<div style="text-align:center; margin-bottom:32px"><div style="font-size:20px; font-weight:700; color:var(--grn); margin-bottom:8px">✓ Answer Submitted</div><div class="meta-title" style="font-size: 24px; color: var(--tx);">How confident are you in your answer?</div></div>';
         html += '<div class="conf-row" style="flex-wrap:wrap; justify-content:center; gap:12px; margin-top:24px">';
@@ -2402,22 +2408,38 @@
               const _qts = st.qTimerState;
               const _curQId = S.qs[S.cur] ? S.qs[S.cur].id : null;
               if (_qts.qId === _curQId) {
-                if (_qts.dismissed) {
+                if (_qts.dismissed || _qts.cancelled) {
                   if (S.qTimerActive && !S.qTimerDismissed) {
-                    // Teacher dismissed — clear timer and re-enable input
+                    // Teacher dismissed or cancelled — clear timer and re-enable input
                     S.qTimerDismissed = true;
                     S.qTimerActive = false;
+                    S.qTimerPaused = false;
                     clearInterval(S.qTimerInt);
                     document.getElementById('qTimerPill').style.display = 'none';
                     var _ov = document.getElementById('qTimerExpiredOverlay');
                     if (_ov) _ov.remove();
                     enableAnswerInput();
                   }
+                } else if (_qts.paused) {
+                  // Timer is paused — freeze display without triggering expiry
+                  if (!S.qTimerPaused) {
+                    S.qTimerPaused = true;
+                    clearInterval(S.qTimerInt);
+                    const _pausedRem = Math.max(0, Math.floor((_qts.pausedRemaining || 0) / 1000));
+                    const _pmm = String(Math.floor(_pausedRem/60)).padStart(2,'0');
+                    const _pss = String(_pausedRem%60).padStart(2,'0');
+                    const _pill = document.getElementById('qTimerPill');
+                    _pill.textContent = '⏸ ' + _pmm + ':' + _pss;
+                    _pill.style.background = '#d97706';
+                    _pill.style.display = 'inline-block';
+                  }
                 } else {
-                  var _endMs = new Date(_qts.startedAt).getTime() + st.qTimerSeconds * 1000;
-                  if (!S.qTimerActive || S.qTimerEnd !== _endMs) {
+                  // Timer running — use endTime if provided, fall back to startedAt + seconds
+                  var _endMs = _qts.endTime || (new Date(_qts.startedAt).getTime() + st.qTimerSeconds * 1000);
+                  if (!S.qTimerActive || S.qTimerEnd !== _endMs || S.qTimerPaused) {
                     S.qTimerActive = true;
                     S.qTimerDismissed = false;
+                    S.qTimerPaused = false;
                     S.qTimerEnd = _endMs;
                     startQTimer();
                   }
