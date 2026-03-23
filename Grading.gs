@@ -578,7 +578,7 @@ const Grader = {
     // Each valid {id, score, feedback} entry is returned; missing student IDs
     // will naturally fall back to single grading via the existing resultMap check.
     const results = [];
-    const regex = /\{\s*"id"\s*:\s*"([^"]+)"\s*,\s*"score"\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"feedback"\s*:\s*"([^"]*)"\s*\}/g;
+    const regex = /\{\s*"id"\s*:\s*"([^"]+)"\s*,\s*"score"\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"feedback"\s*:\s*"((?:[^"\\]|\\.)*)"\s*\}/g;
     let match;
     while ((match = regex.exec(text)) !== null) {
       results.push({
