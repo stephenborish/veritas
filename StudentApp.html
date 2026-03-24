@@ -1462,7 +1462,9 @@
       // stimuli stores passage/figure material keyed by id
       stimuli: [],
       // Lockstep question timer state
-      qTimerInt: null, qTimerActive: false, qTimerEnd: 0, qTimerDismissed: false, qTimerPaused: false
+      qTimerInt: null, qTimerActive: false, qTimerEnd: 0, qTimerDismissed: false, qTimerPaused: false,
+      // Session timer sync state
+      sessionTimerPaused: false, sessionTimerCancelled: false
     };
 
     const SCI_PUNS = [
@@ -1845,11 +1847,16 @@
               }
             });
           }
-          // Start the session countdown from when the assessment actually begins, not from join time
-          if (S.timerConfig && S.timerConfig.type !== 'none') {
-            S.endTime = Date.now() + (S.timerConfig.seconds * 1000);
+          // Set timer from server-authoritative sessionTimerState — never start from local time.
+          // This prevents the timer from counting down while the student is in the holding room.
+          if (d.sessionTimerState && !d.sessionTimerState.cancelled && !d.sessionTimerState.paused) {
+            S.endTime = d.sessionTimerState.endTime;
+          } else {
+            S.endTime = 0; // Will be synced from server once teacher starts the session
           }
-          renderQ(); startTimer(); startPoll();
+          renderQ();
+          if (S.cur >= 0) startTimer(); // Only start if already past the holding room (e.g. rejoining)
+          startPoll();
         })
         .withFailureHandler(function (err) {
           toast((err && err.message) ? err.message : 'Unable to load the assessment. Please reopen the secure link from your email.');
@@ -2492,6 +2499,37 @@
             if (prevGradeStatus !== S.gradeStatus && S.mode === 'lockstep' && !S.isTransitioning) renderQ();
           }
 
+          // Sync session-level timer state from server (handles pause/extend/cancel for all modes)
+          if (st.sessionTimerState) {
+            const _sts = st.sessionTimerState;
+            if (_sts.cancelled) {
+              if (!S.sessionTimerCancelled) {
+                S.sessionTimerCancelled = true; S.sessionTimerPaused = false;
+                if (S.timerInt) { clearInterval(S.timerInt); S.timerInt = null; }
+                document.getElementById('timerPill').style.display = 'none';
+              }
+            } else if (_sts.paused) {
+              if (!S.sessionTimerPaused) {
+                S.sessionTimerPaused = true;
+                if (S.timerInt) { clearInterval(S.timerInt); S.timerInt = null; }
+                const _rem = Math.max(0, Math.floor((_sts.pausedRemaining || 0) / 1000));
+                const _pill = document.getElementById('timerPill');
+                _pill.textContent = '⏸ ' + String(Math.floor(_rem / 60)).padStart(2, '0') + ':' + String(_rem % 60).padStart(2, '0');
+                if (S.cur >= 0) _pill.style.display = 'inline-block';
+              }
+            } else {
+              S.sessionTimerCancelled = false;
+              const _wasResumed = S.sessionTimerPaused;
+              S.sessionTimerPaused = false;
+              if (_sts.endTime && S.endTime !== _sts.endTime) {
+                S.endTime = _sts.endTime;
+                if (S.cur >= 0) { if (S.timerInt) { clearInterval(S.timerInt); S.timerInt = null; } startTimer(); }
+              } else if (_wasResumed && S.cur >= 0) {
+                if (S.timerInt) { clearInterval(S.timerInt); S.timerInt = null; } startTimer();
+              }
+            }
+          }
+
           // Lockstep syncing logic
           if (S.mode === 'lockstep') {
             if (S.isTransitioning) return; // Ignore polling data mid-transition
@@ -2500,9 +2538,12 @@
             let didAdvance = false;
 
             if (st.currentQ !== undefined && S.cur !== st.currentQ && st.currentQ < S.qs.length) {
+              const _prevCur = S.cur;
               if (st.currentQ > S.cur) didAdvance = true;
               S.cur = st.currentQ;
               shouldRender = true;
+              // Start session timer when teacher starts the session (holding room → Q1)
+              if (_prevCur < 0 && S.cur >= 0 && !S.timerInt && S.endTime) startTimer();
             }
 
             const q = S.qs[S.cur];
@@ -2595,6 +2636,7 @@
           // Detect session start for non-lockstep modes (waiting room → first question)
           if (S.mode !== 'lockstep' && S.cur === -1 && st.currentQ >= 0) {
             S.cur = 0;
+            if (!S.timerInt && S.endTime) startTimer(); // Start session timer now that session has begun
             renderQ();
           }
         }).studentCheckStatus(S.sid, S.stuId);

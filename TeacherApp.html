@@ -2867,11 +2867,12 @@
       const _lockedQs  = JSON.stringify((d.session.config || {}).lockedQs || []);
       const _gsState   = (d.gradeStatus || {}).state || 'idle';
       const _gsCounts  = (d.gradeStatus || {}).gradedCount + '/' + (d.gradeStatus || {}).totalToGrade;
+      const _stsFP = (function() { const s = d.session.sessionTimerState; if (!s) return 'none'; return (s.cancelled ? 'c' : s.paused ? 'p:' + s.pausedRemaining : 'r:' + s.endTime); })();
       const _newFP = {
         banner:   d.session.code + ':' + curQIdx,
         stats:    d.totalJoined + ':' + d.totalFinished + ':' + (d.totalActiveNow || 0) + ':' + _violCount,
-        controls: isLS ? curQIdx + ':' + _lockedQs + ':' + _gsState + ':' + _gsCounts : 'off',
-        left:     isLS ? curQIdx + ':' + _lockedQs + ':' + _answerFP : curQIdx + ':' + _answerFP + ':' + _violCount,
+        controls: isLS ? curQIdx + ':' + _lockedQs + ':' + _gsState + ':' + _gsCounts + ':' + _stsFP : _stsFP,
+        left:     isLS ? curQIdx + ':' + _lockedQs + ':' + _answerFP : curQIdx + ':' + _answerFP + ':' + _violCount + ':' + _stsFP,
         students: liveTab === 'students' ? _answerFP + ':' + _violCount : null,
         details:  liveTab === 'details'  ? _answerFP : null,
         grading:  liveTab === 'grading'  ? _gsState + ':' + _gsCounts + ':' + _answerFP : null,
@@ -2900,6 +2901,28 @@
           border:1px solid var(--bd); letter-spacing:1.5px; color:var(--tx2); white-space:nowrap;">${DOMPurify.sanitize(d.session.code)}</div>
       `;
       if (!_ch.controls && !_ch.stats && !_ch.left && !_ch.students && !_ch.details && !_ch.grading) return;
+
+      // Helper: builds session timer live countdown + controls HTML
+      const _buildSessionTimerHtml = function(session) {
+        const _t = session.timer || {};
+        if (!_t.type || _t.type === 'none' || !_t.seconds) return '';
+        const _s = session.sessionTimerState;
+        if (!_s) {
+          return `<span style="font-size:12px;color:var(--tx2);padding:4px 0;white-space:nowrap">⏱ ${Math.floor(_t.seconds/60)} min · starts when session begins</span>`;
+        }
+        if (_s.cancelled) {
+          return `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(107,114,128,0.1);color:var(--tx2);border:1px solid var(--bd);white-space:nowrap">Session Timer Cancelled</span><button class="btn bd" style="font-size:12px" onclick="startSessionTimer()">↺ Restart</button>`;
+        }
+        if (_s.paused) {
+          const _rem=Math.max(0,Math.floor((_s.pausedRemaining||0)/1000));
+          const _pmm=String(Math.floor(_rem/60)).padStart(2,'0'), _pss=String(_rem%60).padStart(2,'0');
+          return `<span id="teacherSessionTimerPill" data-end="0" data-paused="1" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(217,119,6,0.12);color:#d97706;border:1px solid #d97706;white-space:nowrap">⏸ ${_pmm}:${_pss}</span><button class="btn bd" style="font-size:12px" onclick="resumeSessionTimer()">▶ Resume</button><button class="btn bd" style="font-size:12px" onclick="extendSessionTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="extendSessionTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="cancelSessionTimer()">✕ Cancel</button>`;
+        }
+        const _endMs=_s.endTime, _rem=Math.max(0,Math.floor((_endMs-Date.now())/1000));
+        const _mm=String(Math.floor(_rem/60)).padStart(2,'0'), _ss=String(_rem%60).padStart(2,'0');
+        return `<span id="teacherSessionTimerPill" data-end="${_endMs}" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;white-space:nowrap">⏱ ${_mm}:${_ss}</span><button class="btn bd" style="font-size:12px" onclick="pauseSessionTimer()">⏸ Pause</button><button class="btn bd" style="font-size:12px" onclick="extendSessionTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="extendSessionTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="cancelSessionTimer()">✕ Cancel</button>`;
+      };
+
       if (_ch.controls) {
         if (isLS) {
           // FIX: lockedQs lives in session.config, NOT at session root
@@ -2924,7 +2947,7 @@
 
           if (curQIdx === -1) {
             document.getElementById('lsQText').textContent = `Lockstep: Not Started`;
-            document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Begin Q1</button>`;
+            document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Begin Q1</button>${_buildSessionTimerHtml(d.session) ? '<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + _buildSessionTimerHtml(d.session) + '</span>' : ''}`;
           } else {
             document.getElementById('lsQText').textContent = `Lockstep: Q${curQIdx + 1} of ${d.session.questionCount}`;
 
@@ -2981,6 +3004,7 @@
           <button class="btn bg" onclick="lsPrev()">← Prev</button>
           ${lockBtnHtml}
           ${qTimerHtml}
+          ${_buildSessionTimerHtml(d.session)}
           ${gradeIndicator}
           ${gradeBtnHtml}
           <button class="btn bg" onclick="lsReveal()">👁 Reveal</button>
@@ -2992,7 +3016,7 @@
             document.getElementById('lockstepControls').style.display = 'flex';
             document.getElementById('lsQText').textContent = 'Session Not Started';
             document.getElementById('lsParticipation').style.display = 'none';
-            document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Start Session</button>`;
+            document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Start Session</button>${_buildSessionTimerHtml(d.session) ? '<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + _buildSessionTimerHtml(d.session) + '</span>' : ''}`;
           } else {
             document.getElementById('lockstepControls').style.display = 'none';
           }
@@ -3044,12 +3068,9 @@
         // Randomized / Self-Paced: show per-question participation summary
         const totalJoined = (d.students || []).filter(s => s.status !== 'not-joined').length;
 
-        // Session timer display
-        const _timer = d.session.timer || {};
-        let timerHtml = '';
-        if (_timer.type && _timer.type !== 'none' && _timer.seconds) {
-          timerHtml = `<div style="font-size:13px;color:var(--tx2);margin-bottom:16px">Session timer: <strong>${Math.floor(_timer.seconds / 60)} min</strong></div>`;
-        }
+        // Session timer display — live countdown with controls
+        const _sTimerContent = _buildSessionTimerHtml(d.session);
+        const timerHtml = _sTimerContent ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px">${_sTimerContent}</div>` : '';
 
         leftHtml += `<div class="card" style="margin-bottom:24px;padding:20px">
           <div style="font-weight:700;font-size:15px;color:var(--tx);margin-bottom:4px">Randomized Assessment</div>
@@ -3580,18 +3601,50 @@
         .cancelQuestionTimer(aSid);
     }
 
-    // Tick the teacher-side question timer pill every 500ms (lightweight, DOM-only)
+    // ── Session Timer Controls ────────────────────────────────────────
+    function pauseSessionTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer paused.', 'ok'); }).withFailureHandler(e => toast('Failed to pause session timer: ' + (e.message||'Unknown error'), 'err')).pauseSessionTimer(aSid);
+    }
+    function resumeSessionTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer resumed.', 'ok'); }).withFailureHandler(e => toast('Failed to resume session timer: ' + (e.message||'Unknown error'), 'err')).resumeSessionTimer(aSid);
+    }
+    function extendSessionTimer(seconds) {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => { refreshLive(); toast('+' + seconds + 's added to session timer.', 'ok'); }).withFailureHandler(e => toast('Failed to extend session timer: ' + (e.message||'Unknown error'), 'err')).extendSessionTimer(aSid, seconds);
+    }
+    function cancelSessionTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer cancelled.', 'ok'); }).withFailureHandler(e => toast('Failed to cancel session timer: ' + (e.message||'Unknown error'), 'err')).cancelSessionTimer(aSid);
+    }
+    function startSessionTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer restarted.', 'ok'); }).withFailureHandler(e => toast('Failed to restart session timer: ' + (e.message||'Unknown error'), 'err')).startSessionTimer(aSid);
+    }
+
+    // Tick the teacher-side question and session timer pills every 500ms (lightweight, DOM-only)
     setInterval(function() {
+      // Question timer pill
       const pill = document.getElementById('teacherQTimerPill');
-      if (!pill) return;
-      if (pill.dataset.paused === '1') return; // frozen while paused
-      const endMs = parseInt(pill.dataset.end, 10);
-      if (!endMs) return;
-      const rem = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
-      const mm = String(Math.floor(rem/60)).padStart(2,'0');
-      const ss = String(rem%60).padStart(2,'0');
-      pill.textContent = '⏱ ' + mm + ':' + ss;
-      if (rem === 0) pill.style.background = 'rgba(239,68,68,0.3)';
+      if (pill && pill.dataset.paused !== '1') {
+        const endMs = parseInt(pill.dataset.end, 10);
+        if (endMs) {
+          const rem = Math.max(0, Math.floor((endMs - Date.now()) / 1000));
+          pill.textContent = '⏱ ' + String(Math.floor(rem/60)).padStart(2,'0') + ':' + String(rem%60).padStart(2,'0');
+          if (rem === 0) pill.style.background = 'rgba(239,68,68,0.3)';
+        }
+      }
+      // Session timer pill
+      const sPill = document.getElementById('teacherSessionTimerPill');
+      if (sPill && sPill.dataset.paused !== '1') {
+        const sEndMs = parseInt(sPill.dataset.end, 10);
+        if (sEndMs) {
+          const rem = Math.max(0, Math.floor((sEndMs - Date.now()) / 1000));
+          sPill.textContent = '⏱ ' + String(Math.floor(rem/60)).padStart(2,'0') + ':' + String(rem%60).padStart(2,'0');
+          if (rem === 0) sPill.style.background = 'rgba(239,68,68,0.3)';
+        }
+      }
     }, 500);
 
     function readmitS(sid, stuId) { if ((typeof google !== 'undefined' && google.script && google.script.run)) google.script.run.withSuccessHandler(() => { toast('Student Re-admitted.', 'ok'); refreshLive(); }).readmitStudent(sid, stuId); }

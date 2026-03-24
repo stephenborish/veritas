@@ -296,6 +296,13 @@ function getLiveResults(id) { return DB.getLiveResults(id); }
 function getLiveQuestionDetail(sessId, qId) { return DB.getLiveQuestionDetail(sessId, qId); }
 function readmitStudent(sessId, stuId) { return DB.readmitStudent(sessId, stuId); }
 
+// ── Session Timer ──
+function pauseSessionTimer(sessId) { return DB.pauseSessionTimer(sessId); }
+function resumeSessionTimer(sessId) { return DB.resumeSessionTimer(sessId); }
+function extendSessionTimer(sessId, seconds) { return DB.extendSessionTimer(sessId, seconds); }
+function cancelSessionTimer(sessId) { return DB.cancelSessionTimer(sessId); }
+function startSessionTimer(sessId) { return DB.startSessionTimer(sessId); }
+
 // ── Student ──
 function studentJoin(code, first, last, clientToken, studentToken) { return DB.studentJoin(code, first, last, clientToken, studentToken); }
 function studentGetQuestions(sessId, stuId) { return DB.studentGetQuestions(sessId, stuId); }
