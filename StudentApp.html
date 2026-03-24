@@ -2343,7 +2343,14 @@
       SyncQueue.add('studentSubmitMeta', [S.sid, S.stuId, qId, confVal]);
     }
 
-    function goPrev() { if (S.cur > 0 && S.mode !== 'lockstep') { S.cur--; renderQ(); } }
+    function goPrev() {
+      if (S.cur > 0 && S.mode !== 'lockstep') {
+        const _saIn = document.getElementById('saIn');
+        if (_saIn && !S.submittedAns[_saIn.dataset.qid]) saveSA(_saIn.dataset.qid);
+        S.cur--;
+        renderQ();
+      }
+    }
 
     function goNext() {
       if (S.mode === 'lockstep') return; // Enforce prevention locally too
@@ -2353,8 +2360,8 @@
       const hasAns = !!S.ans[qId] && String(S.ans[qId]).trim().length > 0;
       const isSubmitted = S.submittedAns[qId];
 
-      // Block if SA question is not submitted
-      if (q.type === 'sa' && !isSubmitted) {
+      // Block if open-response question is not submitted (covers 'sa' and any future non-MC types)
+      if (q.type !== 'mc' && !isSubmitted) {
         return toast("Please submit your answer before proceeding.");
       }
 
