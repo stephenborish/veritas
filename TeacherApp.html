@@ -2871,7 +2871,7 @@
         banner:   d.session.code + ':' + curQIdx,
         stats:    d.totalJoined + ':' + d.totalFinished + ':' + (d.totalActiveNow || 0) + ':' + _violCount,
         controls: isLS ? curQIdx + ':' + _lockedQs + ':' + _gsState + ':' + _gsCounts : 'off',
-        left:     isLS ? curQIdx + ':' + _lockedQs + ':' + _answerFP : _answerFP,
+        left:     isLS ? curQIdx + ':' + _lockedQs + ':' + _answerFP : curQIdx + ':' + _answerFP + ':' + _violCount,
         students: liveTab === 'students' ? _answerFP + ':' + _violCount : null,
         details:  liveTab === 'details'  ? _answerFP : null,
         grading:  liveTab === 'grading'  ? _gsState + ':' + _gsCounts + ':' + _answerFP : null,
@@ -3040,6 +3040,50 @@
       });
 
       // === LEFT COLUMN STICKY CONTEXT ===
+      if (!isLS && d.session.currentQ >= 0) {
+        // Randomized / Self-Paced: show per-question participation summary
+        const totalJoined = (d.students || []).filter(s => s.status !== 'not-joined').length;
+
+        // Session timer display
+        const _timer = d.session.timer || {};
+        let timerHtml = '';
+        if (_timer.type && _timer.type !== 'none' && _timer.seconds) {
+          timerHtml = `<div style="font-size:13px;color:var(--tx2);margin-bottom:16px">Session timer: <strong>${Math.floor(_timer.seconds / 60)} min</strong></div>`;
+        }
+
+        leftHtml += `<div class="card" style="margin-bottom:24px;padding:20px">
+          <div style="font-weight:700;font-size:15px;color:var(--tx);margin-bottom:4px">Randomized Assessment</div>
+          <div style="font-size:13px;color:var(--tx3);margin-bottom:16px">${(d.qStats || []).length} questions · each student has a unique order</div>
+          ${timerHtml}
+          <div style="display:flex;flex-direction:column;gap:10px">`;
+        (d.qStats || []).forEach(function(qstat, idx) {
+          const answered = (qstat.studentResponses || []).filter(r => r.answer).length;
+          const pct = totalJoined > 0 ? answered / totalJoined : 0;
+          const barColor = pct >= 0.8 ? 'var(--grn)' : pct >= 0.5 ? 'var(--amb)' : 'var(--red)';
+          const pctRound = Math.round(pct * 100);
+          const qType = qstat.type === 'sa' ? 'SA' : 'MC';
+          const qLabel = String(qstat.text || '').replace(/<[^>]*>/g, '').slice(0, 80) + (String(qstat.text || '').replace(/<[^>]*>/g, '').length > 80 ? '…' : '');
+          leftHtml += `<div style="border:1px solid var(--bd);border-radius:8px;padding:10px 14px;background:var(--s)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-size:12px;font-weight:700;color:var(--tx2)">Q${idx+1} <span style="font-weight:400;color:var(--tx3)">${qType}</span></span>
+              <span style="font-size:12px;font-weight:700;color:${barColor}">${answered}/${totalJoined} answered</span>
+            </div>
+            <div style="font-size:13px;color:var(--tx);margin-bottom:8px;line-height:1.4">${DOMPurify.sanitize(qLabel)}</div>
+            <div style="height:6px;background:var(--bd);border-radius:3px;overflow:hidden">
+              <div style="height:100%;width:${pctRound}%;background:${barColor};border-radius:3px;transition:width 0.4s ease"></div>
+            </div>
+          </div>`;
+        });
+        leftHtml += `</div></div>`;
+
+        // Proctoring: violations
+        if (unresolvedViolations.length) {
+          leftHtml += `<div class="card" style="border:1px solid var(--red)">
+            <div style="font-weight:700;color:var(--red);margin-bottom:10px">⚠ Students Locked Out (${unresolvedViolations.length})</div>
+            <div style="display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="readmitS('${d.session.sessionId}','${v.studentId}')">Re-admit</button></div>`).join('')}</div>
+          </div>`;
+        }
+      }
       if (isLS && q) {
         // Evaluate visual state for Teacher card
         const lockedQsList = (d.session.config && d.session.config.lockedQs) || [];
