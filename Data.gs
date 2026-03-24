@@ -961,8 +961,11 @@ const DB = {
     const totalPts=safeResponses.reduce((sum,r)=>sum+(Number(r.points)||0),0);
     const totalMax=safeResponses.reduce((sum,r)=>sum+(Number(r.maxPoints)||0),0);
     const pct=totalMax>0?Math.round((totalPts/totalMax)*100):0;
+    // Detect SA responses submitted but not yet AI-graded (isCorrect is null/empty)
+    const hasPendingGrades=safeResponses.some(r=>r.answer&&(r.isCorrect===null||r.isCorrect===''||r.isCorrect===undefined));
     return {
-      showScore:cfg.showScore!==false,
+      showScore:cfg.showScore!==false&&!hasPendingGrades,
+      pendingGrades:hasPendingGrades,
       pct,
       totalPts,
       totalMax,
