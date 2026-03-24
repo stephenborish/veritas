@@ -558,6 +558,27 @@ const DB = {
     });
   },
 
+  readmitAllStudents(sessId) {
+    return this.withLock(() => {
+      const s = this.sh('StudentSessions'); const d = s.getDataRange().getValues();
+      let count = 0;
+      for (let i = 1; i < d.length; i++) {
+        if (d[i][0] === sessId && (d[i][8] === true || d[i][8] === 'TRUE')) {
+          s.getRange(i + 1, 9).setValue(false);   // unlock
+          s.getRange(i + 1, 11).setValue(true);   // require fullscreen re-entry
+          count++;
+        }
+      }
+      // Resolve all open violations for the session
+      const v = this.sh('Violations'); const vd = v.getDataRange().getValues();
+      for (let i = 1; i < vd.length; i++) {
+        if (vd[i][0] === sessId && !vd[i][5]) v.getRange(i + 1, 6).setValue(true);
+      }
+      this.logAuditEvent('READMIT_ALL_STUDENTS', sessId, 'count=' + count);
+      return {readmitted: count};
+    });
+  },
+
   studentCheckStatus(sessId,stuId) {
     const sess=this.getSessionById(sessId); if(!sess) return {sessionStatus:'ended'};
     // Enforce access window close time — treat expired window as ended session

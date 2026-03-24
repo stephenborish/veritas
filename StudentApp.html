@@ -1454,7 +1454,7 @@
       sid: null, stuId: null, qs: [], cur: 0, ans: {}, conf: {}, correct: {},
       locked: false, done: false, poll: null, timerInt: null, endTime: 0, timerConfig: null,
       mode: 'self-paced', metaEnabled: true, needsFS: false, accessToken: '', lockedQs: [], revealedQs: [],
-      submittedAns: {}, gradeStatus: 'idle',
+      submittedAns: {}, gradeStatus: 'idle', confirmedScores: {},
       // pendingMulti stores in-progress multi-select choices (array) before submission
       pendingMulti: {},
       // eliminated tracks crossed-out choice indices per question: { [qId]: Set<choiceIndex> }
@@ -1553,6 +1553,14 @@
           if (res && res.error && typeof res.error === 'string' && res.error.indexOf('System is busy') > -1) {
             failureHandler(new Error('System busy'));
             return;
+          }
+          // Cache server-confirmed score so the student sees accurate points on reveal
+          if (res && res.saved && item.fnName === 'studentSubmitAnswer') {
+            const qId = item.args[2]; // 3rd arg is qId
+            if (qId) {
+              if (!S.confirmedScores) S.confirmedScores = {};
+              S.confirmedScores[qId] = { points: res.points, maxPts: res.maxPts, isCorrect: res.isCorrect };
+            }
           }
           SyncQueue.items.shift();
           SyncQueue.isProcessing = false;
@@ -2011,7 +2019,12 @@
         html += '<div class="anti-ss-side" style="padding:24px; background:var(--s); border:2px solid var(--bd); border-radius:var(--rs);">';
         html += '<div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:12px; letter-spacing:1px">Hover to view Answer</div>';
 
-        const ptStr = (q.ptsEarned !== undefined && q.ptsEarned !== null) ? `<span style="float:right; color:var(--teal)">Score: ${q.ptsEarned} / ${q.points || 1}</span>` : '';
+        // Use server-revealed ptsEarned, falling back to cached confirmed score from submission
+        let _ptsEarned = q.ptsEarned;
+        if ((_ptsEarned === undefined || _ptsEarned === null) && S.confirmedScores && S.confirmedScores[q.id] !== undefined) {
+          _ptsEarned = S.confirmedScores[q.id].points;
+        }
+        const ptStr = (_ptsEarned !== undefined && _ptsEarned !== null) ? `<span style="float:right; color:var(--teal)">Score: ${_ptsEarned} / ${q.points || 1}</span>` : '';
         html += `<div style="font-size:16px; margin-bottom:16px"><strong style="color:var(--tx2)">Your Answer:</strong>${ptStr}<br/>` + (DOMPurify.sanitize(S.ans[q.id]) || '<em style="color:var(--tx3)">No answer submitted</em>') + '</div>';
 
         if (S.metaEnabled && S.conf[q.id]) {
@@ -2568,6 +2581,11 @@
                   qq.aiScore = st.revealedDetails[qq.id].aiScore;
                   qq.aiFeedback = st.revealedDetails[qq.id].aiFeedback;
                   qq.ptsEarned = st.revealedDetails[qq.id].ptsEarned;
+                  // Keep confirmedScores in sync with authoritative server value
+                  if (!S.confirmedScores) S.confirmedScores = {};
+                  if (qq.ptsEarned !== undefined && qq.ptsEarned !== null) {
+                    S.confirmedScores[qq.id] = { points: qq.ptsEarned, maxPts: qq.points || 1 };
+                  }
                 }
               });
             }
