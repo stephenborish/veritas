@@ -275,6 +275,7 @@ const DB = {
       metacognitionEnabled: cfg.metacognitionEnabled !== false,
       qTimerSeconds: cfg.qTimerSeconds || 0,
       qTimerState:   cfg.qTimerState   || null,
+      sessionTimerState: cfg.sessionTimerState || null,
       closeAt:       cfg.closeAt       || null
     };
   },
@@ -753,17 +754,25 @@ const DB = {
       const q=Math.max(0,Math.min(Number(qIndex)||0,maxQ));
       const sheet = this.sh('Sessions');
       sheet.getRange(sess.row,10).setValue(q);
+      const cfg = sess.config || {};
+      let cfgDirty = false;
+      // Initialize session timer when teacher starts the session for the first time (currentQ -1 → 0)
+      if (sess.currentQ < 0 && q === 0 && sess.timer && sess.timer.type !== 'none' && sess.timer.seconds) {
+        const _now = Date.now();
+        cfg.sessionTimerState = {startedAt: new Date(_now).toISOString(), endTime: _now + sess.timer.seconds * 1000, originalSeconds: sess.timer.seconds, paused: false, pausedRemaining: null, cancelled: false};
+        cfgDirty = true;
+      }
       // Auto-start question timer for lockstep sessions that have a question time limit
-      const qTimerSeconds = (sess.config||{}).qTimerSeconds;
+      const qTimerSeconds = cfg.qTimerSeconds;
       if (qTimerSeconds && sess.mode === 'lockstep') {
         const qId = qSet.questions[q] ? qSet.questions[q].id : null;
         if (qId) {
-          const cfg = sess.config || {};
           const _now = Date.now();
           cfg.qTimerState = {qId, startedAt: new Date(_now).toISOString(), endTime: _now + qTimerSeconds * 1000, originalSeconds: qTimerSeconds, paused: false, pausedRemaining: null, dismissed: false, cancelled: false};
-          sheet.getRange(sess.row,13).setValue(JSON.stringify(cfg));
+          cfgDirty = true;
         }
       }
+      if (cfgDirty) sheet.getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const updatedSess = this.getSessionById(id);
       return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(qq=>qq.id))};
     });
@@ -931,6 +940,70 @@ const DB = {
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const qSet = this.getQSet(sess.setId);
       const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  pauseSessionTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.sessionTimerState || cfg.sessionTimerState.cancelled) return {error:'No active session timer'};
+      if (cfg.sessionTimerState.paused) return {ok:true};
+      cfg.sessionTimerState.pausedRemaining = Math.max(0, (cfg.sessionTimerState.endTime || Date.now()) - Date.now());
+      cfg.sessionTimerState.paused = true;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  resumeSessionTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.sessionTimerState || !cfg.sessionTimerState.paused) return {error:'Session timer not paused'};
+      cfg.sessionTimerState.endTime = Date.now() + (cfg.sessionTimerState.pausedRemaining || 0);
+      cfg.sessionTimerState.paused = false; cfg.sessionTimerState.pausedRemaining = null;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  extendSessionTimer(sessId, additionalSeconds) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.sessionTimerState) return {error:'No session timer active'};
+      const addMs = (Number(additionalSeconds) || 0) * 1000;
+      if (cfg.sessionTimerState.paused) {
+        cfg.sessionTimerState.pausedRemaining = (cfg.sessionTimerState.pausedRemaining || 0) + addMs;
+      } else {
+        cfg.sessionTimerState.endTime = (cfg.sessionTimerState.endTime || Date.now()) + addMs;
+        if (cfg.sessionTimerState.cancelled) cfg.sessionTimerState.cancelled = false;
+      }
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  cancelSessionTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (cfg.sessionTimerState) { cfg.sessionTimerState.cancelled = true; cfg.sessionTimerState.paused = false; }
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  startSessionTimer(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      if (!sess.timer || sess.timer.type === 'none' || !sess.timer.seconds) return {error:'No timer configured for this session'};
+      const cfg = sess.config || {};
+      const _now = Date.now();
+      cfg.sessionTimerState = {startedAt: new Date(_now).toISOString(), endTime: _now + sess.timer.seconds * 1000, originalSeconds: sess.timer.seconds, paused: false, pausedRemaining: null, cancelled: false};
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
       return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
     });
   },
