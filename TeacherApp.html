@@ -1704,6 +1704,8 @@
             </div>
             <div id="lsActions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
           </div>
+          <!-- Row 3: question-jump strip (lockstep only, hidden until session starts) -->
+          <div id="lsQJump" style="display:none;gap:4px;flex-wrap:wrap;padding:4px 16px 6px;border-top:1px solid var(--bd);background:var(--s2)"></div>
         </div>
 
         <!-- NEW: 2-Column Dashboard Layout -->
@@ -1920,6 +1922,7 @@
     }
 
     let liveInt = null, aSid = null, liveTab = 'students', curQIdx = 0;
+    let lsConfirmPending = false; // true while "Advance anyway?" confirm is visible — blocks poll overwrite
     let edQ = [], edStimuli = [], curSetId = null, uploadCallback = null;
     let authChecked = false;
     let __gradingActive = false; // true while AI grading is running — drives faster poll rate
@@ -3000,16 +3003,18 @@
               qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(107,114,128,0.1);color:var(--tx2);border:1px solid var(--bd);white-space:nowrap">⏱ ${_qTimerSec}s per Q</span>`;
             }
 
-            document.getElementById('lsActions').innerHTML = `
-          <button class="btn bg" onclick="lsPrev()">← Prev</button>
-          ${lockBtnHtml}
-          ${qTimerHtml}
-          ${_buildSessionTimerHtml(d.session)}
-          ${gradeIndicator}
-          ${gradeBtnHtml}
-          <button class="btn bg" onclick="lsReveal()">👁 Reveal</button>
-          ${nextBtnHtml}
-        `;
+            if (!lsConfirmPending) {
+              document.getElementById('lsActions').innerHTML = `
+            <button class="btn bg" onclick="lsPrev()">← Prev</button>
+            ${lockBtnHtml}
+            ${qTimerHtml}
+            ${_buildSessionTimerHtml(d.session)}
+            ${gradeIndicator}
+            ${gradeBtnHtml}
+            <button class="btn bg" onclick="lsReveal()">👁 Reveal</button>
+            ${nextBtnHtml}
+          `;
+            }
           }
         } else {
           if (curQIdx === -1) {
@@ -3019,6 +3024,25 @@
             document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Start Session</button>${_buildSessionTimerHtml(d.session) ? '<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + _buildSessionTimerHtml(d.session) + '</span>' : ''}`;
           } else {
             document.getElementById('lockstepControls').style.display = 'none';
+          }
+        }
+
+        // Question-jump strip: show per-question pills when lockstep session is active
+        const _qJump = document.getElementById('lsQJump');
+        if (_qJump) {
+          if (isLS && curQIdx >= 0 && d.qStats && d.qStats.length > 1) {
+            _qJump.style.display = 'flex';
+            _qJump.innerHTML = d.qStats.map((qs, i) => {
+              const isCur = i === curQIdx;
+              const pct = qs.total > 0 ? Math.round((qs.studentResponses || []).filter(r => r.answer).length / Math.max(1, (d.students || []).filter(s => s.status !== 'not-joined').length) * 100) : 0;
+              const style = isCur
+                ? 'background:var(--teal);color:#fff;border-color:var(--teal);font-weight:700;cursor:default'
+                : 'background:var(--s2);color:var(--tx2);border-color:var(--bd)';
+              return `<button class="btn" title="Jump to Q${i + 1} (${pct}% answered)" style="font-size:11px;padding:2px 8px;min-width:30px;${style}" ${isCur ? 'disabled' : `onclick="lsGoTo(${i})"`}>Q${i + 1}</button>`;
+            }).join('');
+          } else {
+            _qJump.style.display = 'none';
+            _qJump.innerHTML = '';
           }
         }
       }
@@ -3100,7 +3124,11 @@
         // Proctoring: violations
         if (unresolvedViolations.length) {
           leftHtml += `<div class="card" style="border:1px solid var(--red)">
-            <div style="font-weight:700;color:var(--red);margin-bottom:10px">⚠ Students Locked Out (${unresolvedViolations.length})</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-weight:700;color:var(--red)">⚠ Students Locked Out (${unresolvedViolations.length})</div>
+              ${unresolvedViolations.length > 1 ? `<button class="btn bp" style="font-size:12px;padding:4px 10px" onclick="readmitAllS('${d.session.sessionId}')">Re-admit All</button>` : ''}
+            </div>
+            <div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Resolve by re-admitting student</div>
             <div style="display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="readmitS('${d.session.sessionId}','${v.studentId}')">Re-admit</button></div>`).join('')}</div>
           </div>`;
         }
@@ -3487,6 +3515,14 @@
       if (curQIdx <= 0 || typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run.withSuccessHandler(() => refreshLive()).goToQuestion(aSid, curQIdx - 1);
     }
+    function lsGoTo(idx) {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      lsConfirmPending = false;
+      google.script.run
+        .withSuccessHandler(() => refreshLive())
+        .withFailureHandler(e => toast('⚠ Could not navigate: ' + (e.message || 'Unknown error'), 'err'))
+        .goToQuestion(aSid, idx);
+    }
     function lsReveal() {
       const d = window.__liveD;
       if (!d || typeof google === 'undefined' || !google.script || !google.script.run) return;
@@ -3503,10 +3539,11 @@
         if (totalJoined > 0 && answered / totalJoined < 0.8) {
           const el = document.getElementById('lsActions');
           el.dataset.savedHtml = el.innerHTML;
+          lsConfirmPending = true;
           el.innerHTML = `
             <span style="font-size:13px;color:var(--amb);font-weight:600;padding:4px 0">${answered}/${totalJoined} answered.</span>
             <button class="btn bp" style="background:var(--amb)" onclick="lsNextForce()">Advance anyway</button>
-            <button class="btn bg" onclick="document.getElementById('lsActions').innerHTML=document.getElementById('lsActions').dataset.savedHtml">Cancel</button>`;
+            <button class="btn bg" onclick="lsConfirmPending=false;document.getElementById('lsActions').innerHTML=document.getElementById('lsActions').dataset.savedHtml">Cancel</button>`;
           return;
         }
       }
@@ -3514,7 +3551,11 @@
     }
     function lsNextForce() {
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-      google.script.run.withSuccessHandler(() => refreshLive()).goToQuestion(aSid, curQIdx + 1);
+      lsConfirmPending = false;
+      google.script.run
+        .withSuccessHandler(() => refreshLive())
+        .withFailureHandler(e => { toast('⚠ Could not advance: ' + (e.message || 'Unknown error'), 'err'); refreshLive(); })
+        .goToQuestion(aSid, curQIdx + 1);
     }
     function lsInitiateLock(qId) {
       const btn = document.getElementById('btnLockToggle');
@@ -3648,6 +3689,13 @@
     }, 500);
 
     function readmitS(sid, stuId) { if ((typeof google !== 'undefined' && google.script && google.script.run)) google.script.run.withSuccessHandler(() => { toast('Student Re-admitted.', 'ok'); refreshLive(); }).readmitStudent(sid, stuId); }
+    function readmitAllS(sid) {
+      if (typeof google !== 'undefined' && google.script && google.script.run)
+        google.script.run
+          .withSuccessHandler(res => { toast('All students re-admitted (' + (res.readmitted || 0) + ').', 'ok'); refreshLive(); })
+          .withFailureHandler(e => toast('⚠ Re-admit all failed: ' + (e.message || 'Unknown error'), 'err'))
+          .readmitAllStudents(sid);
+    }
 
     // ── AI Grading ────────────────────────────────────────────────────
     // Fires startAIGrading (returns instantly). Status is then tracked

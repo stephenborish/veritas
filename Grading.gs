@@ -17,8 +17,8 @@
 
 const Grader = {
   MODEL: 'gemini-3-flash-preview',
-  BATCH_SIZE: 5,
-  SYSTEM_INSTRUCTION: 'You are a rigorous, fair science teacher grading student short-answer responses. Your feedback style is direct, specific, and concise — like margin notes from an expert. Never restate the question. Never use filler phrases like "Great job" or "Good effort." Focus exclusively on the scientific accuracy of what the student wrote. Ignore spelling, grammar, and punctuation unless they change the factual meaning of a science concept. Only reference concepts the student actually wrote — never infer, assume, or fabricate content not present in the answer. If the answer is blank or nonsensical, score 0 and say so. Grade every student with equal care regardless of their position in the list.',
+  BATCH_SIZE: 3,
+  SYSTEM_INSTRUCTION: 'You are a rigorous, fair science teacher grading student short-answer responses. Your feedback style is direct, specific, and concise — like margin notes from an expert. Never restate the question. Never use filler phrases like "Great job" or "Good effort." Focus exclusively on the scientific accuracy of what the student wrote. Ignore spelling, grammar, and punctuation unless they change the factual meaning of a science concept. Only reference concepts the student actually wrote — never infer, assume, or fabricate content not present in the answer. If the answer is blank or nonsensical, score 0 and say so. Grade every student with equal care regardless of their position in the list. CRITICAL: You MUST read each student\'s answer EXACTLY as written — do NOT paraphrase, restate, or reinterpret the student\'s words. If a student wrote "reject the null hypothesis" do not change this to "fail to reject" or any other wording. Do NOT attribute one student\'s answer to another student under any circumstances. Every grade must reflect only what that specific student actually wrote.',
   QUEUE_KEY: 'VA_GRADE_QUEUE',
 
   statusKey(sessId) { return 'VA_GRADE_STATUS_' + sessId; },
@@ -301,17 +301,20 @@ const Grader = {
     if (extraContext) rubricText += '\nADDITIONAL TEACHER CONTEXT:\n' + extraContext;
 
     const total = responses.length;
-    let studentsText = responses.map((r, idx) => `[${idx + 1}/${total}] ID: ${r.studentId}\nANSWER: "${r.answer}"`).join('\n\n');
+    let studentsText = responses.map((r, idx) =>
+      '━━━ STUDENT ' + (idx + 1) + ' OF ' + total + ' ━━━\nID: ' + r.studentId + '\nANSWER: "' + r.answer + '"'
+    ).join('\n\n');
 
     const prompt = 'QUESTION (' + maxPts + ' pt' + (maxPts > 1 ? 's' : '') + '):\n' +
       question.text + '\n' +
       rubricText + '\n\n' +
-      'STUDENT RESPONSES (' + total + ' total):\n' + studentsText + '\n\n' +
+      'STUDENT RESPONSES (' + total + ' total — grade EACH independently):\n' + studentsText + '\n\n' +
       'GRADING INSTRUCTIONS:\n' +
       '1. Compare each answer against the rubric and ideal answer above.\n' +
       '2. Award points only for correct scientific content that addresses the question.\n' +
       '3. For each student, write brief, specific feedback (1-3 sentences or fragments): name the exact concept correct, partially correct, or missing. No filler.\n' +
-      '4. You MUST return results for ALL ' + total + ' student IDs listed above. Do NOT skip any student. Do NOT cut off mid-sentence.\n\n' +
+      '4. You MUST return results for ALL ' + total + ' student IDs listed above. Do NOT skip any student. Do NOT cut off mid-sentence.\n' +
+      '5. CRITICAL: Grade each student ONLY on the EXACT words in their answer. Do NOT paraphrase or reword what the student wrote. Do NOT confuse one student\'s answer with another.\n\n' +
       'Reply with ONLY a JSON array (no markdown, no code fences, no commentary):\n' +
       '[{"id":"<student_id>","score":<0-' + maxPts + '>,"feedback":"<brief specific feedback>"}]';
 
@@ -398,7 +401,8 @@ const Grader = {
       'GRADING INSTRUCTIONS:\n' +
       '1. Compare the answer against the rubric and ideal answer.\n' +
       '2. Award points only for correct scientific content.\n' +
-      '3. Write brief, specific feedback (1-3 sentences or fragments): name the exact concept correct, partially correct, or missing.\n\n' +
+      '3. Write brief, specific feedback (1-3 sentences or fragments): name the exact concept correct, partially correct, or missing.\n' +
+      '4. CRITICAL: Grade ONLY based on the EXACT words the student wrote. Do NOT paraphrase or reword the student\'s answer.\n\n' +
       'Reply with ONLY this JSON (no markdown, no code fences):\n' +
       '{"score":<0-' + maxPts + '>,"feedback":"<brief specific feedback>"}';
 

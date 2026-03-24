@@ -295,6 +295,7 @@ function dismissViolation(sessId, timestamp) { return DB.dismissViolation(sessId
 function getLiveResults(id) { return DB.getLiveResults(id); }
 function getLiveQuestionDetail(sessId, qId) { return DB.getLiveQuestionDetail(sessId, qId); }
 function readmitStudent(sessId, stuId) { return DB.readmitStudent(sessId, stuId); }
+function readmitAllStudents(sessId) { try { return DB.readmitAllStudents(sessId); } catch(e) { return {error: e.message}; } }
 
 // ── Session Timer ──
 function pauseSessionTimer(sessId) { return DB.pauseSessionTimer(sessId); }
