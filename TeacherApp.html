@@ -2943,10 +2943,11 @@
       const _gsState   = (d.gradeStatus || {}).state || 'idle';
       const _gsCounts  = (d.gradeStatus || {}).gradedCount + '/' + (d.gradeStatus || {}).totalToGrade;
       const _stsFP = (function() { const s = d.session.sessionTimerState; if (!s) return 'none'; return (s.cancelled ? 'c' : s.paused ? 'p:' + s.pausedRemaining : 'r:' + s.endTime); })();
+      const _pausedFP = d.session.sessionPaused ? 'P' : 'R';
       const _newFP = {
         banner:   d.session.code + ':' + curQIdx,
         stats:    d.totalJoined + ':' + d.totalFinished + ':' + (d.totalActiveNow || 0) + ':' + _violCount,
-        controls: isLS ? curQIdx + ':' + _lockedQs + ':' + _gsState + ':' + _gsCounts + ':' + _stsFP : curQIdx + ':' + _stsFP,
+        controls: isLS ? curQIdx + ':' + _lockedQs + ':' + _gsState + ':' + _gsCounts + ':' + _stsFP + ':' + _pausedFP : curQIdx + ':' + _stsFP + ':' + _pausedFP,
         left:     isLS ? curQIdx + ':' + _lockedQs + ':' + _answerFP + ':' + (teacherPreviewQIdx||'') : curQIdx + ':' + _answerFP + ':' + _violCount + ':' + _stsFP + ':' + (teacherPreviewQIdx||''),
         students: liveTab === 'students' ? _answerFP + ':' + _violCount : null,
         details:  liveTab === 'details'  ? _answerFP : null,
@@ -2997,6 +2998,15 @@
         const _mm=String(Math.floor(_rem/60)).padStart(2,'0'), _ss=String(_rem%60).padStart(2,'0');
         return `<span id="teacherSessionTimerPill" data-end="${_endMs}" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;white-space:nowrap">⏱ ${_mm}:${_ss}</span><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';pauseSessionTimer()">⏸ Pause</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendSessionTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendSessionTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';cancelSessionTimer()">✕ Cancel</button>`;
       };
+
+      // Session pause button helper
+      const _isPaused = !!(d.session && d.session.sessionPaused);
+      const _pauseBtnHtml = _isPaused
+        ? `<button class="btn" style="background:#d97706;color:#fff;border:none;font-weight:700;font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';resumeSessionNow()">▶ Resume Session</button>`
+        : `<button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';pauseSessionNow()">⏸ Pause Session</button>`;
+      const _pauseIndicator = _isPaused
+        ? `<span style="font-size:13px;font-weight:700;padding:4px 12px;border-radius:12px;background:rgba(217,119,6,0.15);color:#d97706;border:1px solid #d97706;white-space:nowrap;animation:pulse 2s ease-in-out infinite">⏸ SESSION PAUSED</span>`
+        : '';
 
       if (_ch.controls) {
         if (isLS) {
@@ -3079,6 +3089,8 @@
               document.getElementById('lsActions').innerHTML = `
             <button class="btn bg" onclick="this.disabled=true;this.style.opacity='0.55';lsPrev()">← Prev</button>
             ${lockBtnHtml}
+            ${_pauseBtnHtml}
+            ${_pauseIndicator}
             ${qTimerHtml}
             ${_buildSessionTimerHtml(d.session)}
             ${gradeIndicator}
@@ -3100,7 +3112,7 @@
           } else {
             document.getElementById('lsQText').textContent = `${_modeLabel}: ${d.session.questionCount} Question${d.session.questionCount !== 1 ? 's' : ''}`;
             const _timerStr = _buildSessionTimerHtml(d.session);
-            document.getElementById('lsActions').innerHTML = _timerStr || '<span style="font-size:12px;color:var(--tx3)">No session timer</span>';
+            document.getElementById('lsActions').innerHTML = `${_pauseBtnHtml} ${_pauseIndicator} ${_timerStr || '<span style="font-size:12px;color:var(--tx3)">No session timer</span>'}`;
           }
         }
 
@@ -3211,6 +3223,139 @@
           </div>`;
         });
         leftHtml += `</div></div>`;
+
+        // Non-lockstep: Full question detail card when teacher previews a question
+        if (viewQ) {
+          let _nlQHtml = `<div class="card" style="margin-bottom:24px; padding:20px; border: 2px solid var(--teal); transition: all 0.3s ease;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:12px; align-items:center;">
+               <span style="font-weight:700; font-size:15px; color:var(--tx)">Q${viewQIdx+1} Detail</span>
+               <span style="font-weight:600; font-size:13px; color:var(--teal)">${viewQ.type === 'mc' ? 'Multiple Choice' : 'Short Answer'}</span>
+            </div>
+            <div style="font-size:16px; margin-bottom:20px; max-width:100%; overflow:hidden;" class="q-text rte-content">${DOMPurify.sanitize(viewQ.text)}</div>`;
+
+          if (viewQ.type === 'mc' && viewQ.choices) {
+            const _nlChoicesCount = {};
+            viewQ.choices.forEach(c => _nlChoicesCount[c] = { count: 0, confSum: 0, confCount: 0, students: [] });
+            (viewQ.studentResponses || []).forEach(r => {
+              if (r.answer) {
+                let answers = [];
+                try { answers = JSON.parse(r.answer); if (!Array.isArray(answers)) answers = [r.answer]; } catch(e) { answers = [r.answer]; }
+                answers.forEach(a => {
+                  if (_nlChoicesCount[a]) {
+                    _nlChoicesCount[a].count++;
+                    _nlChoicesCount[a].students.push(r.name);
+                    if (r.confidence) { _nlChoicesCount[a].confSum += Number(r.confidence); _nlChoicesCount[a].confCount++; }
+                  }
+                });
+              }
+            });
+            const _nlTotalResps = viewQ.studentResponses ? viewQ.studentResponses.length : 0;
+            _nlQHtml += `<div style="display:flex; flex-direction:column; gap:12px;">`;
+            const _nlCorrectInds = viewQ.correctIndices || [];
+            viewQ.choices.forEach((c, idx) => {
+              const st = _nlChoicesCount[c];
+              const pct = _nlTotalResps > 0 ? Math.round((st.count / _nlTotalResps) * 100) : 0;
+              const avgConf = st.confCount > 0 ? (st.confSum / st.confCount).toFixed(1) : '-';
+              const isC = _nlCorrectInds.includes(idx);
+              const border = isC ? 'border: 2px solid var(--teal);' : 'border: 1px solid var(--bd);';
+              const bg = isC ? 'background: var(--tealBg);' : 'background: var(--s);';
+              let studentListHtml = '';
+              if (st.students.length > 0) {
+                studentListHtml = `<div style="margin-top:8px; font-size:12px; color:var(--tx2); line-height:1.4;">
+                  <strong>Students:</strong> ${st.students.map(name => DOMPurify.sanitize(name)).join(', ')}
+                </div>`;
+              }
+              _nlQHtml += `<div style="padding:12px 14px; border-radius:8px; font-size:14px; ${bg} ${border}">
+                  <div style="display:flex; justify-content:space-between; align-items: flex-start; gap: 12px;">
+                      <div style="font-weight:600; color:var(--tx); flex:1; max-width:100%; overflow:hidden;">
+                          <div class="rte-content">${DOMPurify.sanitize(c)}</div>
+                          ${studentListHtml}
+                      </div>
+                      <div style="display:flex; flex-direction:column; align-items:flex-end; white-space:nowrap; font-size:12px;">
+                          <span style="font-weight:700; color:var(--tx2);">${st.count} selected (${pct}%)</span>
+                          <span style="color:var(--tx3)">Avg Conf: <strong>${avgConf}</strong></span>
+                      </div>
+                  </div>
+              </div>`;
+            });
+            _nlQHtml += `</div>`;
+          } else if (viewQ.type === 'sa') {
+            _nlQHtml += `<div style="font-weight:700; font-size:14px; margin-bottom:12px; border-bottom:1px solid var(--bd); padding-bottom:8px;">Responses List</div>`;
+            _nlQHtml += `<div style="display:flex; flex-direction:column; gap:12px; max-height: 400px; overflow-y: auto; padding-right: 8px;">`;
+            if (!viewQ.studentResponses || viewQ.studentResponses.length === 0) {
+               _nlQHtml += `<div style="color:var(--tx3); font-style:italic; font-size:13px;">No responses yet.</div>`;
+            } else {
+               (viewQ.studentResponses || []).forEach(r => {
+                  if (!r.answer) return;
+                  let parsedAns = r.answer;
+                  try { const arr = JSON.parse(parsedAns); if (Array.isArray(arr)) parsedAns = arr.join(', '); } catch(e) {}
+                  parsedAns = String(parsedAns).replace(/^\["|"\]$/g, '').replace(/","/g, ', ').replace(/"/g, '');
+                  let hasGrade = r.score !== undefined && r.score !== null;
+                  let border = hasGrade ? (Number(r.score) >= 80 ? 'border-left: 4px solid var(--grn);' : 'border-left: 4px solid var(--red);') : 'border-left: 4px solid var(--bd);';
+                  _nlQHtml += `<div style="padding:10px 12px; border-radius:4px; font-size:13px; background:var(--s2); border:1px solid var(--bd); ${border}">
+                      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                          <div style="font-weight:700; color:var(--tx);">${DOMPurify.sanitize(r.name)}</div>
+                          <div style="font-size:12px; color:var(--tx3);">
+                              Conf: <strong>${r.confidence ? r.confidence : '-'}</strong>
+                              ${hasGrade ? '| Score: <strong>' + r.score + '</strong>' : ''}
+                          </div>
+                      </div>
+                      <div style="color:var(--tx2); line-height:1.4;">${DOMPurify.sanitize(parsedAns)}</div>
+                      ${r.feedback ? '<div style="margin-top:6px; font-size:11px; color:var(--teal); font-style:italic;"><strong>AI Feedback:</strong> ' + DOMPurify.sanitize(r.feedback) + '</div>' : ''}
+                  </div>`;
+               });
+            }
+            _nlQHtml += `</div>`;
+          }
+          _nlQHtml += `</div>`;
+          leftHtml += _nlQHtml;
+
+          // Confidence matrix for non-lockstep preview
+          const _nlWithState = (d.students || []).map(s => {
+            const r = (viewQ.studentResponses || []).find(x => x.studentId === s.studentId);
+            if (!r || !r.answer) return { ...s, tileState: 'none', qResp: r };
+            if (r.isCorrect === true || r.isCorrect === 'TRUE') return { ...s, tileState: 'correct', qResp: r };
+            return { ...s, tileState: 'incorrect', qResp: r };
+          });
+          const _nlSureRight = [], _nlSureWrong = [], _nlUnsureRight = [], _nlUnsureWrong = [];
+          let _nlTotalAns2 = 0;
+          _nlWithState.forEach(s => {
+            if (s.qResp && s.qResp.answer) {
+              _nlTotalAns2++;
+              const isC = s.tileState === 'correct';
+              if (s.qResp.confidence) {
+                const conf = Number(s.qResp.confidence);
+                if (conf >= 3) { if (isC) _nlSureRight.push(s.name); else _nlSureWrong.push(s.name); }
+                else { if (isC) _nlUnsureRight.push(s.name); else _nlUnsureWrong.push(s.name); }
+              }
+            }
+          });
+          const _nlPartRate = _nlWithState.length > 0 ? Math.round((_nlTotalAns2 / _nlWithState.length) * 100) : 0;
+          leftHtml += `<div class="card" style="margin-top:24px;">
+               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--bd); padding-bottom:12px;">
+                   <div style="font-weight:700; font-size:15px; color:var(--tx)">Metacognition & Confidence</div>
+                   <div style="font-size:13px; color:var(--tx3)">Participation: ${_nlPartRate}%</div>
+               </div>
+               <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                  <div style="border:1px solid var(--grn); background:rgba(16,185,129,0.08); padding:12px; border-radius:6px;">
+                     <div style="font-weight:700; color:var(--grn); font-size:12px; margin-bottom:6px; text-transform:uppercase;">Sure & Right (${_nlSureRight.length})</div>
+                     <div style="font-size:12px; color:var(--tx2); line-height:1.4;">${_nlSureRight.length ? _nlSureRight.map(n => DOMPurify.sanitize(n)).join(', ') : '<span style="opacity:0.6;font-style:italic">None</span>'}</div>
+                  </div>
+                  <div style="border:1px solid var(--red); background:rgba(239,68,68,0.08); padding:12px; border-radius:6px;">
+                     <div style="font-weight:700; color:var(--red); font-size:12px; margin-bottom:6px; text-transform:uppercase;">Sure & Wrong (${_nlSureWrong.length})</div>
+                     <div style="font-size:12px; color:var(--tx2); line-height:1.4;">${_nlSureWrong.length ? _nlSureWrong.map(n => DOMPurify.sanitize(n)).join(', ') : '<span style="opacity:0.6;font-style:italic">None</span>'}</div>
+                  </div>
+                  <div style="border:1px solid var(--amb); background:rgba(245,158,11,0.08); padding:12px; border-radius:6px;">
+                     <div style="font-weight:700; color:var(--amb); font-size:12px; margin-bottom:6px; text-transform:uppercase;">Unsure & Right (${_nlUnsureRight.length})</div>
+                     <div style="font-size:12px; color:var(--tx2); line-height:1.4;">${_nlUnsureRight.length ? _nlUnsureRight.map(n => DOMPurify.sanitize(n)).join(', ') : '<span style="opacity:0.6;font-style:italic">None</span>'}</div>
+                  </div>
+                  <div style="border:1px solid var(--blu); background:rgba(59,130,246,0.08); padding:12px; border-radius:6px;">
+                     <div style="font-weight:700; color:var(--blu); font-size:12px; margin-bottom:6px; text-transform:uppercase;">Unsure & Wrong (${_nlUnsureWrong.length})</div>
+                     <div style="font-size:12px; color:var(--tx2); line-height:1.4;">${_nlUnsureWrong.length ? _nlUnsureWrong.map(n => DOMPurify.sanitize(n)).join(', ') : '<span style="opacity:0.6;font-style:italic">None</span>'}</div>
+                  </div>
+               </div>
+            </div>`;
+        }
 
         // Proctoring: violations
         if (unresolvedViolations.length) {
@@ -3482,7 +3627,11 @@
             ? `<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(13,148,136,0.12);color:var(--teal);border:1px solid rgba(13,148,136,0.25)">on Q${(s.currentQIndex || 0) + 1}</span>` : '';
           const _flagDisp = (s.flaggedQs && s.flaggedQs.length > 0)
             ? `<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:var(--amb);border:1px solid rgba(245,158,11,0.25)">&#9733; ${s.flaggedQs.length}</span>` : '';
-          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${DOMPurify.sanitize(s.name)}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${_curQDisp || _flagDisp ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${_curQDisp}${_flagDisp}</div>` : ''}${ansSnippet}${reAd}${resendBtn}</div>`;
+          const _extDisp = s.timerExtensionMs ? `<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(59,130,246,0.1);color:var(--blu);border:1px solid rgba(59,130,246,0.25)">+${Math.round(s.timerExtensionMs/1000)}s</span>` : '';
+          const _extendBtn = (s.status === 'active' && s.studentId)
+            ? `<div style="margin-top:6px;display:flex;gap:4px"><button class="btn bg" style="font-size:10px;padding:2px 6px;flex:1" onclick="event.stopPropagation();extendStudentTime('${d.session.sessionId}','${s.studentId}',60)">+1m</button><button class="btn bg" style="font-size:10px;padding:2px 6px;flex:1" onclick="event.stopPropagation();extendStudentTime('${d.session.sessionId}','${s.studentId}',300)">+5m</button></div>`
+            : '';
+          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${DOMPurify.sanitize(s.name)}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${_curQDisp || _flagDisp || _extDisp ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${_curQDisp}${_flagDisp}${_extDisp}</div>` : ''}${ansSnippet}${reAd}${resendBtn}${_extendBtn}</div>`;
         }).join('')}</div>`;
 
         document.getElementById('tab-students').innerHTML = rightHtml;
@@ -3787,6 +3936,22 @@
     function startSessionTimer() {
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer restarted.', 'ok'); }).withFailureHandler(e => toast('Failed to restart session timer: ' + (e.message||'Unknown error'), 'err')).startSessionTimer(aSid);
+    }
+
+    // ── Session Pause Controls ──────────────────────────────────────
+    function pauseSessionNow() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session paused — students cannot answer.', 'ok'); }).withFailureHandler(e => toast('Failed to pause session: ' + (e.message||'Unknown error'), 'err')).pauseSession(aSid);
+    }
+    function resumeSessionNow() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session resumed.', 'ok'); }).withFailureHandler(e => toast('Failed to resume session: ' + (e.message||'Unknown error'), 'err')).resumeSession(aSid);
+    }
+
+    // ── Individual Student Timer Extension ──────────────────────────
+    function extendStudentTime(sessId, stuId, seconds) {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run.withSuccessHandler(() => { refreshLive(); toast('+' + seconds + 's for student.', 'ok'); }).withFailureHandler(e => toast('Failed to extend: ' + (e.message||'Unknown error'), 'err')).extendStudentTimer(sessId, stuId, seconds);
     }
 
     // Tick the teacher-side question and session timer pills every 500ms (lightweight, DOM-only)
@@ -4283,9 +4448,44 @@
 
       const typeLabels = {
         'view_q': 'Viewed', 'navigate': 'Navigated to', 'flag': 'Flagged',
-        'unflag': 'Unflagged', 'submit': 'Submitted exam',
+        'unflag': 'Unflagged', 'answer_change': 'Answered', 'submit': 'Submitted exam',
         'fullscreen_exit': 'Exited fullscreen', 'screenshot_attempt': 'Screenshot keystroke detected'
       };
+
+      // ── Time-on-question metric ──
+      // Track which question the student was on at each moment and accumulate time
+      const timeOnQ = {}; // {qId: totalMs}
+      let _curViewQId = null;
+      let _curViewTs = null;
+      events.forEach(function(e) {
+        const eTime = new Date(e.ts).getTime();
+        if (isNaN(eTime)) return;
+        // When student views or navigates to a new question, close the previous timer
+        if (e.type === 'view_q' || e.type === 'navigate') {
+          if (_curViewQId && _curViewTs) {
+            if (!timeOnQ[_curViewQId]) timeOnQ[_curViewQId] = 0;
+            timeOnQ[_curViewQId] += eTime - _curViewTs;
+          }
+          _curViewQId = e.qId || null;
+          _curViewTs = eTime;
+        } else if (e.type === 'submit') {
+          // Close final question timer on submit
+          if (_curViewQId && _curViewTs) {
+            if (!timeOnQ[_curViewQId]) timeOnQ[_curViewQId] = 0;
+            timeOnQ[_curViewQId] += eTime - _curViewTs;
+          }
+          _curViewQId = null;
+          _curViewTs = null;
+        }
+      });
+      // If no submit event, close the last question at the last event timestamp
+      if (_curViewQId && _curViewTs && events.length > 0) {
+        const lastTs = new Date(events[events.length - 1].ts).getTime();
+        if (!isNaN(lastTs) && lastTs > _curViewTs) {
+          if (!timeOnQ[_curViewQId]) timeOnQ[_curViewQId] = 0;
+          timeOnQ[_curViewQId] += lastTs - _curViewTs;
+        }
+      }
 
       // Generate CSV download link
       const csvRows = [['Time','Event','Question','Value']];
@@ -4300,6 +4500,29 @@
       let html = '<div style="display:flex;justify-content:flex-end;margin-bottom:14px">';
       html += '<a href="' + csvUri + '" download="exam_playback_' + DOMPurify.sanitize(stuId) + '.csv" class="btn bg" style="font-size:12px;padding:5px 12px">&#8595; Export CSV</a>';
       html += '</div>';
+
+      // Time-on-Question summary table
+      const _toqKeys = Object.keys(timeOnQ);
+      if (_toqKeys.length > 0) {
+        html += '<div class="card" style="margin-bottom:16px;padding:16px">';
+        html += '<div style="font-weight:700;font-size:14px;margin-bottom:12px;color:var(--tx)">Time on Question</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:8px">';
+        questions.forEach(function(q, idx) {
+          const ms = timeOnQ[q.id] || 0;
+          const secs = Math.round(ms / 1000);
+          const mm = Math.floor(secs / 60);
+          const ss = secs % 60;
+          const timeStr = mm > 0 ? mm + 'm ' + ss + 's' : ss + 's';
+          const barPct = Math.min(100, Math.round((ms / Math.max.apply(null, _toqKeys.map(function(k) { return timeOnQ[k]; }))) * 100));
+          html += '<div style="flex:1;min-width:80px;max-width:140px;padding:8px 10px;border:1px solid var(--bd);border-radius:6px;background:var(--s)">';
+          html += '<div style="font-size:11px;font-weight:700;color:var(--tx2);margin-bottom:4px">Q' + (idx + 1) + '</div>';
+          html += '<div style="font-size:14px;font-weight:700;color:var(--tx)">' + timeStr + '</div>';
+          html += '<div style="height:4px;background:var(--bd);border-radius:2px;margin-top:4px;overflow:hidden"><div style="height:100%;width:' + barPct + '%;background:var(--teal);border-radius:2px"></div></div>';
+          html += '</div>';
+        });
+        html += '</div></div>';
+      }
+
       html += '<div style="display:flex;flex-direction:column;gap:6px">';
 
       events.forEach(function(e) {
