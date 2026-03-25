@@ -3244,9 +3244,9 @@
             (viewQ.studentResponses || []).forEach(r => {
               if (r.answer) {
                 let answers = [];
-                try { answers = JSON.parse(r.answer); if (!Array.isArray(answers)) answers = [r.answer]; } catch(e) { answers = [r.answer]; }
+                try { answers = JSON.parse(r.answer); if (!Array.isArray(answers)) answers = [answers]; } catch(e) { answers = [r.answer]; }
                 answers.forEach(a => {
-                  if (_nlChoicesCount[a]) {
+                  if (Object.prototype.hasOwnProperty.call(_nlChoicesCount, a)) {
                     _nlChoicesCount[a].count++;
                     _nlChoicesCount[a].students.push(r.name);
                     if (r.confidence) { _nlChoicesCount[a].confSum += Number(r.confidence); _nlChoicesCount[a].confCount++; }
@@ -3435,13 +3435,13 @@
               let answers = [];
               try {
                 answers = JSON.parse(r.answer);
-                if (!Array.isArray(answers)) answers = [r.answer];
+                if (!Array.isArray(answers)) answers = [answers];
               } catch (e) {
                 // Not JSON, treat as plain string
                 answers = [r.answer];
               }
               answers.forEach(a => {
-                if (choicesCount[a]) {
+                if (Object.prototype.hasOwnProperty.call(choicesCount, a)) {
                   choicesCount[a].count++;
                   choicesCount[a].students.push(r.name);
                   if (r.confidence) {

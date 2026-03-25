@@ -731,7 +731,10 @@ const DB = {
     const sess=this.getSessionById(sessId);if(!sess)return null;
     const qSet=this.getQSet(sess.setId);const questions=qSet?qSet.questions:[];
     const snapshot={};
-    const stuSess=this.getStudentSessions(sessId,snapshot);const resps=this.getAllResponses(sessId,snapshot);
+    const stuSess=this.getStudentSessions(sessId,snapshot);const _rawResps=this.getAllResponses(sessId,snapshot);
+    // Deduplicate: keep latest response per (studentId, questionId) in case of duplicate sheet rows
+    const _rDedupMap={};_rawResps.forEach(r=>{const _k=r.studentId+'|'+r.questionId;if(!_rDedupMap[_k]||String(r.submittedAt)>=String(_rDedupMap[_k].submittedAt))_rDedupMap[_k]=r;});
+    const resps=Object.values(_rDedupMap);
     const viols=this.getActiveViolations(sessId,snapshot);const meta=this.getAllMeta(sessId,snapshot);
     const courseId=(sess.config && sess.config.courseId) || '';
     const roster=this.getRoster(sess.block, courseId);
@@ -782,8 +785,8 @@ const DB = {
             const a = JSON.parse(r.answer);
             if (Array.isArray(a)) {
               a.forEach(x => { if (dist[x] !== undefined) dist[x]++; });
-            } else if (dist[r.answer] !== undefined) {
-              dist[r.answer]++;
+            } else if (dist[a] !== undefined) {
+              dist[a]++;
             }
           } catch (e) {
             // Not JSON, treat as plain string
