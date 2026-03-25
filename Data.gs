@@ -48,7 +48,8 @@ const DB = {
       'Violations':['SessionID','StudentID','StudentName','Type','Timestamp','Resolved'],
       'AIGrades':['SessionID','StudentID','StudentName','QuestionID','Score','MaxScore','Feedback','Answer','GradedAt','Overridden','OverrideScore','OverrideFeedback','Context'],
       'Archive':['SessionID','Code','SetName','Block','StartedAt','EndedAt','StudentCount','AvgPct','DataJSON'],
-      'AuditLog':['Timestamp','Action','Target','Details']
+      'AuditLog':['Timestamp','Action','Target','Details'],
+      'ActionLog':['SessionID','StudentID','EventType','QuestionID','Value','Timestamp']
     };
     for (const [name, headers] of Object.entries(sheets)) {
       let s = ss.getSheetByName(name);
@@ -90,6 +91,73 @@ const DB = {
     } catch (e) {
       Logger.log('logAuditEvent error: ' + e.toString());
     }
+  },
+
+  // ── STUDENT ACTION LOG ──
+  // Fire-and-forget append to ActionLog. No lock needed — Sheets row appends are atomic.
+  // EventTypes: view_q, navigate, flag, unflag, answer_change, submit
+  logStudentAction(sessId, stuId, eventType, qId, value) {
+    try {
+      const sheet = this.sh('ActionLog');
+      if (!sheet) return;
+      sheet.appendRow([
+        String(sessId || ''), String(stuId || ''), String(eventType || ''),
+        String(qId || ''), String(value || ''), new Date().toISOString()
+      ]);
+    } catch (e) {
+      Logger.log('logStudentAction error: ' + e.toString());
+    }
+  },
+
+  // Returns all ActionLog rows for a session, optionally filtered by stuId.
+  getStudentActionLog(sessId, stuId) {
+    try {
+      const sheet = this.sh('ActionLog');
+      if (!sheet) return [];
+      const data = sheet.getDataRange().getValues();
+      return data.slice(1)
+        .filter(r => r[0] === sessId && (!stuId || r[1] === stuId))
+        .map(r => ({
+          sessionId: r[0], studentId: r[1], eventType: r[2],
+          questionId: r[3], value: r[4], timestamp: r[5]
+        }))
+        .sort(function(a, b) { return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(); });
+    } catch (e) {
+      Logger.log('getStudentActionLog error: ' + e.toString());
+      return [];
+    }
+  },
+
+  // Persists a student's flagged question IDs to col 16 of StudentSessions (1-indexed).
+  // Column 16 is FlaggedQs — backward-compatible (old rows without it default to []).
+  studentUpdateFlags(sessId, stuId, flaggedQIds) {
+    return this.withLock(() => {
+      const sheet = this.sh('StudentSessions');
+      const data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] === sessId && data[i][1] === stuId) {
+          const safe = Array.isArray(flaggedQIds) ? flaggedQIds.filter(function(x) { return typeof x === 'string'; }) : [];
+          sheet.getRange(i + 1, 16).setValue(JSON.stringify(safe));
+          return { ok: true };
+        }
+      }
+      return { ok: false, error: 'Student session not found' };
+    });
+  },
+
+  // Updates col 17 (StudentCurrentQ) in StudentSessions — lightweight position tracking.
+  studentReportCurrentQ(sessId, stuId, qIndex) {
+    return this.withLock(() => {
+      const sheet = this.sh('StudentSessions');
+      const data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] === sessId && data[i][1] === stuId) {
+          sheet.getRange(i + 1, 17).setValue(Number(qIndex) || 0);
+          return { ok: true };
+        }
+      }
+      return { ok: false };
+    });
   },
 
   // ── COURSES, QSETS, ROSTERS (Standard CRUD) ──
@@ -404,12 +472,13 @@ const DB = {
     const sess=this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
     const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Questions not found'};
     let questions=JSON.parse(JSON.stringify(qSet.questions)); const stimuli=qSet.stimuli||[];
-    const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues(); let qOrder=null; let choiceOrders=null; let stuRowIdx=-1;
+    const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues(); let qOrder=null; let choiceOrders=null; let stuRowIdx=-1; let existingFlaggedQs=[];
     for(let i=1;i<sd.length;i++) {
       if(sd[i][0]===sessId&&sd[i][1]===stuId){
         stuRowIdx=i+1;
         if(sd[i][9]){try{qOrder=JSON.parse(sd[i][9]);}catch(e){Logger.log('Error parsing qOrder for student '+stuId+': '+e.toString());}}
         if(sd[i][14]){try{choiceOrders=JSON.parse(sd[i][14]);}catch(e){Logger.log('Error parsing choiceOrders for student '+stuId+': '+e.toString());}}
+        if(sd[i][15]){try{existingFlaggedQs=JSON.parse(sd[i][15]);}catch(e){existingFlaggedQs=[];}}
         break;
       }
     }
@@ -427,6 +496,13 @@ const DB = {
       try{ssSheet.getRange(stuRowIdx,15).setValue(JSON.stringify(co));}catch(e){Logger.log('Error saving choiceOrders: '+e.toString());}
     }
     if(qOrder && qOrder.length && sess.mode !== 'lockstep') questions=qOrder.map(idx=>questions[idx]);
+    // Apply question bank subset draw: if bankSize is configured and mode is not lockstep,
+    // slice the (already-randomized) question list to the configured number.
+    // Each student's unique qOrder means they each get a different reproducible subset.
+    const _bankSize = Number((sess.config && sess.config.bankSize) || 0);
+    if (_bankSize > 0 && _bankSize < questions.length && sess.mode !== 'lockstep') {
+      questions = questions.slice(0, _bankSize);
+    }
     // Apply per-student persisted choice order (generated once at join time for consistency across reloads)
     if(choiceOrders) questions.forEach(q=>{if(q.type==='mc'&&q.choices&&choiceOrders[q.id]){const order=choiceOrders[q.id];const orig=q.choices.slice();const origCi=q.correctIndices||[q.correctIndex];const correctTexts=origCi.map(i=>orig[i]);q.choices=order.map(i=>orig[i]);q.correctIndices=correctTexts.map(ca=>q.choices.indexOf(ca));if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
     const studentQs=questions.map(q=>{const sq={...q};
@@ -438,7 +514,7 @@ const DB = {
     const metaResps=this.getAllMeta(sessId).filter(m=>m.studentId===stuId);
     const existingMeta={};metaResps.forEach(m=>{existingMeta[m.questionId]=m.confidence;});
     const sessionState = this._normalizeSessionState(sess, studentQs.map(q=>q.id));
-    return {questions:studentQs,stimuli,existing,existingMeta,...sessionState};
+    return {questions:studentQs,stimuli,existing,existingMeta,flaggedQs:existingFlaggedQs,...sessionState};
   },
   
   // ── CONCURRENT SECURE SUBMISSION ──
@@ -680,7 +756,7 @@ const DB = {
       sr.forEach(r=>{const q=questionById[r.questionId];if(q&&q.type==='mc'){mcT++;if(r.isCorrect===true||r.isCorrect==='TRUE')mcC++;}});
       const lastTs=[ss.joinedAt,ss.finishedAt].concat(sr.map(x=>x.submittedAt)).concat(sm.map(x=>x.submittedAt)).filter(Boolean).map(x=>new Date(x).getTime()).sort((a,b)=>b-a)[0]||0;
       const activeNow=ss.status==='active' && !ss.lockedOut && (nowMs-lastTs)<(2*60*1000);
-      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,activeNow,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr};
+      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,activeNow,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr,flaggedQs:ss.flaggedQs||[],currentQIndex:ss.currentQIndex||0,answeredQIds:sr.map(r=>r.questionId)};
     });
     
     const qStats=questions.map((q,idx)=>{
@@ -1102,7 +1178,8 @@ const DB = {
     });
     const totalPts=details.reduce((a,b)=>a+(Number(b.points)||0),0);
     const totalMax=details.reduce((a,b)=>a+(Number(b.maxPoints)||0),0);
-    return {student,session:{sessionId:sessId,setName:sess.setName,code:sess.code},totalPts,totalMax,pct:totalMax?Math.round((totalPts/totalMax)*100):0,details};
+    const _flaggedQs = student ? (student.flaggedQs || []) : [];
+    return {student,session:{sessionId:sessId,setName:sess.setName,code:sess.code},totalPts,totalMax,pct:totalMax?Math.round((totalPts/totalMax)*100):0,details,flaggedQs:_flaggedQs};
   },
   archiveSession(id) {
     const sess=this.getSessionById(id); if(!sess) return false;
@@ -1125,7 +1202,7 @@ const DB = {
     });
     const pcts=Object.values(totalByStudent);
     const avgPct=pcts.length?Math.round(pcts.reduce((a,b)=>a+b,0)/pcts.length):0;
-    archive.appendRow([id,sess.code,sess.setName,sess.block,sess.startedAt,sess.endedAt||new Date().toISOString(),students.length,avgPct,JSON.stringify({session:sess,students,responses,meta:this.getAllMeta(id),grades:this.getAIGrades(id),violations:this.getActiveViolations(id)})]);
+    archive.appendRow([id,sess.code,sess.setName,sess.block,sess.startedAt,sess.endedAt||new Date().toISOString(),students.length,avgPct,JSON.stringify({session:sess,students,responses,meta:this.getAllMeta(id),grades:this.getAIGrades(id),violations:this.getActiveViolations(id),actionLog:this.getStudentActionLog(id,null)})]);
     return true;
   },
 
@@ -1888,7 +1965,7 @@ const DB = {
     const d=this._getSheetValues(sheetName,snapshot);
     return d.slice(1).filter(r=>r[0]===sessId);
   },
-  getStudentSessions(sessId,snapshot){const rows=this._getSessionRows('StudentSessions',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11],normalizedName:r[12]||this.normalizeStudentName(r[2]||''),identityKey:r[13]||''}));},
+  getStudentSessions(sessId,snapshot){const rows=this._getSessionRows('StudentSessions',sessId,snapshot);return rows.map(r=>{let _fq=[];try{if(r[15])_fq=JSON.parse(r[15]);}catch(e){}return{studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11],normalizedName:r[12]||this.normalizeStudentName(r[2]||''),identityKey:r[13]||'',flaggedQs:_fq,currentQIndex:r[16]!==undefined&&r[16]!==''?Number(r[16])||0:0};});},
   getAllResponses(sessId,snapshot){const rows=this._getSessionRows('Responses',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:r[5],isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
   getAllMeta(sessId,snapshot){const rows=this._getSessionRows('Metacognition',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
   getActiveViolations(sessId,snapshot){const rows=this._getSessionRows('Violations',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},
