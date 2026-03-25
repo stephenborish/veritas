@@ -3244,9 +3244,9 @@
             (viewQ.studentResponses || []).forEach(r => {
               if (r.answer) {
                 let answers = [];
-                try { answers = JSON.parse(r.answer); if (!Array.isArray(answers)) answers = [r.answer]; } catch(e) { answers = [r.answer]; }
+                try { answers = JSON.parse(r.answer); if (!Array.isArray(answers)) answers = [answers]; } catch(e) { answers = [r.answer]; }
                 answers.forEach(a => {
-                  if (_nlChoicesCount[a]) {
+                  if (Object.prototype.hasOwnProperty.call(_nlChoicesCount, a)) {
                     _nlChoicesCount[a].count++;
                     _nlChoicesCount[a].students.push(r.name);
                     if (r.confidence) { _nlChoicesCount[a].confSum += Number(r.confidence); _nlChoicesCount[a].confCount++; }
@@ -3435,13 +3435,13 @@
               let answers = [];
               try {
                 answers = JSON.parse(r.answer);
-                if (!Array.isArray(answers)) answers = [r.answer];
+                if (!Array.isArray(answers)) answers = [answers];
               } catch (e) {
                 // Not JSON, treat as plain string
                 answers = [r.answer];
               }
               answers.forEach(a => {
-                if (choicesCount[a]) {
+                if (Object.prototype.hasOwnProperty.call(choicesCount, a)) {
                   choicesCount[a].count++;
                   choicesCount[a].students.push(r.name);
                   if (r.confidence) {
@@ -4428,17 +4428,23 @@
       const qMap = questions.reduce(function(acc, q) { acc[q.id] = q; return acc; }, {});
       const viols = (data.violations || []).filter(function(v) { return v.studentId === stuId; });
 
-      // Collect action log entries for this student
+      // Collect action log entries for this student.
+      // Archived entries are objects {sessionId,studentId,eventType,questionId,value,timestamp};
+      // legacy raw-array rows (col indices 0-5) are also supported via fallback.
       const rawLog = data.actionLog || [];
       const stuLog = rawLog.filter(function(row) {
-        // row format: [SessionID, StudentID, EventType, QuestionID, Value, Timestamp]
-        return String(row[1]) === String(stuId);
+        const id = (row.studentId !== undefined) ? row.studentId : row[1];
+        return String(id) === String(stuId);
       });
 
       // Build unified event list: action log + violations
       const events = [];
       stuLog.forEach(function(row) {
-        events.push({ ts: row[5] || '', type: row[2] || '', qId: row[3] || '', value: row[4] || '', isViol: false });
+        const ts    = (row.timestamp  !== undefined) ? row.timestamp  : (row[5] || '');
+        const type  = (row.eventType  !== undefined) ? row.eventType  : (row[2] || '');
+        const qId   = (row.questionId !== undefined) ? row.questionId : (row[3] || '');
+        const value = (row.value      !== undefined) ? row.value      : (row[4] || '');
+        events.push({ ts, type, qId, value, isViol: false });
       });
       viols.forEach(function(v) {
         events.push({ ts: v.timestamp || '', type: v.type || 'violation', qId: '', value: '', isViol: true });
