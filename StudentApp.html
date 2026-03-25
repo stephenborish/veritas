@@ -1331,6 +1331,99 @@
       50%  { width: 55%; margin-left: 30%; }
       100% { width: 15%; margin-left: 85%; }
     }
+
+    /* ── Question Sidebar & Progress Timeline ── */
+    .exam-layout { display: flex; align-items: flex-start; position: relative; }
+    .q-sidebar {
+      width: 228px; min-width: 228px; flex-shrink: 0;
+      position: sticky; top: 0; max-height: 100vh; overflow-y: auto; overflow-x: hidden;
+      background: rgba(255,255,255,0.02); border-right: 1px solid rgba(255,255,255,0.06);
+      transition: width 0.25s ease, min-width 0.25s ease; z-index: 40;
+      display: flex; flex-direction: column;
+    }
+    .q-sidebar.collapsed { width: 40px; min-width: 40px; }
+    .qsb-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 10px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);
+      position: sticky; top: 0; background: rgba(15,20,30,0.95); z-index: 1;
+    }
+    .qsb-summary {
+      font-size: 11px; color: var(--tx3); font-weight: 600;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      white-space: nowrap; overflow: hidden; flex: 1;
+    }
+    .sidebar-toggle {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px; color: var(--tx2); cursor: pointer; padding: 3px 7px;
+      font-size: 11px; flex-shrink: 0; transition: background 0.15s; line-height: 1.4;
+    }
+    .sidebar-toggle:hover { background: rgba(255,255,255,0.12); }
+    .q-sidebar.collapsed .qsb-summary { display: none; }
+    .qsb-pills {
+      flex: 1; padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;
+    }
+    .q-sidebar.collapsed .qsb-pills { display: none; }
+    .q-sidebar.collapsed .qsb-next-flagged { display: none !important; }
+    .qsb-pill {
+      display: flex; align-items: center; gap: 7px; padding: 6px 8px;
+      border-radius: 8px; cursor: pointer; transition: background 0.15s, border-color 0.15s;
+      border: 1px solid transparent; user-select: none;
+    }
+    .qsb-pill:hover { background: rgba(255,255,255,0.06); }
+    .qsb-pill.no-jump { cursor: default; }
+    .qpill-num {
+      width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center;
+      justify-content: center; font-size: 11px; font-weight: 700;
+      background: rgba(255,255,255,0.06); color: var(--tx3); flex-shrink: 0;
+    }
+    .qsb-pill.answered .qpill-num { background: rgba(13,148,136,0.2); color: #2dd4bf; }
+    .qsb-pill.flagged .qpill-num { background: rgba(245,158,11,0.18); color: #fbbf24; }
+    .qsb-pill.current { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); }
+    .qsb-pill.current .qpill-num { box-shadow: 0 0 0 2px #0D9488; color: #2dd4bf; }
+    .qpill-label {
+      font-size: 11px; color: var(--tx3); white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; max-width: 130px; flex: 1;
+    }
+    .qsb-pill.current .qpill-label { color: var(--tx2); }
+    .qpill-badge { font-size: 10px; flex-shrink: 0; }
+    .qpill-badge.flag { color: #fbbf24; }
+    .qpill-badge.check { color: #2dd4bf; }
+    .qsb-next-flagged {
+      margin: 6px 8px 10px; padding: 8px 10px;
+      background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.28);
+      border-radius: 8px; color: #fbbf24; font-size: 11px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s; text-align: center; width: calc(100% - 16px);
+    }
+    .qsb-next-flagged:hover { background: rgba(245,158,11,0.18); }
+    .q-main { flex: 1; min-width: 0; }
+
+    /* ── Flag button ── */
+    .flag-btn {
+      background: none; border: 1px solid rgba(255,255,255,0.12); border-radius: 7px;
+      color: var(--tx3); cursor: pointer; padding: 4px 10px; font-size: 12px;
+      display: inline-flex; align-items: center; gap: 4px; transition: all 0.15s;
+      vertical-align: middle;
+    }
+    .flag-btn:hover { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.35); color: #fbbf24; }
+    .flag-btn.flagged { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.45); color: #fbbf24; }
+    .q-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+    .q-card-header .q-text { margin-bottom: 0; flex: 1; }
+
+    /* ── Connectivity indicator ── */
+    .conn-pill {
+      position: fixed; bottom: 68px; right: 16px; padding: 4px 10px;
+      border-radius: 99px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
+      z-index: 200; transition: opacity 0.3s; pointer-events: none;
+    }
+    .conn-pill.ok { display: inline-block; background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.25); }
+    .conn-pill.warn { display: inline-block; background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); animation: connPulse 1.5s ease-in-out infinite; }
+    .conn-pill.hidden { display: none; }
+    @keyframes connPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
+
+    @media (max-width: 720px) {
+      .q-sidebar { position: fixed; left: 0; top: 56px; bottom: 0; z-index: 45; background: var(--bg); width: 200px; min-width: 200px; }
+      .q-sidebar.collapsed { width: 0; min-width: 0; border-right: none; }
+    }
   </style>
 </head>
 
@@ -1391,12 +1484,25 @@
         <span class="prog" id="progTxt"></span>
       </div>
     </div>
-    <div class="q-area" id="qArea"></div>
+    <div class="exam-layout">
+      <div id="qSidebar" class="q-sidebar">
+        <div class="qsb-header">
+          <span class="qsb-summary" id="qtlSummary">0 / 0 answered</span>
+          <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">◀</button>
+        </div>
+        <div class="qsb-pills" id="qtlPills"></div>
+        <button class="qsb-next-flagged" id="nextFlaggedBtn" onclick="jumpToNextFlagged()" style="display:none">&#9733; Next Flagged</button>
+      </div>
+      <div class="q-main">
+        <div class="q-area" id="qArea"></div>
+      </div>
+    </div>
     <div id="aFt" class="a-foot" style="display:none">
       <button class="nbtn nbtn-back" id="prevBtn" style="visibility:hidden">&larr; Previous</button>
       <button class="nbtn nbtn-next" id="nextBtn" style="visibility:hidden">Next Question &rarr;</button>
     </div>
   </div>
+  <div class="conn-pill hidden" id="connPill">&#9679; Connected</div>
 
   <button class="calc-btn" id="calcBtn">&#x1F522; Calculator</button>
   <div class="calc-win" id="calcWin">
@@ -1464,7 +1570,9 @@
       // Lockstep question timer state
       qTimerInt: null, qTimerActive: false, qTimerEnd: 0, qTimerDismissed: false, qTimerPaused: false,
       // Session timer sync state
-      sessionTimerPaused: false, sessionTimerCancelled: false
+      sessionTimerPaused: false, sessionTimerCancelled: false,
+      // Question flagging & progress tracking
+      flagged: {}, viewedAt: {}, lsLastReportedQ: -2, _connFails: 0, _sidebarCollapsed: false
     };
 
     const SCI_PUNS = [
@@ -1830,6 +1938,11 @@
           S.qs = d.questions;
           S.cur = typeof d.currentQ === 'number' ? d.currentQ : 0;
           if (d.stimuli) S.stimuli = d.stimuli;
+          // Restore flagged questions from server (authoritative)
+          if (d.flaggedQs && Array.isArray(d.flaggedQs)) {
+            S.flagged = {};
+            d.flaggedQs.forEach(function(qid) { if (qid) S.flagged[qid] = true; });
+          }
           if (d.existing) {
             Object.assign(S.ans, d.existing);
             for (let k in d.existing) {
@@ -1843,6 +1956,8 @@
           }
           if (d.lockedQs) S.lockedQs = d.lockedQs;
           if (d.revealedQs) S.revealedQs = d.revealedQs;
+          // Merge any locally-saved flagged state (supplement server with local — server is authoritative)
+          lsLoad();
           if (d.revealedDetails) {
             S.qs.forEach(q => {
               if (d.revealedDetails[q.id]) {
@@ -1863,6 +1978,7 @@
             S.endTime = 0; // Will be synced from server once teacher starts the session
           }
           renderQ();
+          lsSave();
           if (S.cur >= 0) startTimer(); // Only start if already past the holding room (e.g. rejoining)
           startPoll();
         })
@@ -1965,6 +2081,19 @@
       const q = S.qs[S.cur]; if (!q) return;
       const total = S.qs.length;
       document.getElementById('progTxt').textContent = 'Question ' + (S.cur + 1) + ' of ' + total;
+
+      // Audit: log first view of this question (fire-and-forget)
+      if (!S.viewedAt[q.id]) {
+        S.viewedAt[q.id] = Date.now();
+        logAction('view_q', q.id, '');
+      }
+      // Report current Q position to server (throttled to avoid redundant calls)
+      if (S.lsLastReportedQ !== S.cur && S.sid && S.stuId) {
+        S.lsLastReportedQ = S.cur;
+        try { google.script.run.studentReportCurrentQ(S.sid, S.stuId, S.cur); } catch(e) {}
+      }
+      // Update progress timeline
+      renderTimeline();
 
       // Lockstep Logic: Hide Next/Prev buttons entirely so students cannot advance on their own
       document.getElementById('prevBtn').style.visibility = (S.cur > 0 && S.mode !== 'lockstep') ? 'visible' : 'hidden';
@@ -2116,7 +2245,18 @@
         }
 
         html += '<div class="q-card fade-in-up">';
-        html += '<div class="q-text">' + DOMPurify.sanitize(q.text) + '</div>';
+        // Flag button header row (not shown in lockstep mode)
+        if (S.mode !== 'lockstep') {
+          const isFlagged = !!S.flagged[q.id];
+          html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px">';
+          html += '<div class="q-text" style="margin-bottom:0;flex:1">' + DOMPurify.sanitize(q.text) + '</div>';
+          html += '<button class="flag-btn' + (isFlagged ? ' flagged' : '') + '" onclick="toggleFlag(\'' + q.id + '\')" title="' + (isFlagged ? 'Remove flag' : 'Flag to revisit') + '">';
+          html += (isFlagged ? '&#9733;' : '&#9734;') + ' ' + (isFlagged ? 'Flagged' : 'Flag');
+          html += '</button>';
+          html += '</div>';
+        } else {
+          html += '<div class="q-text">' + DOMPurify.sanitize(q.text) + '</div>';
+        }
         if (isMC) {
           // Detect multi-select: question has more than 1 correct answer
           const isMultiSelect = !!q.multiSelect;
@@ -2384,7 +2524,7 @@
       }
 
       if (S.cur === S.qs.length - 1) {
-        document.getElementById('submitModal').classList.add('show');
+        showSubmitModal();
       } else {
         S.cur++;
         triggerGetReadyAnimation(S.cur, () => renderQ());
@@ -2435,6 +2575,11 @@
       // Eagerly save any in-progress short answer before closing
       const _saInExec = document.getElementById('saIn');
       if (_saInExec && !S.submittedAns[_saInExec.dataset.qid]) saveSA(_saInExec.dataset.qid);
+
+      // Audit log the submit action (fire-and-forget)
+      logAction('submit', '', '');
+      // Clear localStorage backup now that exam is submitted
+      try { localStorage.removeItem('va_session'); } catch(e) {}
 
       // Set Done flag before exiting fullscreen to safely prevent penalty strikes
       S.done = true;
@@ -2490,7 +2635,14 @@
     function startPoll() {
       S.poll = setInterval(function () {
         if (S.done) return;
-        google.script.run.withSuccessHandler(function (st) {
+        google.script.run
+          .withFailureHandler(function () {
+            S._connFails = (S._connFails || 0) + 1;
+            if (S._connFails >= 3) setConnPill('warn');
+          })
+          .withSuccessHandler(function (st) {
+          S._connFails = 0;
+          setConnPill('ok');
           if (!st) return;
           if (st.sessionStatus === 'ended') {
             // Eagerly save SA if we are typing before end
@@ -2713,6 +2865,206 @@
         }
       });
     })();
+
+    // ── Connectivity Indicator ──────────────────────────────────────────
+    function setConnPill(state) {
+      const pill = document.getElementById('connPill');
+      if (!pill) return;
+      if (state === 'ok') {
+        pill.className = 'conn-pill ok';
+        pill.textContent = '● Connected';
+        // Auto-hide after 3s of connected status
+        clearTimeout(pill._hideTimer);
+        pill._hideTimer = setTimeout(function() { pill.className = 'conn-pill hidden'; }, 3000);
+      } else {
+        pill.className = 'conn-pill warn';
+        pill.textContent = '● Reconnecting…';
+        clearTimeout(pill._hideTimer);
+      }
+    }
+
+    // ── Question Flagging ───────────────────────────────────────────────
+    function toggleFlag(qId) {
+      if (!qId) return;
+      if (S.flagged[qId]) {
+        delete S.flagged[qId];
+        logAction('unflag', qId, '');
+      } else {
+        S.flagged[qId] = true;
+        logAction('flag', qId, '');
+      }
+      lsSave();
+      // Push to server (fire-and-forget via SyncQueue not needed — flags are non-critical)
+      var flaggedArr = Object.keys(S.flagged).filter(function(k) { return S.flagged[k]; });
+      try { google.script.run.studentUpdateFlags(S.sid, S.stuId, flaggedArr); } catch(e) {}
+      // Re-render flag button in place (faster than full renderQ)
+      renderTimeline();
+      var btn = document.querySelector('.flag-btn');
+      if (btn && btn.closest('.q-card')) {
+        var isFlagged = !!S.flagged[qId];
+        btn.className = 'flag-btn' + (isFlagged ? ' flagged' : '');
+        btn.title = isFlagged ? 'Remove flag' : 'Flag to revisit';
+        btn.innerHTML = (isFlagged ? '&#9733;' : '&#9734;') + ' ' + (isFlagged ? 'Flagged' : 'Flag');
+      }
+      // Show/hide Next Flagged button
+      var hasFlagged = Object.keys(S.flagged).some(function(k) { return S.flagged[k]; });
+      var nfb = document.getElementById('nextFlaggedBtn');
+      if (nfb) nfb.style.display = hasFlagged && !S._sidebarCollapsed ? '' : 'none';
+    }
+
+    // ── Progress Timeline Sidebar ───────────────────────────────────────
+    function renderTimeline() {
+      var pills = document.getElementById('qtlPills');
+      var summary = document.getElementById('qtlSummary');
+      var nfb = document.getElementById('nextFlaggedBtn');
+      if (!pills || !S.qs || !S.qs.length) return;
+
+      var total = S.qs.length;
+      var answeredCount = 0;
+      var flaggedCount = 0;
+      var html = '';
+
+      for (var i = 0; i < total; i++) {
+        var q = S.qs[i];
+        var isAnswered = !!S.ans[q.id] && String(S.ans[q.id]).trim().length > 0;
+        var isFlagged = !!S.flagged[q.id];
+        var isCurrent = (i === S.cur);
+        var isLockstep = S.mode === 'lockstep';
+        if (isAnswered) answeredCount++;
+        if (isFlagged) flaggedCount++;
+        var cls = 'qsb-pill';
+        if (isAnswered) cls += ' answered';
+        if (isFlagged) cls += ' flagged';
+        if (isCurrent) cls += ' current';
+        if (isLockstep) cls += ' no-jump';
+        // Truncate question text for label
+        var label = q.text ? q.text.replace(/<[^>]+>/g, '').substring(0, 40) : ('Q' + (i + 1));
+        var clickAttr = (!isLockstep) ? ' onclick="jumpToQ(' + i + ')"' : '';
+        html += '<div class="' + cls + '"' + clickAttr + ' title="' + (isLockstep ? '' : 'Jump to question ') + (i + 1) + '">';
+        html += '<span class="qpill-num">' + (i + 1) + '</span>';
+        html += '<span class="qpill-label">' + label + '</span>';
+        if (isFlagged) html += '<span class="qpill-badge flag">&#9733;</span>';
+        else if (isAnswered) html += '<span class="qpill-badge check">&#10003;</span>';
+        html += '</div>';
+      }
+
+      pills.innerHTML = html;
+      if (summary) summary.textContent = answeredCount + ' / ' + total + ' answered';
+
+      // Show "Next Flagged" button only if there are flagged questions and sidebar is expanded
+      if (nfb) nfb.style.display = (flaggedCount > 0 && !S._sidebarCollapsed) ? '' : 'none';
+
+      // Scroll current pill into view
+      var currentPill = pills.querySelector('.qsb-pill.current');
+      if (currentPill) {
+        currentPill.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+
+    function toggleSidebar() {
+      S._sidebarCollapsed = !S._sidebarCollapsed;
+      var sb = document.getElementById('qSidebar');
+      var tog = document.getElementById('sidebarToggle');
+      if (S._sidebarCollapsed) {
+        sb.classList.add('collapsed');
+        if (tog) tog.textContent = '▶';
+      } else {
+        sb.classList.remove('collapsed');
+        if (tog) tog.textContent = '◀';
+        renderTimeline(); // refresh after expanding
+      }
+    }
+
+    function jumpToQ(idx) {
+      if (S.mode === 'lockstep') return;
+      if (idx < 0 || idx >= S.qs.length) return;
+      if (idx === S.cur) return;
+      // Auto-save SA before leaving
+      var saIn = document.getElementById('saIn');
+      if (saIn && !S.submittedAns[saIn.dataset.qid]) saveSA(saIn.dataset.qid);
+      logAction('navigate', S.qs[idx] ? S.qs[idx].id : '', String(idx));
+      S.cur = idx;
+      renderQ();
+    }
+
+    function jumpToNextFlagged() {
+      if (S.mode === 'lockstep') return;
+      var flaggedKeys = Object.keys(S.flagged).filter(function(k) { return S.flagged[k]; });
+      if (!flaggedKeys.length) return;
+      // Find next flagged question cyclically, starting after current
+      var found = -1;
+      for (var i = S.cur + 1; i < S.qs.length; i++) {
+        if (S.flagged[S.qs[i].id]) { found = i; break; }
+      }
+      if (found === -1) {
+        for (var j = 0; j < S.cur; j++) {
+          if (S.flagged[S.qs[j].id]) { found = j; break; }
+        }
+      }
+      if (found !== -1) jumpToQ(found);
+    }
+
+    // ── Submit Guard ────────────────────────────────────────────────────
+    function showSubmitModal() {
+      var unanswered = S.qs.filter(function(q) {
+        return !S.ans[q.id] || String(S.ans[q.id]).trim().length === 0;
+      }).length;
+      var flagged = Object.keys(S.flagged).filter(function(k) { return S.flagged[k]; }).length;
+      var warnings = [];
+      if (unanswered > 0) warnings.push(unanswered + ' unanswered question' + (unanswered !== 1 ? 's' : ''));
+      if (flagged > 0) warnings.push(flagged + ' flagged question' + (flagged !== 1 ? 's' : ''));
+      var modal = document.getElementById('submitModal');
+      var p = modal.querySelector('p');
+      if (p) {
+        if (warnings.length > 0) {
+          p.innerHTML = 'You have <strong style="color:#fbbf24">' + warnings.join('</strong> and <strong style="color:#fbbf24">') + '</strong>. You will not be able to return after submitting.';
+        } else {
+          p.textContent = 'You will not be able to return to change your answers after submitting.';
+        }
+      }
+      modal.classList.add('show');
+    }
+
+    // ── LocalStorage Reliability ────────────────────────────────────────
+    var _LS_KEY = 'va_session';
+    var _LS_TTL = 4 * 60 * 60 * 1000; // 4 hours
+
+    function lsSave() {
+      if (!S.sid || !S.stuId) return;
+      try {
+        localStorage.setItem(_LS_KEY, JSON.stringify({
+          sid: S.sid, stuId: S.stuId,
+          flagged: S.flagged,
+          savedAt: Date.now()
+        }));
+      } catch(e) { /* silent */ }
+    }
+
+    function lsLoad() {
+      try {
+        var raw = localStorage.getItem(_LS_KEY);
+        if (!raw) return;
+        var data = JSON.parse(raw);
+        if (!data || !data.sid || !data.stuId) return;
+        // Only restore for same session and student
+        if (data.sid !== S.sid || data.stuId !== S.stuId) return;
+        if (Date.now() - data.savedAt > _LS_TTL) return;
+        // Merge locally-saved flags (supplement server flags — don't overwrite)
+        if (data.flagged && typeof data.flagged === 'object') {
+          Object.keys(data.flagged).forEach(function(k) {
+            if (data.flagged[k] && !S.flagged[k]) S.flagged[k] = true;
+          });
+        }
+      } catch(e) { /* silent */ }
+    }
+
+    // ── Audit Action Logger ─────────────────────────────────────────────
+    function logAction(eventType, qId, value) {
+      if (!S.sid || !S.stuId) return;
+      try {
+        google.script.run.studentLogAction(S.sid, S.stuId, eventType, qId || '', value || '');
+      } catch(e) { /* fire and forget — never block exam */ }
+    }
 
     hydrateJoinPrefill();
   </script>

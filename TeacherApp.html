@@ -1640,7 +1640,7 @@
               </select></div>
           </div>
           <div class="fg">
-            <div class="fr"><label>Mode</label><select id="lMode" onchange="document.getElementById('lQTimerRow').style.display=this.value==='lockstep'?'flex':'none'">
+            <div class="fr"><label>Mode</label><select id="lMode" onchange="document.getElementById('lQTimerRow').style.display=this.value==='lockstep'?'flex':'none';checkBankLockstep()">
                 <option value="self-paced">Self-Paced</option>
                 <option value="lockstep" selected>Lockstep (Teacher paced)</option>
                 <option value="randomized">Randomized Questions</option>
@@ -1672,13 +1672,29 @@
             <div class="fr"><label>Closes At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lCloseAt"></div>
           </div>
 
-          <div style="display:flex;gap:20px;margin:16px 0 24px;flex-wrap:wrap">
+          <div style="display:flex;gap:20px;margin:16px 0 16px;flex-wrap:wrap">
             <label
               style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500"><input
                 type="checkbox" id="lCE" style="width:auto; transform:scale(1.1)"> Enable Calculator</label>
             <label
               style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500"><input
                 type="checkbox" id="lME" checked style="width:auto; transform:scale(1.1)"> Require Metacognition</label>
+          </div>
+
+          <!-- Bank Draw: pull a random subset of N questions per student -->
+          <div style="margin:0 0 20px;padding:14px 16px;border:1px solid var(--bd);border-radius:10px;background:var(--s2)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;margin:0">
+              <input type="checkbox" id="lBankMode" style="width:auto;transform:scale(1.1)" onchange="toggleBankSize()">
+              Draw random question subset per student
+            </label>
+            <div id="bankSizeRow" style="display:none;margin-top:12px;align-items:center;gap:10px;flex-wrap:wrap">
+              <label style="margin:0;font-size:13px;color:var(--tx2);font-weight:500">Questions per student:</label>
+              <input type="number" id="lBankSize" min="1" max="9999" style="width:72px" placeholder="e.g. 20">
+              <span id="bankSizeHint" style="font-size:12px;color:var(--tx3)"></span>
+            </div>
+            <div id="bankLockstepWarn" style="display:none;margin-top:10px;font-size:12px;color:var(--amb)">
+              &#9888; Question bank drawing is not available in Lockstep mode.
+            </div>
           </div>
 
           <div style="display:flex;gap:10px"><button class="btn bp" style="font-size:15px; padding:12px 28px"
@@ -2645,7 +2661,12 @@
     // ── LAUNCH ──
     function loadLaunch() {
       if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run.withSuccessHandler(sets => { document.getElementById('lSet').innerHTML = sets.map(s => `<option value="${s.id}">${s.name}</option>`).join('') }).getQuestionSets();
+        google.script.run.withSuccessHandler(sets => {
+          window.__qSets = sets;
+          document.getElementById('lSet').innerHTML = sets.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+          document.getElementById('lSet').onchange = updateBankSizeHint;
+          updateBankSizeHint();
+        }).getQuestionSets();
 
         // Match Courses to Blocks for a clean dropdown
         google.script.run.withSuccessHandler(courses => {
@@ -2675,6 +2696,51 @@
       }
     }
 
+    function toggleBankSize() {
+      var checked = document.getElementById('lBankMode').checked;
+      var row = document.getElementById('bankSizeRow');
+      var warn = document.getElementById('bankLockstepWarn');
+      var mode = document.getElementById('lMode').value;
+      if (checked && mode === 'lockstep') {
+        document.getElementById('lBankMode').checked = false;
+        if (warn) warn.style.display = 'block';
+        return;
+      }
+      if (warn) warn.style.display = 'none';
+      if (row) row.style.display = checked ? 'flex' : 'none';
+      if (checked) updateBankSizeHint();
+    }
+
+    function checkBankLockstep() {
+      var mode = document.getElementById('lMode').value;
+      var bankChk = document.getElementById('lBankMode');
+      var warn = document.getElementById('bankLockstepWarn');
+      if (mode === 'lockstep' && bankChk && bankChk.checked) {
+        bankChk.checked = false;
+        document.getElementById('bankSizeRow').style.display = 'none';
+        if (warn) warn.style.display = 'block';
+      } else if (mode !== 'lockstep' && warn) {
+        warn.style.display = 'none';
+      }
+    }
+
+    function updateBankSizeHint() {
+      // Try to get total questions from the selected question set
+      var hint = document.getElementById('bankSizeHint');
+      if (!hint) return;
+      var setId = document.getElementById('lSet').value;
+      if (!setId) { hint.textContent = ''; return; }
+      // If we have cached QSet data, use it; otherwise just clear
+      if (window.__qSets) {
+        var qs = window.__qSets.find(function(s) { return s.id === setId; });
+        if (qs && qs.questionCount) {
+          hint.textContent = 'of ' + qs.questionCount + ' total';
+          return;
+        }
+      }
+      hint.textContent = '';
+    }
+
     function launchS() {
       const tt = document.getElementById('lTT').value;
       const rawBk = document.getElementById('lBk').value || '';
@@ -2697,7 +2763,10 @@
         timer: tt === 'none' ? { type: 'none' } : { type: tt, seconds: +(document.getElementById('lTM').value || 30) * 60 },
         openAt:  _openAtVal  ? new Date(_openAtVal).toISOString()  : null,
         closeAt: _closeAtVal ? new Date(_closeAtVal).toISOString() : null,
-        qTimerSeconds: (_mode === 'lockstep' && _qTimerSec > 0) ? _qTimerSec : null
+        qTimerSeconds: (_mode === 'lockstep' && _qTimerSec > 0) ? _qTimerSec : null,
+        bankSize: (document.getElementById('lBankMode').checked && _mode !== 'lockstep')
+          ? (parseInt(document.getElementById('lBankSize').value, 10) || 0)
+          : 0
       };
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         showLoad('Launching Live Session...');
@@ -2869,7 +2938,7 @@
       // ── Fingerprint-based diff: skip re-rendering unchanged sections ──
       const _q = (d.qStats || [])[curQIdx] || null;
       const _violCount = (d.violations || []).filter(v => !v.resolved).length;
-      const _answerFP  = (d.students || []).map(s => s.studentId + ':' + s.answered).join('|');
+      const _answerFP  = (d.students || []).map(s => s.studentId + ':' + s.answered + ':' + (s.currentQIndex || 0) + ':' + (s.flaggedQs ? s.flaggedQs.length : 0)).join('|');
       const _lockedQs  = JSON.stringify((d.session.config || {}).lockedQs || []);
       const _gsState   = (d.gradeStatus || {}).state || 'idle';
       const _gsCounts  = (d.gradeStatus || {}).gradedCount + '/' + (d.gradeStatus || {}).totalToGrade;
@@ -3409,7 +3478,11 @@
           const resendBtn = (s.status === 'not-joined' && s.email)
             ? `<div style="margin-top:8px"><button class="btn bg" style="width:100%;font-size:11px" onclick="event.stopPropagation();sendSingleEmail('${d.session.sessionId}','${DOMPurify.sanitize(s.email)}')">📧 Resend Link</button></div>`
             : '';
-          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${DOMPurify.sanitize(s.name)}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${ansSnippet}${reAd}${resendBtn}</div>`;
+          const _curQDisp = (s.status === 'active' && s.currentQIndex !== undefined && s.total > 0)
+            ? `<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(13,148,136,0.12);color:var(--teal);border:1px solid rgba(13,148,136,0.25)">on Q${(s.currentQIndex || 0) + 1}</span>` : '';
+          const _flagDisp = (s.flaggedQs && s.flaggedQs.length > 0)
+            ? `<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:var(--amb);border:1px solid rgba(245,158,11,0.25)">&#9733; ${s.flaggedQs.length}</span>` : '';
+          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${DOMPurify.sanitize(s.name)}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${_curQDisp || _flagDisp ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${_curQDisp}${_flagDisp}</div>` : ''}${ansSnippet}${reAd}${resendBtn}</div>`;
         }).join('')}</div>`;
 
         document.getElementById('tab-students').innerHTML = rightHtml;
@@ -4089,14 +4162,15 @@
                     // Expected fallback: Not JSON, use raw plain-string answer
                   }
 
+        const isFlagged = st.flaggedQs && st.flaggedQs.includes(q.id);
         html += `
           <div style="position:relative; z-index:1; padding-left:48px; margin-bottom:40px">
             <!-- Timeline Node Dot -->
             <div style="position:absolute; left:12px; top:4px; width:18px; height:18px; border-radius:50%; background:${ptsNodeColor}; border:4px solid var(--bg); box-shadow:0 0 0 1px ${ptsNodeColor}"></div>
-            
+
             <div style="display:flex; gap:16px; align-items:flex-start; margin-bottom:12px; overflow:hidden;">
               <div style="flex:1; min-width:0;">
-                <div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:8px">Q${i + 1} · ${q.type === 'mc' ? 'Multiple Choice' : 'Short Answer'}</div>
+                <div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:8px">Q${i + 1} · ${q.type === 'mc' ? 'Multiple Choice' : 'Short Answer'}${isFlagged ? ' <span style="background:rgba(245,158,11,0.15);color:var(--amb);border:1px solid rgba(245,158,11,0.3);border-radius:4px;padding:1px 6px;font-size:10px;vertical-align:middle">&#9733; Flagged</span>' : ''}</div>
                 <div class="rte-content" style="font-size:14px; font-weight:400; color:var(--tx); line-height:1.5">${DOMPurify.sanitize(q.text)}</div>
               </div>
               <div style="text-align:right; margin-left:16px; flex-shrink:0">
@@ -4143,9 +4217,113 @@
 
       html += '</div>'; // End relative wrapper
 
-      document.getElementById('anaStBody').innerHTML = html;
+      // Tab controls: Answers | Exam Playback
+      const tabBar = `<div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--bd);padding-bottom:0">
+        <button id="anaTabAnswers" onclick="switchAnaTab('answers','${stuId}')" style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--teal);border-bottom:2px solid var(--teal)">Answers</button>
+        <button id="anaTabPlayback" onclick="switchAnaTab('playback','${stuId}')" style="padding:8px 16px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:500;color:var(--tx3);border-bottom:2px solid transparent">&#9654; Exam Playback</button>
+      </div>`;
+
+      document.getElementById('anaStBody').innerHTML = tabBar + '<div id="anaTabContent">' + html + '</div>';
       document.getElementById('anaStudentModal').classList.add('show-drawer');
-      // Added show-drawer for the new slide-out css
+    }
+
+    function switchAnaTab(tab, stuId) {
+      var answersBtn = document.getElementById('anaTabAnswers');
+      var playbackBtn = document.getElementById('anaTabPlayback');
+      if (!answersBtn || !playbackBtn) return;
+      if (tab === 'answers') {
+        answersBtn.style.color = 'var(--teal)'; answersBtn.style.borderBottomColor = 'var(--teal)';
+        playbackBtn.style.color = 'var(--tx3)'; playbackBtn.style.borderBottomColor = 'transparent';
+        // Restore answers html
+        renderAnaStudentDetail(stuId);
+        // Fix tab display back to answers (avoid recursion)
+        document.getElementById('anaTabAnswers').style.color = 'var(--teal)';
+        document.getElementById('anaTabAnswers').style.borderBottomColor = 'var(--teal)';
+        document.getElementById('anaTabPlayback').style.color = 'var(--tx3)';
+        document.getElementById('anaTabPlayback').style.borderBottomColor = 'transparent';
+      } else {
+        answersBtn.style.color = 'var(--tx3)'; answersBtn.style.borderBottomColor = 'transparent';
+        playbackBtn.style.color = 'var(--teal)'; playbackBtn.style.borderBottomColor = 'var(--teal)';
+        renderExamPlayback(stuId);
+      }
+    }
+
+    function renderExamPlayback(stuId) {
+      var content = document.getElementById('anaTabContent');
+      if (!content) return;
+      const data = window.__currentAnaData;
+      if (!data) return;
+      const qSet = (data.session.config && data.session.config.qSet) || data.session.qSet || {};
+      const questions = qSet.questions || [];
+      const qMap = questions.reduce(function(acc, q) { acc[q.id] = q; return acc; }, {});
+      const viols = (data.violations || []).filter(function(v) { return v.studentId === stuId; });
+
+      // Collect action log entries for this student
+      const rawLog = data.actionLog || [];
+      const stuLog = rawLog.filter(function(row) {
+        // row format: [SessionID, StudentID, EventType, QuestionID, Value, Timestamp]
+        return String(row[1]) === String(stuId);
+      });
+
+      // Build unified event list: action log + violations
+      const events = [];
+      stuLog.forEach(function(row) {
+        events.push({ ts: row[5] || '', type: row[2] || '', qId: row[3] || '', value: row[4] || '', isViol: false });
+      });
+      viols.forEach(function(v) {
+        events.push({ ts: v.timestamp || '', type: v.type || 'violation', qId: '', value: '', isViol: true });
+      });
+      // Sort by timestamp
+      events.sort(function(a, b) { return String(a.ts).localeCompare(String(b.ts)); });
+
+      if (!events.length) {
+        content.innerHTML = '<div style="color:var(--tx3);padding:20px;text-align:center;font-size:14px">No exam playback data recorded for this student.<br><span style="font-size:12px">Playback is available for sessions started after this feature was enabled.</span></div>';
+        return;
+      }
+
+      const typeLabels = {
+        'view_q': 'Viewed', 'navigate': 'Navigated to', 'flag': 'Flagged',
+        'unflag': 'Unflagged', 'submit': 'Submitted exam',
+        'fullscreen_exit': 'Exited fullscreen', 'screenshot_attempt': 'Screenshot keystroke detected'
+      };
+
+      // Generate CSV download link
+      const csvRows = [['Time','Event','Question','Value']];
+      events.forEach(function(e) {
+        const q = qMap[e.qId];
+        const qLabel = q ? ('Q' + (questions.indexOf(q) + 1) + ': ' + q.text.replace(/<[^>]+>/g,'').substring(0,40)) : '';
+        csvRows.push([e.ts, e.type, qLabel, e.value]);
+      });
+      const csvStr = csvRows.map(function(r) { return r.map(function(c) { return '"' + String(c||'').replace(/"/g,'""') + '"'; }).join(','); }).join('\n');
+      const csvUri = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csvStr);
+
+      let html = '<div style="display:flex;justify-content:flex-end;margin-bottom:14px">';
+      html += '<a href="' + csvUri + '" download="exam_playback_' + DOMPurify.sanitize(stuId) + '.csv" class="btn bg" style="font-size:12px;padding:5px 12px">&#8595; Export CSV</a>';
+      html += '</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+
+      events.forEach(function(e) {
+        var timeStr = '';
+        try { timeStr = new Date(e.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch(err) { timeStr = String(e.ts).substring(11,19) || e.ts; }
+        const q = qMap[e.qId];
+        const qNumStr = q ? (' Q' + (questions.indexOf(q) + 1)) : '';
+        const qTextStr = q ? (': <em style="color:var(--tx3)">' + DOMPurify.sanitize(q.text.replace(/<[^>]+>/g,'').substring(0,50)) + '</em>') : '';
+        const label = typeLabels[e.type] || e.type;
+        var dotColor = 'var(--tx3)';
+        if (e.isViol) dotColor = 'var(--red)';
+        else if (e.type === 'submit') dotColor = 'var(--grn)';
+        else if (e.type === 'flag') dotColor = 'var(--amb)';
+        else if (e.type === 'view_q' || e.type === 'navigate') dotColor = 'var(--teal)';
+        html += `<div style="display:flex;align-items:baseline;gap:10px;padding:6px 10px;border-radius:6px;background:${e.isViol ? 'rgba(239,68,68,0.06)' : 'var(--s2)'}">`;
+        html += `<span style="font-size:11px;color:var(--tx3);white-space:nowrap;min-width:70px">${timeStr}</span>`;
+        html += `<span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;margin-top:3px"></span>`;
+        html += `<span style="font-size:13px;color:${e.isViol ? 'var(--red)' : 'var(--tx)'}"><strong>${DOMPurify.sanitize(label)}</strong>${qNumStr}${qTextStr}`;
+        if (e.value && e.type !== 'navigate') html += ' <span style="color:var(--tx3);font-size:12px">— ' + DOMPurify.sanitize(e.value) + '</span>';
+        html += '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+      content.innerHTML = html;
     }
 
     function renderAnaDetail(data) {

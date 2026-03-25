@@ -314,6 +314,12 @@ function studentCheckStatus(sessId, stuId) { return DB.studentCheckStatus(sessId
 function studentFinish(sessId, stuId) { return DB.studentFinish(sessId, stuId); }
 function studentGetSummary(sessId, stuId) { return DB.studentGetSummary(sessId, stuId); }
 
+// ── Student Progress & Audit ──
+function studentUpdateFlags(sessId, stuId, flaggedQIds) { return DB.studentUpdateFlags(sessId, stuId, flaggedQIds); }
+function studentReportCurrentQ(sessId, stuId, qIndex) { return DB.studentReportCurrentQ(sessId, stuId, qIndex); }
+function studentLogAction(sessId, stuId, eventType, qId, value) { return DB.logStudentAction(sessId, stuId, eventType, qId, value); }
+function getStudentActionLog(sessId, stuId) { return DB.getStudentActionLog(sessId, stuId); }
+
 // ── AI Analysis ──
 function generateAIClassReport(sessId) {
   try {
