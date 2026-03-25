@@ -2766,6 +2766,22 @@
             let didAdvance = false;
 
             if (st.currentQ !== undefined && S.cur !== st.currentQ && st.currentQ < S.qs.length) {
+              // ── Lockstep SA flush: save any in-progress short answer before the question changes ──
+              // MC answers are submitted on click; SA answers must be flushed here because
+              // students cannot navigate themselves — the teacher's advance is the only trigger.
+              if (S.cur >= 0 && S.qs[S.cur] && S.qs[S.cur].type === 'sa') {
+                const _flushQId = S.qs[S.cur].id;
+                if (!S.submittedAns[_flushQId]) {
+                  // Capture live text directly from the DOM in case trackSA() hasn't fired yet
+                  const _saEl = document.getElementById('saIn');
+                  if (_saEl && _saEl.dataset.qid === _flushQId) S.ans[_flushQId] = _saEl.value;
+                  if (S.ans[_flushQId] && String(S.ans[_flushQId]).trim()) {
+                    S.submittedAns[_flushQId] = true;
+                    SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, _flushQId, S.ans[_flushQId]]);
+                    logAction('answer_change', _flushQId, '');
+                  }
+                }
+              }
               const _prevCur = S.cur;
               if (st.currentQ > S.cur) didAdvance = true;
               S.cur = st.currentQ;

@@ -768,7 +768,7 @@ const DB = {
       sr.forEach(r=>{const q=questionById[r.questionId];if(q&&q.type==='mc'){mcT++;if(r.isCorrect===true||r.isCorrect==='TRUE')mcC++;}});
       const lastTs=[ss.joinedAt,ss.finishedAt].concat(sr.map(x=>x.submittedAt)).concat(sm.map(x=>x.submittedAt)).filter(Boolean).map(x=>new Date(x).getTime()).sort((a,b)=>b-a)[0]||0;
       const activeNow=ss.status==='active' && !ss.lockedOut && (nowMs-lastTs)<(2*60*1000);
-      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,activeNow,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr,flaggedQs:ss.flaggedQs||[],currentQIndex:ss.currentQIndex||0,answeredQIds:sr.map(r=>r.questionId)};
+      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,activeNow,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr,flaggedQs:ss.flaggedQs||[],currentQIndex:ss.currentQIndex||0,answeredQIds:sr.map(r=>r.questionId),timerExtensionMs:ss.timerExtensionMs||0};
     });
     
     const qStats=questions.map((q,idx)=>{
@@ -830,7 +830,8 @@ const DB = {
       });
     });
     
-    return {session:{...sess,questionCount:questions.length,sessionPaused:!!(sess.config||{}).sessionPaused},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,gradeStatus:Grader.getStatus(sessId)};
+    const _cfg=sess.config||{};
+    return {session:{...sess,questionCount:questions.length,sessionPaused:!!_cfg.sessionPaused,sessionTimerState:_cfg.sessionTimerState||null,qTimerState:_cfg.qTimerState||null,qTimerSeconds:_cfg.qTimerSeconds||0},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,gradeStatus:Grader.getStatus(sessId)};
   },
 
 
