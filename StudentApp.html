@@ -1336,16 +1336,17 @@
     .exam-layout { display: flex; align-items: flex-start; position: relative; }
     .q-sidebar {
       width: 228px; min-width: 228px; flex-shrink: 0;
-      position: sticky; top: 0; max-height: 100vh; overflow-y: auto; overflow-x: hidden;
-      background: rgba(255,255,255,0.02); border-right: 1px solid rgba(255,255,255,0.06);
+      position: fixed; top: 56px; left: 0; bottom: 0; overflow-y: auto; overflow-x: hidden;
+      background: rgba(15,20,30,0.97); border-right: 1px solid rgba(255,255,255,0.10);
       transition: width 0.25s ease, min-width 0.25s ease; z-index: 40;
       display: flex; flex-direction: column;
     }
     .q-sidebar.collapsed { width: 40px; min-width: 40px; }
+    .q-sidebar.collapsed ~ .q-main { margin-left: 40px; }
     .qsb-header {
       display: flex; align-items: center; gap: 8px;
-      padding: 12px 10px 10px; border-bottom: 1px solid rgba(255,255,255,0.06);
-      position: sticky; top: 0; background: rgba(15,20,30,0.95); z-index: 1;
+      padding: 12px 10px 10px; border-bottom: 1px solid rgba(255,255,255,0.10);
+      background: rgba(15,20,30,0.98); z-index: 1;
     }
     .qsb-summary {
       font-size: 11px; color: var(--tx3); font-weight: 600;
@@ -1395,7 +1396,7 @@
       cursor: pointer; transition: background 0.15s; text-align: center; width: calc(100% - 16px);
     }
     .qsb-next-flagged:hover { background: rgba(245,158,11,0.18); }
-    .q-main { flex: 1; min-width: 0; }
+    .q-main { flex: 1; min-width: 0; margin-left: 228px; transition: margin-left 0.25s ease; }
 
     /* ── Flag button ── */
     .flag-btn {
@@ -1421,8 +1422,10 @@
     @keyframes connPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
 
     @media (max-width: 720px) {
-      .q-sidebar { position: fixed; left: 0; top: 56px; bottom: 0; z-index: 45; background: var(--bg); width: 200px; min-width: 200px; }
+      .q-sidebar { width: 200px; min-width: 200px; z-index: 45; background: var(--bg); }
       .q-sidebar.collapsed { width: 0; min-width: 0; border-right: none; }
+      .q-main { margin-left: 0 !important; }
+      .q-sidebar:not(.collapsed) ~ .q-main { margin-left: 200px; }
     }
   </style>
 </head>
@@ -1580,7 +1583,8 @@
       // Session timer sync state
       sessionTimerPaused: false, sessionTimerCancelled: false,
       // Question flagging & progress tracking
-      flagged: {}, viewedAt: {}, lsLastReportedQ: -2, _connFails: 0, _sidebarCollapsed: false
+      flagged: {}, viewedAt: {}, lsLastReportedQ: -2, _connFails: 0, _sidebarCollapsed: false,
+      _justSubmittedQ: null
     };
 
     const SCI_PUNS = [
@@ -1952,7 +1956,7 @@
             return;
           }
           S.qs = d.questions;
-          S.cur = typeof d.currentQ === 'number' ? d.currentQ : 0;
+          S.cur = typeof d.currentQ === 'number' ? d.currentQ : -1;
           if (d.stimuli) S.stimuli = d.stimuli;
           // Restore flagged questions from server (authoritative)
           if (d.flaggedQs && Array.isArray(d.flaggedQs)) {
@@ -2237,8 +2241,8 @@
         html += '<div class="scoring-dots"><span></span><span></span><span></span></div>';
         html += '<div style="margin-top:28px"><div class="scoring-bar-track"><div class="scoring-bar-fill"></div></div></div>';
         html += '</div>';
-      } else if (isDone && S.mode !== 'lockstep') {
-        // STATE 4: Self-Paced Done Phase
+      } else if (isDone && S.mode !== 'lockstep' && S._justSubmittedQ === q.id) {
+        // STATE 4: Self-Paced Done Phase (only shown immediately after submission, not on revisit)
         html += '<div class="q-card" style="text-align:center; padding:64px 48px; position:relative; overflow:hidden">';
         html += '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(to right,#059669,#10b981,#34d399,#059669);background-size:200%;animation:holdingBarShift 3s linear infinite"></div>';
         html += '<div class="scoring-brain" style="font-size:54px; margin-bottom:20px">✅</div>';
@@ -2322,7 +2326,8 @@
           }
         } else {
           html += '<div class="sa"><textarea id="saIn" data-qid="' + q.id + '" placeholder="Type your detailed response here...">' + (S.ans[q.id] || '') + '</textarea></div>';
-          html += '<div style="margin-top: 24px; text-align: right;"><button class="nbtn nbtn-next" style="display:inline-flex" onclick="submitSA(\'' + q.id + '\')">Submit Answer</button></div>';
+          const _saLabel = (S.submittedAns[q.id] && S.mode !== 'lockstep') ? 'Update Answer' : 'Submit Answer';
+          html += '<div style="margin-top: 24px; text-align: right;"><button class="nbtn nbtn-next" style="display:inline-flex" onclick="submitSA(\'' + q.id + '\')">' + _saLabel + '</button></div>';
         }
         html += '</div>';
       }
@@ -2391,9 +2396,9 @@
       if (opt.dataset.multiselect === '1') {
         const isMultiSelect = !!q.multiSelect;
         if (!isMultiSelect) return;
-        // Block if fully submitted (meta done or no meta)
-        if (S.submittedAns[q.id] && S.metaEnabled && S.conf[q.id]) return;
-        if (S.submittedAns[q.id] && !S.metaEnabled) return;
+        // Block if fully submitted in lockstep mode (self-paced allows re-editing)
+        if (S.mode === 'lockstep' && S.submittedAns[q.id] && S.metaEnabled && S.conf[q.id]) return;
+        if (S.mode === 'lockstep' && S.submittedAns[q.id] && !S.metaEnabled) return;
         // If the choice is crossed out, clicking restores it
         const msIdx = Number(opt.dataset.choiceIdx);
         const msElimSet = S.eliminated[q.id] || new Set();
@@ -2408,9 +2413,9 @@
         return;
       }
 
-      // Single-select: Prevent re-picking if already submitted and in meta/done phase
-      if (S.submittedAns[q.id] && S.metaEnabled && S.conf[q.id]) return;
-      if (S.submittedAns[q.id] && !S.metaEnabled) return;
+      // Single-select: Prevent re-picking if already submitted in lockstep mode (self-paced allows re-editing)
+      if (S.mode === 'lockstep' && S.submittedAns[q.id] && S.metaEnabled && S.conf[q.id]) return;
+      if (S.mode === 'lockstep' && S.submittedAns[q.id] && !S.metaEnabled) return;
 
       // If the choice is crossed out, clicking the choice body restores it instead of selecting it
       const choiceIdx = Number(opt.dataset.choiceIdx);
@@ -2457,6 +2462,7 @@
       if (_isQLocked(qId)) return;
       S.ans[qId] = c;
       S.submittedAns[qId] = true;
+      S._justSubmittedQ = qId;
       renderQ();
       SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, c]);
       logAction('answer_change', qId, c);
@@ -2489,6 +2495,7 @@
       const ansStr = JSON.stringify(arr);
       S.ans[qId] = ansStr;
       S.submittedAns[qId] = true;
+      S._justSubmittedQ = qId;
       renderQ();
       SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, arr]);
       logAction('answer_change', qId, ansStr);
@@ -2502,6 +2509,7 @@
         return;
       }
       S.submittedAns[qId] = true;
+      S._justSubmittedQ = qId;
       saveSA(qId);
       logAction('answer_change', qId, '');
       renderQ();
@@ -2518,6 +2526,7 @@
 
     function setConf(qId, confVal) {
       S.conf[qId] = confVal;
+      if (S.submittedAns[qId]) S._justSubmittedQ = qId;
       renderQ();
       SyncQueue.add('studentSubmitMeta', [S.sid, S.stuId, qId, confVal]);
     }
@@ -2527,6 +2536,7 @@
         const _saIn = document.getElementById('saIn');
         if (_saIn && !S.submittedAns[_saIn.dataset.qid]) saveSA(_saIn.dataset.qid);
         S.cur--;
+        S._justSubmittedQ = null;
         renderQ();
       }
     }
@@ -2553,7 +2563,12 @@
         showSubmitModal();
       } else {
         S.cur++;
-        triggerGetReadyAnimation(S.cur, () => renderQ());
+        S._justSubmittedQ = null;
+        if (S.mode === 'lockstep') {
+          triggerGetReadyAnimation(S.cur, () => renderQ());
+        } else {
+          renderQ();
+        }
       }
     }
 
@@ -3017,6 +3032,7 @@
       if (saIn && !S.submittedAns[saIn.dataset.qid]) saveSA(saIn.dataset.qid);
       logAction('navigate', S.qs[idx] ? S.qs[idx].id : '', String(idx));
       S.cur = idx;
+      S._justSubmittedQ = null;
       renderQ();
     }
 

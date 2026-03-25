@@ -3110,9 +3110,14 @@
             const _timerStr = _buildSessionTimerHtml(d.session);
             document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="this.disabled=true;this.style.opacity='0.55';lsNext()">▶ Start Session</button>${_timerStr ? '<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + _timerStr + '</span>' : ''}`;
           } else {
-            document.getElementById('lsQText').textContent = `${_modeLabel}: ${d.session.questionCount} Question${d.session.questionCount !== 1 ? 's' : ''}`;
+            const _finished = (d.students || []).filter(s => s.status === 'finished').length;
+            const _totalJoined = (d.students || []).filter(s => s.status !== 'not-joined').length;
+            document.getElementById('lsQText').textContent = `${_modeLabel}: ${d.session.questionCount} Q · ${_finished}/${_totalJoined} finished`;
             const _timerStr = _buildSessionTimerHtml(d.session);
-            document.getElementById('lsActions').innerHTML = `${_pauseBtnHtml} ${_pauseIndicator} ${_timerStr || '<span style="font-size:12px;color:var(--tx3)">No session timer</span>'}`;
+            let _spControls = `${_pauseBtnHtml} ${_pauseIndicator} `;
+            if (_timerStr) _spControls += `<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${_timerStr}</span>`;
+            _spControls += `<button class="btn bd" onclick="endS()">🏁 End Session</button>`;
+            document.getElementById('lsActions').innerHTML = _spControls;
           }
         }
 

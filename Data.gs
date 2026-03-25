@@ -297,7 +297,7 @@ const DB = {
   activateSession(config) {
     const s=this.sh('Sessions');
     const d=s.getDataRange().getValues();
-    for(let i=1;i<d.length;i++) if(d[i][8]==='active'){s.getRange(i+1,9).setValue('ended');s.getRange(i+1,12).setValue(new Date().toISOString());}
+    for(let i=1;i<d.length;i++) if(d[i][8]==='active'){const oldId=d[i][0];s.getRange(i+1,9).setValue('ended');s.getRange(i+1,12).setValue(new Date().toISOString());try{this.archiveSession(oldId);}catch(e){Logger.log('Failed to archive session '+oldId+': '+e);}}
     const qSet=this.getQSet(config.setId); if(!qSet) throw new Error('Question set not found');
     const id='sess_'+Utilities.getUuid().slice(0,8); const code=this.makeCode(); const now=new Date().toISOString();
     const mode = config.mode || 'self-paced';
@@ -316,14 +316,14 @@ const DB = {
     return null;
   },
   _parseSess(r,row) {
-    return {sessionId:r[0],code:r[1],setId:r[2],setName:r[3],block:r[4],mode:r[5],randQ:r[6],randC:r[7],status:r[8],currentQ:r[9]||0,startedAt:r[10],endedAt:r[11],config:JSON.parse(r[12]||'{}'),timer:JSON.parse(r[13]||'{}'),revealMode:r[14]||'end',summaryConfig:JSON.parse(r[15]||'{}'),revealedQs:JSON.parse(r[16]||'[]'),calcEnabled:r[17]===true||r[17]==='TRUE',row};
+    return {sessionId:r[0],code:r[1],setId:r[2],setName:r[3],block:r[4],mode:r[5],randQ:r[6],randC:r[7],status:r[8],currentQ:(r[9]===''||r[9]===null||r[9]===undefined)?-1:Number(r[9]),startedAt:r[10],endedAt:r[11],config:JSON.parse(r[12]||'{}'),timer:JSON.parse(r[13]||'{}'),revealMode:r[14]||'end',summaryConfig:JSON.parse(r[15]||'{}'),revealedQs:JSON.parse(r[16]||'[]'),calcEnabled:r[17]===true||r[17]==='TRUE',row};
   },
   _normalizeSessionState(sess, questionIds) {
     const ids = Array.isArray(questionIds) ? questionIds : [];
     const maxQ = Math.max(0, ids.length - 1);
     const requestedQ = Number(sess.currentQ);
     const minBound = -1;
-    const currentQ = Number.isFinite(requestedQ) ? Math.max(minBound, Math.min(requestedQ, maxQ)) : 0;
+    const currentQ = Number.isFinite(requestedQ) ? Math.max(minBound, Math.min(requestedQ, maxQ)) : -1;
     const revealMode = sess.revealMode || 'end';
     let revealedQs = Array.isArray(sess.revealedQs) ? sess.revealedQs.filter(qId => ids.indexOf(qId) !== -1) : [];
     if (revealMode === 'never') revealedQs = [];
@@ -352,7 +352,7 @@ const DB = {
     return this.withLock(() => {
       const s=this.sh('Sessions'); const d=s.getDataRange().getValues();
       for(let i=1;i<d.length;i++) if(d[i][0]===id){
-        s.getRange(i+1,9).setValue('ended');s.getRange(i+1,12).setValue(new Date().toISOString());this.archiveSession(id);
+        s.getRange(i+1,9).setValue('ended');s.getRange(i+1,12).setValue(new Date().toISOString());try{this.archiveSession(id);}catch(e){Logger.log('Failed to archive session '+id+': '+e);}
         const ss=this.sh('StudentSessions'); const sd=ss.getDataRange().getValues();
         for(let j=1;j<sd.length;j++) if(sd[j][0]===id&&(sd[j][8]===true||sd[j][8]==='TRUE')){ss.getRange(j+1,9).setValue(false);}
         this.logAuditEvent('END_SESSION', id, '');
