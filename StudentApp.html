@@ -1466,6 +1466,14 @@
     </div>
   </div>
 
+  <div class="lock" id="pauseOverlay" style="z-index:9998">
+    <div class="violation-card" style="border-color:#d97706">
+      <span class="violation-icon">⏸️</span>
+      <div class="violation-title" style="color:#d97706">Session Paused</div>
+      <div class="violation-msg">Your teacher has temporarily paused this session. Please wait — you will be able to continue when the session resumes.</div>
+    </div>
+  </div>
+
   <!-- Custom Submit Confirm Modal avoids triggering browser fullscreen exit -->
   <div class="modal-bg" id="submitModal">
     <div class="modal-card">
@@ -1664,6 +1672,22 @@
         const successHandler = function (res) {
           if (res && res.error && typeof res.error === 'string' && res.error.indexOf('System is busy') > -1) {
             failureHandler(new Error('System busy'));
+            return;
+          }
+          // Non-retryable server errors — drop the item but notify the student
+          if (res && res.error && typeof res.error === 'string') {
+            var errMsg = res.error;
+            var isExpected = errMsg.indexOf('locked') > -1 || errMsg.indexOf('paused') > -1 || errMsg.indexOf('ended') > -1;
+            if (isExpected) {
+              console.warn('SyncQueue: expected rejection (' + item.fnName + '):', errMsg);
+            } else {
+              // Unexpected server error — warn student so they know answer may not have saved
+              console.error('SyncQueue: unexpected server error (' + item.fnName + '):', errMsg);
+              toast('Your response may not have been saved. Please try again.');
+            }
+            SyncQueue.items.shift();
+            SyncQueue.isProcessing = false;
+            SyncQueue.process();
             return;
           }
           // Cache server-confirmed score so the student sees accurate points on reveal
@@ -2438,13 +2462,18 @@
       renderQ();
     }
 
+    // Guard: prevent submission to locked questions (lockstep race condition)
+    function _isQLocked(qId) { return S.mode === 'lockstep' && S.lockedQs && S.lockedQs.includes(qId); }
+
     // Single-answer MC: auto-submit on click
     function pickMC(qId, c) {
+      if (_isQLocked(qId)) return;
       S.ans[qId] = c;
       S.submittedAns[qId] = true;
       S._justSubmittedQ = qId;
       renderQ();
       SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, c]);
+      logAction('answer_change', qId, c);
     }
 
     // Multi-select MC: toggle a choice in pendingMulti without submitting
@@ -2468,6 +2497,7 @@
 
     // Multi-select MC: explicit submit button
     function submitMCMulti(qId) {
+      if (_isQLocked(qId)) return;
       const arr = S.pendingMulti[qId] || [];
       if (!arr.length) return toast('Please select at least one answer.');
       const ansStr = JSON.stringify(arr);
@@ -2476,9 +2506,11 @@
       S._justSubmittedQ = qId;
       renderQ();
       SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, arr]);
+      logAction('answer_change', qId, ansStr);
     }
 
     function submitSA(qId) {
+      if (_isQLocked(qId)) return;
       const val = document.getElementById('saIn') ? document.getElementById('saIn').value.trim() : '';
       if (!val) {
         toast('Please enter a response before submitting.');
@@ -2487,6 +2519,7 @@
       S.submittedAns[qId] = true;
       S._justSubmittedQ = qId;
       saveSA(qId);
+      logAction('answer_change', qId, '');
       renderQ();
     }
 
@@ -2495,6 +2528,7 @@
     }
 
     function saveSA(qId) {
+      if (_isQLocked(qId)) return;
       SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, S.ans[qId]]);
     }
 
@@ -2666,6 +2700,13 @@
             triggerLockout('session_ended');
             return;
           }
+          // Handle session pause overlay
+          if (st.sessionPaused) {
+            document.getElementById('pauseOverlay').classList.add('show');
+          } else {
+            document.getElementById('pauseOverlay').classList.remove('show');
+          }
+
           if (st.lockedOut && !S.locked) {
             const shortAnswerInput = document.getElementById('saIn');
             if (shortAnswerInput && !S.submittedAns[shortAnswerInput.dataset.qid]) saveSA(shortAnswerInput.dataset.qid);

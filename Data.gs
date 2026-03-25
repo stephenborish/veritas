@@ -344,6 +344,7 @@ const DB = {
       qTimerSeconds: cfg.qTimerSeconds || 0,
       qTimerState:   cfg.qTimerState   || null,
       sessionTimerState: cfg.sessionTimerState || null,
+      sessionPaused: !!cfg.sessionPaused,
       closeAt:       cfg.closeAt       || null
     };
   },
@@ -521,6 +522,7 @@ const DB = {
   studentSubmitAnswer(sessId, stuId, qId, answer) {
     return this.withLock(() => {
       const sess=this.getSessionById(sessId); if(!sess||sess.status!=='active') return {error:'Session ended'};
+      if ((sess.config||{}).sessionPaused) return {error:'Session is paused'};
       const qSet=this.getQSet(sess.setId); const q=qSet.questions.find(qq=>qq.id===qId); if(!q) return {error:'Q not found'};
       const lockedQs = Array.isArray((sess.config || {}).lockedQs) ? sess.config.lockedQs : [];
       if (lockedQs.includes(qId)) return {error:'This question has been locked by the teacher.'};
@@ -562,10 +564,8 @@ const DB = {
       }
       const qIdx=qSet.questions.findIndex(qq=>qq.id===qId);
       let ansStr=Array.isArray(answer)?JSON.stringify(answer):String(answer);
-      // Force plain text in Sheets to prevent auto-formatting (e.g. 100% -> 1)
-      if (ansStr && !ansStr.startsWith('{') && !ansStr.startsWith('[')) {
-        ansStr = "'" + ansStr;
-      }
+      // setNumberFormat('@') on the cell is sufficient to prevent auto-formatting;
+      // do NOT prepend "'" — it becomes part of the stored value and corrupts MC matching.
       
       const rSheet=this.sh('Responses');
       const rd=rSheet.getDataRange().getValues();
@@ -591,6 +591,7 @@ const DB = {
     return this.withLock(() => {
       const sess = this.getSessionById(sessId);
       if (sess) {
+         if ((sess.config||{}).sessionPaused) return {error:'Session is paused'};
          const lockedQs = Array.isArray((sess.config || {}).lockedQs) ? sess.config.lockedQs : [];
          if (lockedQs.includes(qId)) return {error: 'This question has been locked by the teacher.'};
       }
@@ -693,6 +694,17 @@ const DB = {
 
     const d=this.sh('StudentSessions').getDataRange().getValues();
     for(let i=1;i<d.length;i++) if(d[i][0]===sessId&&d[i][1]===stuId){
+      // Apply per-student timer extension to sessionTimerState (col 18 = index 17)
+      const stuTimerExtMs = Number(d[i][17]) || 0;
+      if (stuTimerExtMs && sessionState.sessionTimerState) {
+        // Deep copy to avoid mutating shared state
+        sessionState.sessionTimerState = Object.assign({}, sessionState.sessionTimerState);
+        if (sessionState.sessionTimerState.paused) {
+          sessionState.sessionTimerState.pausedRemaining = (sessionState.sessionTimerState.pausedRemaining || 0) + stuTimerExtMs;
+        } else if (sessionState.sessionTimerState.endTime) {
+          sessionState.sessionTimerState.endTime = sessionState.sessionTimerState.endTime + stuTimerExtMs;
+        }
+      }
       return {...sessionState,lockedOut:d[i][8]===true||d[i][8]==='TRUE',
         needsFullscreen:d[i][10]===true||d[i][10]==='TRUE',
         gradeStatus:Grader.getStatus(sessId).state||'idle'};
@@ -818,7 +830,7 @@ const DB = {
       });
     });
     
-    return {session:{...sess,questionCount:questions.length},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,gradeStatus:Grader.getStatus(sessId)};
+    return {session:{...sess,questionCount:questions.length,sessionPaused:!!(sess.config||{}).sessionPaused},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,gradeStatus:Grader.getStatus(sessId)};
   },
 
 
@@ -1104,6 +1116,66 @@ const DB = {
       return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
     });
   },
+  // ── SESSION PAUSE (freezes student interaction) ──
+  pauseSession(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId);
+      if (!sess || sess.status !== 'active') return {error:'No active session'};
+      const cfg = sess.config || {};
+      if (cfg.sessionPaused) return {ok:true}; // Already paused
+      cfg.sessionPaused = true;
+      cfg.sessionPausedAt = new Date().toISOString();
+      // Also pause session timer if running
+      if (cfg.sessionTimerState && !cfg.sessionTimerState.paused && !cfg.sessionTimerState.cancelled) {
+        cfg.sessionTimerState.pausedRemaining = Math.max(0, (cfg.sessionTimerState.endTime || Date.now()) - Date.now());
+        cfg.sessionTimerState.paused = true;
+      }
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+  resumeSession(sessId) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId);
+      if (!sess || sess.status !== 'active') return {error:'No active session'};
+      const cfg = sess.config || {};
+      if (!cfg.sessionPaused) return {ok:true}; // Already running
+      cfg.sessionPaused = false;
+      cfg.sessionPausedAt = null;
+      // Also resume session timer
+      if (cfg.sessionTimerState && cfg.sessionTimerState.paused) {
+        cfg.sessionTimerState.endTime = Date.now() + (cfg.sessionTimerState.pausedRemaining || 0);
+        cfg.sessionTimerState.paused = false;
+        cfg.sessionTimerState.pausedRemaining = null;
+      }
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+    });
+  },
+
+  // ── INDIVIDUAL STUDENT TIME EXTENSION ──
+  extendStudentTimer(sessId, stuId, additionalSeconds) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId);
+      if (!sess) return {error:'Session not found'};
+      const addMs = (Number(additionalSeconds) || 0) * 1000;
+      if (addMs <= 0) return {error:'Invalid time value'};
+      const stuSheet = this.sh('StudentSessions');
+      const d = stuSheet.getDataRange().getValues();
+      for (let i = 1; i < d.length; i++) {
+        if (d[i][0] === sessId && d[i][1] === stuId) {
+          const existing = Number(d[i][17]) || 0;
+          stuSheet.getRange(i + 1, 18).setValue(existing + addMs);
+          this.logAuditEvent('EXTEND_STUDENT_TIMER', stuId, 'Added ' + additionalSeconds + 's for session ' + sessId);
+          return {ok:true, extensionMs: existing + addMs};
+        }
+      }
+      return {error:'Student not found'};
+    });
+  },
+
   updateSessionConfig(id, key, val) {
     return this.withLock(() => {
       const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
@@ -1965,8 +2037,20 @@ const DB = {
     const d=this._getSheetValues(sheetName,snapshot);
     return d.slice(1).filter(r=>r[0]===sessId);
   },
-  getStudentSessions(sessId,snapshot){const rows=this._getSessionRows('StudentSessions',sessId,snapshot);return rows.map(r=>{let _fq=[];try{if(r[15])_fq=JSON.parse(r[15]);}catch(e){}return{studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11],normalizedName:r[12]||this.normalizeStudentName(r[2]||''),identityKey:r[13]||'',flaggedQs:_fq,currentQIndex:r[16]!==undefined&&r[16]!==''?Number(r[16])||0:0};});},
-  getAllResponses(sessId,snapshot){const rows=this._getSessionRows('Responses',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:r[5],isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
+  getStudentSessions(sessId,snapshot){const rows=this._getSessionRows('StudentSessions',sessId,snapshot);return rows.map(r=>{let _fq=[];try{if(r[15])_fq=JSON.parse(r[15]);}catch(e){}return{studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11],normalizedName:r[12]||this.normalizeStudentName(r[2]||''),identityKey:r[13]||'',flaggedQs:_fq,currentQIndex:r[16]!==undefined&&r[16]!==''?Number(r[16])||0:0,timerExtensionMs:Number(r[17])||0};});},
+  // Strip legacy "'" prefix from answers. The old code prepended "'" to non-JSON answers
+  // before setNumberFormat('@') was sufficient. Only strip if the result is non-empty and
+  // the original was not a JSON structure (which was never prefixed).
+  _cleanAnswer(val){
+    if(typeof val!=='string'||val.length<2||val.charAt(0)!=="'") return val;
+    const rest=val.substring(1);
+    // JSON arrays/objects were never prefixed, so "'[" or "'{" is a genuine apostrophe
+    if(rest.charAt(0)==='['||rest.charAt(0)==='{') return val;
+    // If stripping produces a valid JSON array, the "'" was genuine (e.g. user typed '["x"])
+    try{const p=JSON.parse(rest);if(Array.isArray(p)) return val;}catch(e){}
+    return rest;
+  },
+  getAllResponses(sessId,snapshot){const rows=this._getSessionRows('Responses',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:this._cleanAnswer(r[5]),isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
   getAllMeta(sessId,snapshot){const rows=this._getSessionRows('Metacognition',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
   getActiveViolations(sessId,snapshot){const rows=this._getSessionRows('Violations',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},
   getAIGrades(sessId,snapshot){const rows=this._getSessionRows('AIGrades',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12]}));},

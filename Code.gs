@@ -304,6 +304,13 @@ function extendSessionTimer(sessId, seconds) { return DB.extendSessionTimer(sess
 function cancelSessionTimer(sessId) { return DB.cancelSessionTimer(sessId); }
 function startSessionTimer(sessId) { return DB.startSessionTimer(sessId); }
 
+// ── Session Pause ──
+function pauseSession(sessId) { return DB.pauseSession(sessId); }
+function resumeSession(sessId) { return DB.resumeSession(sessId); }
+
+// ── Individual Student Timer ──
+function extendStudentTimer(sessId, stuId, additionalSeconds) { return DB.extendStudentTimer(sessId, stuId, additionalSeconds); }
+
 // ── Student ──
 function studentJoin(code, first, last, clientToken, studentToken) { return DB.studentJoin(code, first, last, clientToken, studentToken); }
 function studentGetQuestions(sessId, stuId) { return DB.studentGetQuestions(sessId, stuId); }
