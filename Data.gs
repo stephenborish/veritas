@@ -1138,7 +1138,7 @@ const DB = {
   resumeSession(sessId) {
     return this.withLock(() => {
       const sess = this.getSessionById(sessId);
-      if (!sess) return {error:'Session not found'};
+      if (!sess || sess.status !== 'active') return {error:'No active session'};
       const cfg = sess.config || {};
       if (!cfg.sessionPaused) return {ok:true}; // Already running
       cfg.sessionPaused = false;
@@ -1160,7 +1160,8 @@ const DB = {
     return this.withLock(() => {
       const sess = this.getSessionById(sessId);
       if (!sess) return {error:'Session not found'};
-      const addMs = additionalSeconds * 1000;
+      const addMs = (Number(additionalSeconds) || 0) * 1000;
+      if (addMs <= 0) return {error:'Invalid time value'};
       const stuSheet = this.sh('StudentSessions');
       const d = stuSheet.getDataRange().getValues();
       for (let i = 1; i < d.length; i++) {
@@ -2037,8 +2038,18 @@ const DB = {
     return d.slice(1).filter(r=>r[0]===sessId);
   },
   getStudentSessions(sessId,snapshot){const rows=this._getSessionRows('StudentSessions',sessId,snapshot);return rows.map(r=>{let _fq=[];try{if(r[15])_fq=JSON.parse(r[15]);}catch(e){}return{studentId:r[1],studentName:r[2],email:r[3],status:r[4],joinedAt:r[5],finishedAt:r[6],violationCount:r[7]||0,lockedOut:r[8]===true||r[8]==='TRUE',qOrder:r[9],needsFS:r[10]===true||r[10]==='TRUE',clientToken:r[11],normalizedName:r[12]||this.normalizeStudentName(r[2]||''),identityKey:r[13]||'',flaggedQs:_fq,currentQIndex:r[16]!==undefined&&r[16]!==''?Number(r[16])||0:0,timerExtensionMs:Number(r[17])||0};});},
-  // Strip legacy "'" prefix from answers (was incorrectly prepended before setNumberFormat('@') fix)
-  _cleanAnswer(val){return typeof val==='string'&&val.length>0&&val.charAt(0)==="'"?val.substring(1):val;},
+  // Strip legacy "'" prefix from answers. The old code prepended "'" to non-JSON answers
+  // before setNumberFormat('@') was sufficient. Only strip if the result is non-empty and
+  // the original was not a JSON structure (which was never prefixed).
+  _cleanAnswer(val){
+    if(typeof val!=='string'||val.length<2||val.charAt(0)!=="'") return val;
+    const rest=val.substring(1);
+    // JSON arrays/objects were never prefixed, so "'[" or "'{" is a genuine apostrophe
+    if(rest.charAt(0)==='['||rest.charAt(0)==='{') return val;
+    // If stripping produces a valid JSON array, the "'" was genuine (e.g. user typed '["x"])
+    try{const p=JSON.parse(rest);if(Array.isArray(p)) return val;}catch(e){}
+    return rest;
+  },
   getAllResponses(sessId,snapshot){const rows=this._getSessionRows('Responses',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:this._cleanAnswer(r[5]),isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
   getAllMeta(sessId,snapshot){const rows=this._getSessionRows('Metacognition',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
   getActiveViolations(sessId,snapshot){const rows=this._getSessionRows('Violations',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},

@@ -1674,9 +1674,17 @@
             failureHandler(new Error('System busy'));
             return;
           }
-          // Non-retryable server errors (locked question, session ended, paused) — drop and move on
+          // Non-retryable server errors — drop the item but notify the student
           if (res && res.error && typeof res.error === 'string') {
-            console.warn('SyncQueue: server rejected (' + item.fnName + '):', res.error);
+            var errMsg = res.error;
+            var isExpected = errMsg.indexOf('locked') > -1 || errMsg.indexOf('paused') > -1 || errMsg.indexOf('ended') > -1;
+            if (isExpected) {
+              console.warn('SyncQueue: expected rejection (' + item.fnName + '):', errMsg);
+            } else {
+              // Unexpected server error — warn student so they know answer may not have saved
+              console.error('SyncQueue: unexpected server error (' + item.fnName + '):', errMsg);
+              toast('Your response may not have been saved. Please try again.');
+            }
             SyncQueue.items.shift();
             SyncQueue.isProcessing = false;
             SyncQueue.process();
