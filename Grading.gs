@@ -199,8 +199,10 @@ const Grader = {
 
             const responseEntry = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
             if (responseEntry) {
-              respSheet.getRange(responseEntry.row, 8).setValue(finalResult.score);
-              respSheet.getRange(responseEntry.row, 7).setValue(responseEntry.maxPts > 0 && Number(finalResult.score) >= responseEntry.maxPts);
+              respSheet.getRange(responseEntry.row, 7, 1, 2).setValues([[
+                responseEntry.maxPts > 0 && Number(finalResult.score) >= responseEntry.maxPts,
+                finalResult.score
+              ]]);
             }
 
             count++;
@@ -245,13 +247,10 @@ const Grader = {
                 ]);
                 const responseEntry = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
                 if (responseEntry) {
-                  respSheet.getRange(responseEntry.row, 8).setValue(singleRes.score);
-                  respSheet.getRange(responseEntry.row, 7).setValue(responseEntry.maxPts > 0 && Number(singleRes.score) >= responseEntry.maxPts);
-                }
-                // Flush immediately after each fallback grade to keep sheets in sync.
-                if (newGradeRows.length > 0) {
-                  this._batchAppendRows(gradeSheet, newGradeRows);
-                  newGradeRows = [];
+                  respSheet.getRange(responseEntry.row, 7, 1, 2).setValues([[
+                    responseEntry.maxPts > 0 && Number(singleRes.score) >= responseEntry.maxPts,
+                    singleRes.score
+                  ]]);
                 }
                 count++;
                 done.add(k);
@@ -263,10 +262,13 @@ const Grader = {
              }
           }
 
+          // Flush any buffered rows from the entire fallback loop at once
+          if (newGradeRows.length > 0) {
+            this._batchAppendRows(gradeSheet, newGradeRows);
+            newGradeRows = [];
+          }
+
           if (errors > 5) {
-            if (newGradeRows.length > 0) {
-              this._batchAppendRows(gradeSheet, newGradeRows);
-            }
             const out = { gradedCount: count, errors, totalToGrade, message: 'Too many API errors. Last error: ' + lastError };
             this.setStatus(sessId, Object.assign({ state: 'error', sessionId: sessId }, out));
             return out;
