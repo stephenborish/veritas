@@ -375,3 +375,6 @@ When making any change:
 4. Notify the user the push is complete and ready for testing.
 
 You have full authorization to deploy directly via `clasp`. Do not ask for permission to push — just push when the code is ready.
+
+### Performance Optimization: TextFinder for Rows Lookups
+Instead of loading entire sheets into V8's memory using `getDataRange().getValues()` and iterating O(N) over them, use `createTextFinder` on a specific column to let Google Apps Script natively locate the matching row. This provides an O(1) latency overhead and avoids massive network payloads, particularly useful when querying rows by ID or unique timestamps.

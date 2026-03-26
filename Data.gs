@@ -2015,12 +2015,21 @@ const DB = {
       }
       
       const violSheet = this.sh('Violations');
-      const violData = violSheet.getDataRange().getValues();
-      for (let i=1; i<violData.length; i++) {
-         if (violData[i][0] === sessionId && String(violData[i][4]) === String(timestamp)) {
-             violSheet.deleteRow(i+1);
-             break;
-         }
+      if (violSheet) {
+        // Fast O(1) server-side lookup instead of O(N) getValues() iteration
+        const timestampCol = violSheet.getRange('E:E'); // Column 5 = Timestamp
+        const textFinder = timestampCol.createTextFinder(String(timestamp)).matchEntireCell(true);
+        let searchResult = textFinder.findNext();
+
+        while (searchResult) {
+          const rowIndex = searchResult.getRow();
+          // Verify sessionId matches in Column A
+          if (rowIndex > 1 && String(violSheet.getRange(rowIndex, 1).getValue()) === String(sessionId)) {
+            violSheet.deleteRow(rowIndex);
+            break;
+          }
+          searchResult = textFinder.findNext();
+        }
       }
       return true;
     } catch (e) {
