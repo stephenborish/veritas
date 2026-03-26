@@ -2817,7 +2817,7 @@
             toast('Ended', 'ok');
             aSid = null;
             if (liveInt) clearInterval(liveInt);
-            document.getElementById('liveStatusBanner').innerHTML = '<div class="card" style="text-align:center; padding: 40px"><div style="font-size:40px">🏁</div><h2 style="font-size:24px; font-weight:700; margin-bottom:12px">Session Ended Successfully</h2><div style="color:var(--tx2);margin-top:10px">Student data has been archived. You may now launch a new session.</div></div>';
+            document.getElementById('liveStatusBanner').innerHTML = '<div class="card" style="text-align:center; padding: 40px"><div style="font-size:40px">🏁</div><h2 style="font-size:24px; font-weight:700; margin-bottom:12px">Session Ended Successfully</h2><div style="color:var(--tx2);margin-top:10px">Student data has been archived. You may now launch a new session.</div><button class="nbtn" style="margin-top:24px" onclick="document.querySelector(\'.ni[data-s=dashboard]\').click()">Go to Home</button></div>';
             document.getElementById('lockstepControls').style.display = 'none';
             document.getElementById('lView').innerHTML = '';
             loadLaunch();
