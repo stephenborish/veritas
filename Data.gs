@@ -2015,12 +2015,16 @@ const DB = {
       }
       
       const violSheet = this.sh('Violations');
-      const violData = violSheet.getDataRange().getValues();
-      for (let i=1; i<violData.length; i++) {
-         if (violData[i][0] === sessionId && String(violData[i][4]) === String(timestamp)) {
-             violSheet.deleteRow(i+1);
-             break;
-         }
+      // ⚡ Performance Fix: Avoids `getValues()` on potentially huge Violations sheet.
+      // TextFinder operates natively in the Sheets API, drastically reducing execution time and memory.
+      const matches = violSheet.createTextFinder(String(timestamp)).matchEntireCell(true).findAll();
+      for (let i = 0; i < matches.length; i++) {
+        const rowNum = matches[i].getRow();
+        // Double check session ID to prevent collisions across sessions with identical timestamps
+        if (String(violSheet.getRange(rowNum, 1).getValue()) === String(sessionId)) {
+          violSheet.deleteRow(rowNum);
+          break;
+        }
       }
       return true;
     } catch (e) {

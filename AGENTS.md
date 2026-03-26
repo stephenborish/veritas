@@ -375,3 +375,6 @@ When making any change:
 4. Notify the user the push is complete and ready for testing.
 
 You have full authorization to deploy directly via `clasp`. Do not ask for permission to push — just push when the code is ready.
+
+### Performance Note: Fast Row Lookups
+To quickly find a matching row in a large sheet without pulling the entire dataset into memory via `getValues()`, use `createTextFinder`. Example: `const matches = sheet.createTextFinder(searchString).matchEntireCell(true).findAll();`. This operates natively within the Sheets API and runs orders of magnitude faster with ~0 runtime memory overhead compared to `getValues()` arrays in App Script's V8 engine.
