@@ -4093,19 +4093,20 @@
     document.addEventListener('click', e => {
       if (e.target.tagName === 'IMG' && e.target.closest('.q-editor')) {
         const currentSize = e.target.style.width || e.target.getAttribute('width') || '100%';
-        const newSize = prompt("Resize image width (e.g., '100%', '300px'):", currentSize);
-        if (newSize) {
-          e.target.style.width = newSize;
-          e.target.removeAttribute('width');
-          e.target.removeAttribute('height'); // preserve aspect ratio naturally
+        sysPrompt('Resize Image', 'Enter a new width (e.g. 100%, 300px).', currentSize, (newSize) => {
+          if (newSize) {
+            e.target.style.width = newSize;
+            e.target.removeAttribute('width');
+            e.target.removeAttribute('height'); // preserve aspect ratio naturally
 
-          // Manually trigger input to ensure save picks up style change
-          const editor = e.target.closest('.q-editor');
-          if (editor) {
-            const ev = new Event('input', { bubbles: true });
-            editor.dispatchEvent(ev);
+            // Manually trigger input to ensure save picks up style change
+            const editor = e.target.closest('.q-editor');
+            if (editor) {
+              const ev = new Event('input', { bubbles: true });
+              editor.dispatchEvent(ev);
+            }
           }
-        }
+        });
       }
     });
 
@@ -4998,27 +4999,34 @@
     }
 
     function editRowKey(sessId, qId, type, oldKey) {
-      const newAns = prompt(`Edit correct answer for this ${type === 'mc' ? 'Multiple Choice' : 'Short Answer'} question.\n\nEnter the exact answer text you want marked as correct:`, oldKey);
-      if (!newAns || newAns === oldKey) return;
-      showLoad('Updating answer key and rescoring class data...');
-      google.script.run
-        .withSuccessHandler(() => { hideLoad(); loadAnaDetail(sessId); })
-        .withFailureHandler(e => { hideLoad(); alert('Error rescoring: ' + e); })
-        .rescoreQuestion(sessId, qId, newAns);
+      sysPrompt(
+        `Edit Correct Answer`,
+        `Edit correct answer for this ${type === 'mc' ? 'Multiple Choice' : 'Short Answer'} question. Enter the exact answer text you want marked as correct:`,
+        oldKey,
+        (newAns) => {
+          if (!newAns || newAns === oldKey) return;
+          showLoad('Updating answer key and rescoring class data...');
+          google.script.run
+            .withSuccessHandler(() => { hideLoad(); loadAnaDetail(sessId); })
+            .withFailureHandler(e => { hideLoad(); toast('Error rescoring: ' + (e.message || e), 'err'); })
+            .rescoreQuestion(sessId, qId, newAns);
+        }
+      );
     }
 
     function doDismissViolation(sessId, timestamp, ev) {
       if (ev) ev.stopPropagation();
-      if (!confirm("Are you sure you want to completely dismiss this violation from the student's analytics record?")) return;
-      showLoad('Dismissing violation...');
-      google.script.run
-        .withSuccessHandler(() => {
-          hideLoad();
-          document.getElementById('anaStudentModal').classList.remove('show-drawer');
-          loadAnaDetail(sessId);
-        })
-        .withFailureHandler(e => { hideLoad(); alert('Error dismissing: ' + e); })
-        .dismissViolation(sessId, timestamp);
+      sysConfirm('Dismiss Violation', "Are you sure you want to completely dismiss this violation from the student's analytics record?", 'Dismiss', () => {
+        showLoad('Dismissing violation...');
+        google.script.run
+          .withSuccessHandler(() => {
+            hideLoad();
+            document.getElementById('anaStudentModal').classList.remove('show-drawer');
+            loadAnaDetail(sessId);
+          })
+          .withFailureHandler(e => { hideLoad(); toast('Error dismissing: ' + (e.message || e), 'err'); })
+          .dismissViolation(sessId, timestamp);
+      }, true);
     }
 
     // Simple markdown parser for bold, italics, headers, lists
@@ -5052,19 +5060,21 @@
 
     // ── DELETION TOOLS ──
     function delQS(id) {
-      if (!confirm("Permanently delete this Question Set?")) return;
-      showLoad('Deleting...');
-      google.script.run.withSuccessHandler(() => { hideLoad(); loadQS(); document.querySelector('[data-s=dashboard]').click(); })
-        .withFailureHandler(e => { hideLoad(); alert(e.message || e); })
-        .deleteQuestionSet(id);
+      sysConfirm('Delete Question Set', "Permanently delete this Question Set?", 'Delete', () => {
+        showLoad('Deleting...');
+        google.script.run.withSuccessHandler(() => { hideLoad(); loadQS(); document.querySelector('[data-s=dashboard]').click(); })
+          .withFailureHandler(e => { hideLoad(); toast(e.message || e, 'err'); })
+          .deleteQuestionSet(id);
+      }, true);
     }
 
     function delArchive(id) {
-      if (!confirm("Permanently delete this assessment history? All student scores will be lost.")) return;
-      showLoad('Deleting...');
-      google.script.run.withSuccessHandler(() => { hideLoad(); loadAnaList(); document.querySelector('[data-s=dashboard]').click(); })
-        .withFailureHandler(e => { hideLoad(); alert(e.message || e); })
-        .deleteArchiveSession(id);
+      sysConfirm('Delete Assessment History', "Permanently delete this assessment history? All student scores will be lost.", 'Delete', () => {
+        showLoad('Deleting...');
+        google.script.run.withSuccessHandler(() => { hideLoad(); loadAnaList(); document.querySelector('[data-s=dashboard]').click(); })
+          .withFailureHandler(e => { hideLoad(); toast(e.message || e, 'err'); })
+          .deleteArchiveSession(id);
+      }, true);
     }
 
     // ── EDIT ARCHIVED QUESTION MODAL ──
@@ -5124,7 +5134,7 @@
           hideLoad();
           loadAnaDetail(sessId); // Reload to pull new scores
         })
-        .withFailureHandler(e => { hideLoad(); alert('Error rescoring: ' + e.message || e); })
+        .withFailureHandler(e => { hideLoad(); toast('Error rescoring: ' + (e.message || e), 'err'); })
         .rescoreQuestionFull(sessId, q.id, JSON.stringify(q));
     }
 
@@ -5443,7 +5453,7 @@
 
     function loadRiskReport() {
       const courseId = document.getElementById('riskCourseSelect').value;
-      if (!courseId) { alert('Please select a course first.'); return; }
+      if (!courseId) { toast('Please select a course first.', 'err'); return; }
       const blockFilter = document.getElementById('riskBlockSelect').value || 'all';
       const res = document.getElementById('riskResult');
       res.innerHTML = '<div style="padding:24px; color:var(--teal); font-style:italic; font-weight:600">⚙️ Scanning archived sessions…</div>';
