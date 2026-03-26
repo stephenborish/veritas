@@ -380,18 +380,35 @@
     }
 
     .a-hdr {
-      background: rgba(255, 255, 255, 0.85);
+      background: rgba(255, 255, 255, 0.96);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border-bottom: 1px solid var(--bd);
-      padding: 16px 40px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
       position: sticky;
       top: 0;
       z-index: 50;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+      width: 100%;
+      box-sizing: border-box;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+
+    .a-hdr__top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 32px;
+    }
+
+    .a-hdr__left {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+
+    .a-hdr__right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
     .a-hdr .brand {
@@ -405,27 +422,157 @@
       font-size: 13px;
       background: var(--tBg);
       color: var(--teal);
-      padding: 6px 16px;
+      padding: 5px 14px;
       border-radius: 20px;
       font-weight: 600;
-      margin-left: 16px
+      margin-left: 14px;
     }
 
     .a-hdr .prog {
-      font-size: 15px;
+      font-size: 13px;
       color: var(--tx3);
-      font-weight: 600
+      font-weight: 600;
+      white-space: nowrap;
     }
 
     .timer-pill {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 700;
-      padding: 8px 20px;
+      padding: 6px 16px;
       border-radius: 24px;
       border: 2px solid var(--bd);
-      margin-right: 16px
     }
+
+    /* ── Question Progress Timeline (header row 2) ── */
+    .a-hdr__timeline {
+      border-top: 1px solid var(--bd);
+      padding: 8px 32px 10px;
+      overflow-x: auto;
+      overflow-y: visible;
+      scrollbar-width: none;
+    }
+    .a-hdr__timeline::-webkit-scrollbar { display: none; }
+
+    .qtl-track {
+      display: flex;
+      align-items: center;
+      min-width: max-content;
+      padding-bottom: 16px; /* room for flag tag below circles */
+    }
+
+    .qtl-connector {
+      width: 28px;
+      height: 2px;
+      background: #e2e8f0;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .qtl-connector.filled { background: var(--teal); }
+
+    .qtl-node {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .qtl-node.no-jump { cursor: default; }
+
+    .qtl-circle {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      border: 2px solid #cbd5e1;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #64748b;
+      transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
+      position: relative;
+      z-index: 1;
+    }
+    .qtl-node:not(.no-jump):hover .qtl-circle {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(13,148,136,0.15);
+    }
+    /* Answered */
+    .qtl-node.answered .qtl-circle {
+      background: var(--teal);
+      border-color: var(--teal);
+      color: #fff;
+    }
+    /* Current */
+    .qtl-node.current .qtl-circle {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 4px rgba(13,148,136,0.28);
+    }
+    .qtl-node.answered.current .qtl-circle {
+      box-shadow: 0 0 0 4px rgba(13,148,136,0.28);
+    }
+    /* Flagged */
+    .qtl-node.flagged .qtl-circle {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 3px rgba(245,158,11,0.22);
+    }
+    .qtl-node.answered.flagged .qtl-circle {
+      background: var(--teal);
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 3px rgba(245,158,11,0.22);
+    }
+    .qtl-node.answered.flagged.current .qtl-circle {
+      box-shadow: 0 0 0 4px rgba(245,158,11,0.3);
+    }
+
+    /* Flag tag below circle */
+    .qtl-tag {
+      position: absolute;
+      top: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #f59e0b;
+      background: rgba(245,158,11,0.12);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: 4px;
+      padding: 1px 5px;
+      white-space: nowrap;
+      max-width: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+      z-index: 2;
+      transition: background 0.15s;
+    }
+    .qtl-tag:hover { background: rgba(245,158,11,0.22); }
+
+    /* Flag toggle button (appears on hover when not flagged) */
+    .qtl-flag-btn {
+      position: absolute;
+      top: 33px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: none;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 9px;
+      padding: 1px 5px;
+      line-height: 1.4;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s;
+      z-index: 2;
+    }
+    .qtl-node:hover .qtl-flag-btn { opacity: 1; }
+    .qtl-node.flagged .qtl-flag-btn { display: none; }
 
     .timer-pill--expired {
       animation: timerExpiredPulse 1.2s ease-in-out infinite;
@@ -435,12 +582,12 @@
       50%       { opacity: 0.7; transform: scale(1.05); }
     }
 
-    /* Desktop Full Width Layout */
+    /* Content area */
     .q-area {
-      max-width: 1400px;
+      max-width: 860px;
       width: 90%;
       margin: 0 auto;
-      padding: 48px 0 100px;
+      padding: 36px 0 100px;
     }
 
     /* Fixed navigation footer */
@@ -1332,71 +1479,9 @@
       100% { width: 15%; margin-left: 85%; }
     }
 
-    /* ── Question Sidebar & Progress Timeline ── */
-    .exam-layout { display: flex; align-items: flex-start; position: relative; }
-    .q-sidebar {
-      width: 228px; min-width: 228px; flex-shrink: 0;
-      position: fixed; top: 56px; left: 0; bottom: 0; overflow-y: auto; overflow-x: hidden;
-      background: rgba(15,20,30,0.97); border-right: 1px solid rgba(255,255,255,0.10);
-      transition: width 0.25s ease, min-width 0.25s ease; z-index: 40;
-      display: flex; flex-direction: column;
-    }
-    .q-sidebar.collapsed { width: 40px; min-width: 40px; }
-    .q-sidebar.collapsed ~ .q-main { margin-left: 40px; }
-    .qsb-header {
-      display: flex; align-items: center; gap: 8px;
-      padding: 12px 10px 10px; border-bottom: 1px solid rgba(255,255,255,0.10);
-      background: rgba(15,20,30,0.98); z-index: 1;
-    }
-    .qsb-summary {
-      font-size: 11px; color: var(--tx3); font-weight: 600;
-      letter-spacing: 0.04em; text-transform: uppercase;
-      white-space: nowrap; overflow: hidden; flex: 1;
-    }
-    .sidebar-toggle {
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 6px; color: var(--tx2); cursor: pointer; padding: 3px 7px;
-      font-size: 11px; flex-shrink: 0; transition: background 0.15s; line-height: 1.4;
-    }
-    .sidebar-toggle:hover { background: rgba(255,255,255,0.12); }
-    .q-sidebar.collapsed .qsb-summary { display: none; }
-    .qsb-pills {
-      flex: 1; padding: 8px 6px; display: flex; flex-direction: column; gap: 2px;
-    }
-    .q-sidebar.collapsed .qsb-pills { display: none; }
-    .q-sidebar.collapsed .qsb-next-flagged { display: none !important; }
-    .qsb-pill {
-      display: flex; align-items: center; gap: 7px; padding: 6px 8px;
-      border-radius: 8px; cursor: pointer; transition: background 0.15s, border-color 0.15s;
-      border: 1px solid transparent; user-select: none;
-    }
-    .qsb-pill:hover { background: rgba(255,255,255,0.06); }
-    .qsb-pill.no-jump { cursor: default; }
-    .qpill-num {
-      width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center;
-      justify-content: center; font-size: 11px; font-weight: 700;
-      background: rgba(255,255,255,0.06); color: var(--tx3); flex-shrink: 0;
-    }
-    .qsb-pill.answered .qpill-num { background: rgba(13,148,136,0.2); color: #2dd4bf; }
-    .qsb-pill.flagged .qpill-num { background: rgba(245,158,11,0.18); color: #fbbf24; }
-    .qsb-pill.current { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.15); }
-    .qsb-pill.current .qpill-num { box-shadow: 0 0 0 2px #0D9488; color: #2dd4bf; }
-    .qpill-label {
-      font-size: 11px; color: var(--tx3); white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis; max-width: 130px; flex: 1;
-    }
-    .qsb-pill.current .qpill-label { color: var(--tx2); }
-    .qpill-badge { font-size: 10px; flex-shrink: 0; }
-    .qpill-badge.flag { color: #fbbf24; }
-    .qpill-badge.check { color: #2dd4bf; }
-    .qsb-next-flagged {
-      margin: 6px 8px 10px; padding: 8px 10px;
-      background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.28);
-      border-radius: 8px; color: #fbbf24; font-size: 11px; font-weight: 600;
-      cursor: pointer; transition: background 0.15s; text-align: center; width: calc(100% - 16px);
-    }
-    .qsb-next-flagged:hover { background: rgba(245,158,11,0.18); }
-    .q-main { flex: 1; min-width: 0; margin-left: 228px; transition: margin-left 0.25s ease; }
+    /* ── Content Layout ── */
+    .exam-layout { display: block; }
+    .q-main { width: 100%; }
 
     /* ── Flag button ── */
     .flag-btn {
@@ -1422,10 +1507,9 @@
     @keyframes connPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
 
     @media (max-width: 720px) {
-      .q-sidebar { width: 200px; min-width: 200px; z-index: 45; background: var(--bg); }
-      .q-sidebar.collapsed { width: 0; min-width: 0; border-right: none; }
-      .q-main { margin-left: 0 !important; }
-      .q-sidebar:not(.collapsed) ~ .q-main { margin-left: 200px; }
+      .a-hdr__top { padding: 8px 16px; }
+      .a-hdr__timeline { padding: 6px 16px 8px; }
+      .q-area { width: 94%; padding: 24px 0 100px; }
     }
   </style>
 </head>
@@ -1487,23 +1571,23 @@
   </div>
 
   <div class="assess" id="assessUI">
-    <div class="a-hdr">
-      <div><span class="brand">VERITAS</span><span class="stu-b" id="stuBadge"></span></div>
-      <div style="display:flex;align-items:center">
-        <span class="timer-pill" id="timerPill" style="display:none">--:--</span>
-        <span class="timer-pill" id="qTimerPill" style="display:none;background:#ef4444;color:#fff;margin-left:6px">--:--</span>
-        <span class="prog" id="progTxt"></span>
+    <div class="a-hdr" id="assessHeader">
+      <div class="a-hdr__top">
+        <div class="a-hdr__left">
+          <span class="brand">VERITAS</span>
+          <span class="stu-b" id="stuBadge"></span>
+        </div>
+        <div class="a-hdr__right">
+          <span class="timer-pill" id="timerPill" style="display:none">--:--</span>
+          <span class="timer-pill" id="qTimerPill" style="display:none;background:#ef4444;color:#fff">--:--</span>
+          <span class="prog" id="progTxt"></span>
+        </div>
+      </div>
+      <div class="a-hdr__timeline" id="qtlTimeline">
+        <div class="qtl-track" id="qtlPills"></div>
       </div>
     </div>
     <div class="exam-layout">
-      <div id="qSidebar" class="q-sidebar">
-        <div class="qsb-header">
-          <span class="qsb-summary" id="qtlSummary">0 / 0 answered</span>
-          <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">◀</button>
-        </div>
-        <div class="qsb-pills" id="qtlPills"></div>
-        <button class="qsb-next-flagged" id="nextFlaggedBtn" onclick="jumpToNextFlagged()" style="display:none">&#9733; Next Flagged</button>
-      </div>
       <div class="q-main">
         <div class="q-area" id="qArea"></div>
       </div>
@@ -1583,7 +1667,7 @@
       // Session timer sync state
       sessionTimerPaused: false, sessionTimerCancelled: false,
       // Question flagging & progress tracking
-      flagged: {}, viewedAt: {}, lsLastReportedQ: -2, _connFails: 0, _sidebarCollapsed: false,
+      flagged: {}, flagLabels: {}, viewedAt: {}, lsLastReportedQ: -2, _connFails: 0,
       _justSubmittedQ: null
     };
 
@@ -2085,6 +2169,7 @@
         const total = S.qs.length;
         document.getElementById('progTxt').textContent = '';
         document.getElementById('aFt').style.display = 'none';
+        var tl = document.getElementById('qtlTimeline'); if (tl) tl.style.display = 'none';
         let hr = '';
         hr += '<div class="q-card" style="text-align:center; padding:72px 48px; position:relative; overflow:hidden">';
         hr += '<div style="position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(to right,#0D9488,#2dd4bf,#4ade80);background-size:200%;animation:holdingBarShift 3s linear infinite"></div>';
@@ -2105,10 +2190,10 @@
         return;
       }
       document.getElementById('qArea').dataset.state = '';
+      var tl = document.getElementById('qtlTimeline'); if (tl) tl.style.display = '';
 
       const q = S.qs[S.cur]; if (!q) return;
       const total = S.qs.length;
-      document.getElementById('progTxt').textContent = 'Question ' + (S.cur + 1) + ' of ' + total;
 
       // Audit: log first view of this question (fire-and-forget)
       if (!S.viewedAt[q.id]) {
@@ -2960,16 +3045,13 @@
       if (!qId) return;
       if (S.flagged[qId]) {
         delete S.flagged[qId];
+        if (S.flagLabels) delete S.flagLabels[qId];
         logAction('unflag', qId, '');
       } else {
         S.flagged[qId] = true;
         logAction('flag', qId, '');
       }
-      lsSave();
-      // Push to server (fire-and-forget via SyncQueue not needed — flags are non-critical)
-      var flaggedArr = Object.keys(S.flagged).filter(function(k) { return S.flagged[k]; });
-      try { google.script.run.studentUpdateFlags(S.sid, S.stuId, flaggedArr); } catch(e) {}
-      // Re-render flag button in place (faster than full renderQ)
+      updateFlagsBackend();
       renderTimeline();
       var btn = document.querySelector('.flag-btn');
       if (btn && btn.closest('.q-card')) {
@@ -2978,74 +3060,104 @@
         btn.title = isFlagged ? 'Remove flag' : 'Flag to revisit';
         btn.innerHTML = (isFlagged ? '&#9733;' : '&#9734;') + ' ' + (isFlagged ? 'Flagged' : 'Flag');
       }
-      // Show/hide Next Flagged button
-      var hasFlagged = Object.keys(S.flagged).some(function(k) { return S.flagged[k]; });
-      var nfb = document.getElementById('nextFlaggedBtn');
-      if (nfb) nfb.style.display = hasFlagged && !S._sidebarCollapsed ? '' : 'none';
     }
 
-    // ── Progress Timeline Sidebar ───────────────────────────────────────
+    function updateFlagsBackend() {
+      lsSave();
+      var flaggedArr = Object.keys(S.flagged).filter(function(k) { return S.flagged[k]; });
+      try { google.script.run.studentUpdateFlags(S.sid, S.stuId, flaggedArr); } catch(e) {}
+    }
+
+    // ── Progress Timeline (header circles) ──────────────────────────────
     function renderTimeline() {
-      var pills = document.getElementById('qtlPills');
-      var summary = document.getElementById('qtlSummary');
-      var nfb = document.getElementById('nextFlaggedBtn');
-      if (!pills || !S.qs || !S.qs.length) return;
+      var track = document.getElementById('qtlPills');
+      var progTxt = document.getElementById('progTxt');
+      if (!track || !S.qs || !S.qs.length) return;
 
       var total = S.qs.length;
       var answeredCount = 0;
-      var flaggedCount = 0;
       var html = '';
+
+      // Pre-calculate answered state for connector coloring
+      var answered = [];
+      for (var i = 0; i < total; i++) {
+        var q = S.qs[i];
+        answered[i] = !!S.ans[q.id] && String(S.ans[q.id]).trim().length > 0;
+        if (answered[i]) answeredCount++;
+      }
+
+      var isLockstep = S.mode === 'lockstep';
 
       for (var i = 0; i < total; i++) {
         var q = S.qs[i];
-        var isAnswered = !!S.ans[q.id] && String(S.ans[q.id]).trim().length > 0;
+        var isAnswered = answered[i];
         var isFlagged = !!S.flagged[q.id];
         var isCurrent = (i === S.cur);
-        var isLockstep = S.mode === 'lockstep';
-        if (isAnswered) answeredCount++;
-        if (isFlagged) flaggedCount++;
-        var cls = 'qsb-pill';
+
+        var cls = 'qtl-node';
         if (isAnswered) cls += ' answered';
         if (isFlagged) cls += ' flagged';
         if (isCurrent) cls += ' current';
         if (isLockstep) cls += ' no-jump';
-        // Truncate question text for label
-        var label = q.text ? q.text.replace(/<[^>]+>/g, '').substring(0, 40) : ('Q' + (i + 1));
+
         var clickAttr = (!isLockstep) ? ' onclick="jumpToQ(' + i + ')"' : '';
-        html += '<div class="' + cls + '"' + clickAttr + ' title="' + (isLockstep ? '' : 'Jump to question ') + (i + 1) + '">';
-        html += '<span class="qpill-num">' + (i + 1) + '</span>';
-        html += '<span class="qpill-label">' + label + '</span>';
-        if (isFlagged) html += '<span class="qpill-badge flag">&#9733;</span>';
-        else if (isAnswered) html += '<span class="qpill-badge check">&#10003;</span>';
+        var titleAttr = isLockstep ? 'Question ' + (i + 1) : 'Jump to question ' + (i + 1);
+
+        html += '<div class="' + cls + '"' + clickAttr + ' title="' + titleAttr + '">';
+        html += '<div class="qtl-circle">' + (i + 1) + '</div>';
+
+        // Show flag tag if flagged (with custom label support stored in S.flagLabels)
+        if (isFlagged) {
+          var tagLabel = (S.flagLabels && S.flagLabels[q.id]) ? S.flagLabels[q.id] : '★ Review';
+          html += '<span class="qtl-tag" onclick="event.stopPropagation();showFlagTag(' + i + ')" title="' + tagLabel + '">' + tagLabel + '</span>';
+        } else if (!isLockstep) {
+          html += '<button class="qtl-flag-btn" onclick="event.stopPropagation();toggleFlag(\'' + q.id + '\')" title="Flag for review">⚑ Flag</button>';
+        }
+
         html += '</div>';
+
+        // Connector between nodes
+        if (i < total - 1) {
+          var connCls = 'qtl-connector';
+          if (isAnswered && answered[i + 1]) connCls += ' filled';
+          html += '<div class="' + connCls + '"></div>';
+        }
       }
 
-      pills.innerHTML = html;
-      if (summary) summary.textContent = answeredCount + ' / ' + total + ' answered';
+      track.innerHTML = html;
 
-      // Show "Next Flagged" button only if there are flagged questions and sidebar is expanded
-      if (nfb) nfb.style.display = (flaggedCount > 0 && !S._sidebarCollapsed) ? '' : 'none';
+      // Update progress text in header
+      if (progTxt) progTxt.textContent = (S.cur >= 0 ? 'Question ' + (S.cur + 1) + ' of ' + total : total + ' questions') + ' · ' + answeredCount + '/' + total + ' answered';
 
-      // Scroll current pill into view
-      var currentPill = pills.querySelector('.qsb-pill.current');
-      if (currentPill) {
-        currentPill.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      // Scroll current node into view horizontally
+      var currentNode = track.querySelector('.qtl-node.current');
+      if (currentNode) {
+        currentNode.scrollIntoView({ inline: 'nearest', behavior: 'smooth', block: 'nearest' });
       }
     }
 
-    function toggleSidebar() {
-      S._sidebarCollapsed = !S._sidebarCollapsed;
-      var sb = document.getElementById('qSidebar');
-      var tog = document.getElementById('sidebarToggle');
-      if (S._sidebarCollapsed) {
-        sb.classList.add('collapsed');
-        if (tog) tog.textContent = '▶';
+    // Show prompt to edit a flag's label tag
+    function showFlagTag(idx) {
+      if (S.mode === 'lockstep') return;
+      var q = S.qs[idx];
+      if (!q) return;
+      if (!S.flagLabels) S.flagLabels = {};
+      var current = S.flagLabels[q.id] || '';
+      var label = window.prompt('Tag label for Question ' + (idx + 1) + ' (leave blank to remove flag):', current);
+      if (label === null) return; // cancelled
+      if (label.trim() === '') {
+        // Remove flag entirely
+        S.flagged[q.id] = false;
+        delete S.flagLabels[q.id];
       } else {
-        sb.classList.remove('collapsed');
-        if (tog) tog.textContent = '◀';
-        renderTimeline(); // refresh after expanding
+        S.flagLabels[q.id] = label.trim().substring(0, 20);
+        S.flagged[q.id] = true;
       }
+      renderTimeline();
+      updateFlagsBackend();
     }
+
+    function toggleSidebar() { /* no-op — sidebar removed */ }
 
     function jumpToQ(idx) {
       if (S.mode === 'lockstep') return;
