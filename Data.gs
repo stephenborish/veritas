@@ -133,12 +133,16 @@ const DB = {
   studentUpdateFlags(sessId, stuId, flaggedQIds) {
     return this.withLock(() => {
       const sheet = this.sh('StudentSessions');
-      const data = sheet.getDataRange().getValues();
-      for (let i = 1; i < data.length; i++) {
-        if (data[i][0] === sessId && data[i][1] === stuId) {
-          const safe = Array.isArray(flaggedQIds) ? flaggedQIds.filter(function(x) { return typeof x === 'string'; }) : [];
-          sheet.getRange(i + 1, 16).setValue(JSON.stringify(safe));
-          return { ok: true };
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        // Fetch only the first 2 columns (SessionID, StudentID) to save payload/memory
+        const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+        for (let i = 0; i < data.length; i++) {
+          if (data[i][0] === sessId && data[i][1] === stuId) {
+            const safe = Array.isArray(flaggedQIds) ? flaggedQIds.filter(function(x) { return typeof x === 'string'; }) : [];
+            sheet.getRange(i + 2, 16).setValue(JSON.stringify(safe));
+            return { ok: true };
+          }
         }
       }
       return { ok: false, error: 'Student session not found' };
@@ -149,11 +153,15 @@ const DB = {
   studentReportCurrentQ(sessId, stuId, qIndex) {
     return this.withLock(() => {
       const sheet = this.sh('StudentSessions');
-      const data = sheet.getDataRange().getValues();
-      for (let i = 1; i < data.length; i++) {
-        if (data[i][0] === sessId && data[i][1] === stuId) {
-          sheet.getRange(i + 1, 17).setValue(Number(qIndex) || 0);
-          return { ok: true };
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        // Fetch only the first 2 columns (SessionID, StudentID) to save payload/memory
+        const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+        for (let i = 0; i < data.length; i++) {
+          if (data[i][0] === sessId && data[i][1] === stuId) {
+            sheet.getRange(i + 2, 17).setValue(Number(qIndex) || 0);
+            return { ok: true };
+          }
         }
       }
       return { ok: false };
