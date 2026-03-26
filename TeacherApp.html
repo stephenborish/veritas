@@ -4228,9 +4228,6 @@
       }
       
       const isCorrect = matchedIdx !== -1 && correctIdxs.includes(matchedIdx);
-      if (window._debugReEval) {
-        console.log(`[reEvalMC] Q:${q.id} Answer:"${rawAns}" -> Clean:"${cleanAns}" -> MatchIdx:${matchedIdx} -> Correct:${isCorrect}`);
-      }
       return { pts: isCorrect ? (Number(q.points) || 1) : 0, isCorrect, matchedIdx };
     }
 
