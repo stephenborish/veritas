@@ -352,6 +352,11 @@ Called from the teacher UI on first setup. Creates the `'Veritas Assess — Data
 
 ## 12. Code Health & Best Practices
 
+### Performance & API Limits
+* **Avoid N+1 Queries in Loops:** Never use `getDataRange().getValues()` or `.setValue()` inside of an O(N) loop (like iterating over students or responses). This will quickly exhaust execution time limits.
+* **O(1) Map Lookups:** When updating rows in Google Sheets, load the entire data range once before the loop, build a `Map` to index row indices by a unique key (e.g., `studentId`), update the array in memory, and write back using batched `setValues()` or single-row `setValues([row])`.
+* **Batched Writes:** Always prefer a single `getRange(...).setValues(2D_ARRAY)` over multiple adjacent `.setValue()` calls.
+
 ### Exception Handling
 * **Never leave `catch` blocks empty.** Log unexpected errors.
 * **Backend:** Use `console.error(e)` or `Logger.log(e)` so errors appear in the Apps Script execution log.
