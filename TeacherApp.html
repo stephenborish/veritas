@@ -3864,7 +3864,7 @@
           // Auto-switch to grading tab if a SA question was just locked
           if (res && res.ok && res.session && window.__liveD) {
             const q = window.__liveD.qStats[curQIdx];
-            const isNowLocked = (res.session.lockedQs || []).includes(qId);
+            const isNowLocked = ((res.session.config && res.session.config.lockedQs) || []).includes(qId);
             if (isNowLocked && q && q.type === 'sa') {
               switchLiveTab('grading');
               toast('📝 Short answer locked. Use AI Grading before revealing the answer.', 'ok');
