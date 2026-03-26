@@ -4535,28 +4535,68 @@
 
       html += '<div style="display:flex;flex-direction:column;gap:6px">';
 
+      // We will render the header first with innerHTML, then append events securely via DOM manipulation
+      html += '</div>';
+      content.innerHTML = html;
+
+      const eventContainer = content.querySelector('div:last-child'); // The flex container for events we just closed
+
       events.forEach(function(e) {
         var timeStr = '';
-        try { timeStr = new Date(e.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch(err) { timeStr = String(e.ts).substring(11,19) || e.ts; }
+        try { timeStr = new Date(e.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }); } catch(err) { timeStr = String(e.ts).substring(11,19) || String(e.ts); }
         const q = qMap[e.qId];
         const qNumStr = q ? (' Q' + (questions.indexOf(q) + 1)) : '';
-        const qTextStr = q ? (': <em style="color:var(--tx3)">' + DOMPurify.sanitize(q.text.replace(/<[^>]+>/g,'').substring(0,50)) + '</em>') : '';
+        const rawQText = q && q.text ? q.text.replace(/<[^>]+>/g,'').substring(0,50) : '';
         const label = typeLabels[e.type] || e.type;
+
         var dotColor = 'var(--tx3)';
         if (e.isViol) dotColor = 'var(--red)';
         else if (e.type === 'submit') dotColor = 'var(--grn)';
         else if (e.type === 'flag') dotColor = 'var(--amb)';
         else if (e.type === 'view_q' || e.type === 'navigate') dotColor = 'var(--teal)';
-        html += `<div style="display:flex;align-items:baseline;gap:10px;padding:6px 10px;border-radius:6px;background:${e.isViol ? 'rgba(239,68,68,0.06)' : 'var(--s2)'}">`;
-        html += `<span style="font-size:11px;color:var(--tx3);white-space:nowrap;min-width:70px">${timeStr}</span>`;
-        html += `<span style="width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;margin-top:3px"></span>`;
-        html += `<span style="font-size:13px;color:${e.isViol ? 'var(--red)' : 'var(--tx)'}"><strong>${DOMPurify.sanitize(label)}</strong>${qNumStr}${qTextStr}`;
-        if (e.value && e.type !== 'navigate') html += ' <span style="color:var(--tx3);font-size:12px">— ' + DOMPurify.sanitize(e.value) + '</span>';
-        html += '</span>';
-        html += '</div>';
+
+        const row = document.createElement('div');
+        row.style.cssText = `display:flex;align-items:baseline;gap:10px;padding:6px 10px;border-radius:6px;background:${e.isViol ? 'rgba(239,68,68,0.06)' : 'var(--s2)'}`;
+
+        const timeSpan = document.createElement('span');
+        timeSpan.style.cssText = 'font-size:11px;color:var(--tx3);white-space:nowrap;min-width:70px';
+        timeSpan.textContent = timeStr;
+        row.appendChild(timeSpan);
+
+        const dotSpan = document.createElement('span');
+        dotSpan.style.cssText = `width:8px;height:8px;border-radius:50%;background:${dotColor};flex-shrink:0;margin-top:3px`;
+        row.appendChild(dotSpan);
+
+        const contentSpan = document.createElement('span');
+        contentSpan.style.cssText = `font-size:13px;color:${e.isViol ? 'var(--red)' : 'var(--tx)'}`;
+
+        const strongLabel = document.createElement('strong');
+        strongLabel.textContent = label;
+        contentSpan.appendChild(strongLabel);
+
+        if (qNumStr) {
+          contentSpan.appendChild(document.createTextNode(qNumStr));
+        }
+
+        if (rawQText) {
+          contentSpan.appendChild(document.createTextNode(': '));
+          const emQText = document.createElement('em');
+          emQText.style.color = 'var(--tx3)';
+          emQText.textContent = rawQText;
+          contentSpan.appendChild(emQText);
+        }
+
+        if (e.value && e.type !== 'navigate') {
+          contentSpan.appendChild(document.createTextNode(' '));
+          const valSpan = document.createElement('span');
+          valSpan.style.cssText = 'color:var(--tx3);font-size:12px';
+          valSpan.textContent = '— ' + String(e.value);
+          contentSpan.appendChild(valSpan);
+        }
+
+        row.appendChild(contentSpan);
+        eventContainer.appendChild(row);
       });
-      html += '</div>';
-      content.innerHTML = html;
     }
 
     function renderAnaDetail(data) {
