@@ -673,7 +673,7 @@
 
     .mc-opt {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 20px;
       padding: 24px 32px;
       border: 2px solid var(--bd);
@@ -795,6 +795,15 @@
 
     .mc-opt .ctxt {
       flex: 1;
+      min-width: 0;
+    }
+
+    .mc-opt .ctxt img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 6px;
+      margin-top: 4px;
     }
 
     .sa textarea {
@@ -1735,7 +1744,6 @@
       "What do you call a clown who's in jail? A silicon.",
       "I accidentally swallowed some isotopes. Does my breath smell like Uranium?",
       "Why did the white bear dissolve in water? Because it was polar.",
-      "How do you make a hormone? Don't pay her.",
       "What falls, but never needs a bandage? The rain."
     ];
     function getPun() { return SCI_PUNS[Math.floor(Math.random() * SCI_PUNS.length)]; }
