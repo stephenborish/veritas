@@ -516,56 +516,94 @@ const Grader = {
           if (res && res.studentId) resultMap[res.studentId] = res;
         });
 
+        // Fallback for missing items in batch map, before taking DB lock
         for (const r of batch) {
-          let result = resultMap[r.studentId];
-          if (!result) {
-             try {
-               result = this.callGemini(key, q, r.answer, safeCtx);
-             } catch(e) { continue; }
+          if (!resultMap[r.studentId]) {
+            try {
+              resultMap[r.studentId] = this.callGemini(key, q, r.answer, safeCtx);
+            } catch(e) { continue; }
           }
-          DB.withLock(() => {
-            const rows = gradeSheet.getDataRange().getValues();
-            let found = false;
-            for (let j = 1; j < rows.length; j++) {
-              if (rows[j][0] === sessId && rows[j][1] === r.studentId && rows[j][3] === qId) {
-                gradeSheet.getRange(j + 1, 5).setValue(result.score);
-                gradeSheet.getRange(j + 1, 7).setValue(result.feedback);
-                gradeSheet.getRange(j + 1, 13).setValue(safeCtx);
-                found = true; break;
-              }
+        }
+
+        DB.withLock(() => {
+          const rows = gradeSheet.getDataRange().getValues();
+
+          // O(1) Index for existing grades in this session/question
+          const rowIndexMap = new Map();
+          for (let j = 1; j < rows.length; j++) {
+            if (rows[j][0] === sessId && rows[j][3] === qId) {
+              rowIndexMap.set(rows[j][1], j);
             }
-            if (!found) {
+          }
+
+          for (const r of batch) {
+            const result = resultMap[r.studentId];
+            if (!result) continue; // skipped/failed
+
+            const j = rowIndexMap.get(r.studentId);
+            if (j !== undefined) {
+              rows[j][4] = result.score;
+              rows[j][6] = result.feedback;
+              rows[j][12] = safeCtx;
+              // Use rows[j].length for range width to match exactly what is in the row array
+              gradeSheet.getRange(j + 1, 1, 1, rows[j].length).setValues([rows[j]]);
+            } else {
               newGradeRows.push([sessId, r.studentId, r.studentName, qId, result.score, q.points || 1, result.feedback, r.answer, new Date().toISOString(), false, '', '', safeCtx]);
             }
-          });
-          this._syncResponseScore(sessId, r.studentId, qId, result.score);
-          updated++;
+          }
+        });
+
+        // Sync response scores outside DB lock for performance
+        for (const r of batch) {
+          const result = resultMap[r.studentId];
+          if (result) {
+            this._syncResponseScore(sessId, r.studentId, qId, result.score);
+            updated++;
+          }
         }
       } catch (e) {
          Logger.log('Regrade batch error: ' + e.toString());
+         // Populate fallbacks for the entire batch
          for (const r of batch) {
-            // Only fallback if the specific ID wasn't successfully processed
-            if (resultMap && resultMap[r.studentId]) continue;
-            try {
-              const result = this.callGemini(key, q, r.answer, safeCtx);
-              DB.withLock(() => {
-                const rows = gradeSheet.getDataRange().getValues();
-                let found = false;
-                for (let j = 1; j < rows.length; j++) {
-                  if (rows[j][0] === sessId && rows[j][1] === r.studentId && rows[j][3] === qId) {
-                    gradeSheet.getRange(j + 1, 5).setValue(result.score);
-                    gradeSheet.getRange(j + 1, 7).setValue(result.feedback);
-                    gradeSheet.getRange(j + 1, 13).setValue(safeCtx);
-                    found = true; break;
-                  }
-                }
-                if (!found) {
-                  newGradeRows.push([sessId, r.studentId, r.studentName, qId, result.score, q.points || 1, result.feedback, r.answer, new Date().toISOString(), false, '', '', safeCtx]);
-                }
-              });
-              this._syncResponseScore(sessId, r.studentId, qId, result.score);
-              updated++;
-            } catch (fallbackE) { Logger.log('Regrade single error: ' + fallbackE.toString()); }
+           if (resultMap && resultMap[r.studentId]) continue;
+           try {
+             resultMap[r.studentId] = this.callGemini(key, q, r.answer, safeCtx);
+           } catch (fallbackE) { Logger.log('Regrade single error: ' + fallbackE.toString()); }
+         }
+
+         DB.withLock(() => {
+           const rows = gradeSheet.getDataRange().getValues();
+
+           const rowIndexMap = new Map();
+           for (let j = 1; j < rows.length; j++) {
+             if (rows[j][0] === sessId && rows[j][3] === qId) {
+               rowIndexMap.set(rows[j][1], j);
+             }
+           }
+
+           for (const r of batch) {
+             const result = resultMap[r.studentId];
+             if (!result) continue; // Failed even fallback
+
+             const j = rowIndexMap.get(r.studentId);
+             if (j !== undefined) {
+               rows[j][4] = result.score;
+               rows[j][6] = result.feedback;
+               rows[j][12] = safeCtx;
+               gradeSheet.getRange(j + 1, 1, 1, rows[j].length).setValues([rows[j]]);
+             } else {
+               newGradeRows.push([sessId, r.studentId, r.studentName, qId, result.score, q.points || 1, result.feedback, r.answer, new Date().toISOString(), false, '', '', safeCtx]);
+             }
+           }
+         });
+
+         // Sync response scores
+         for (const r of batch) {
+           const result = resultMap[r.studentId];
+           if (result) {
+             this._syncResponseScore(sessId, r.studentId, qId, result.score);
+             updated++;
+           }
          }
       }
     }
