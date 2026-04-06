@@ -352,11 +352,34 @@ Called from the teacher UI on first setup. Creates the `'Veritas Assess — Data
 
 ## 12. Code Health & Best Practices
 
+### Performance & API Limits
+* **Avoid N+1 Queries in Loops:** Never use `getDataRange().getValues()` or `.setValue()` inside of an O(N) loop (like iterating over students or responses). This will quickly exhaust execution time limits.
+* **O(1) Map Lookups:** When updating rows in Google Sheets, load the entire data range once before the loop, build a `Map` to index row indices by a unique key (e.g., `studentId`), update the array in memory, and write back using batched `setValues()` or single-row `setValues([row])`.
+* **Batched Writes:** Always prefer a single `getRange(...).setValues(2D_ARRAY)` over multiple adjacent `.setValue()` calls.
+
 ### Exception Handling
 * **Never leave `catch` blocks empty.** Log unexpected errors.
 * **Backend:** Use `console.error(e)` or `Logger.log(e)` so errors appear in the Apps Script execution log.
+
+### Spreadsheet Read Performance (Targeted Range Fetch)
+* **Avoid `getDataRange().getValues()` for ID lookups.** Downloading the entire sheet into memory is extremely slow and acts as an N+1 equivalent on the payload size.
+* **Use Targeted Ranges:** When searching for rows by an ID (e.g., `SessionID`, `StudentID`), fetch only the specific columns needed for matching to drastically reduce data transfer payload and memory overhead.
+* **Example:**
+  ```javascript
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // only first 2 columns
+    for (let i = 0; i < data.length; i++) {
+      if (data[i][0] === targetId) { ... }
+    }
+  }
+  ```
 * **Frontend:** Use `console.error(e)` for critical failures, `console.warn(e)` for non-critical (e.g., KaTeX render failures).
 * **Expected fallbacks (do not log in O(N) loops):** `JSON.parse()` failures on plain-string student answers are expected and normal — do not emit a warning per student. Logging in tight loops causes thousands of avoidable noise entries and buries real errors.
+
+### Google Sheets API Optimization
+* **Batching `appendRow`**: Never call `sheet.appendRow()` (or a wrapper like `_batchAppendRows`) sequentially inside a loop, especially in a fallback scenario like AI grading. Accumulate the rows in memory and perform a single batched insert outside the loop.
+* **Batching `setValue`**: When updating multiple adjacent columns in the same row, consolidate multiple `.setValue()` calls into a single `.setValues([[val1, val2]])` call. This significantly reduces the overhead of API roundtrips.
 
 ### API Contract (Code.gs as Single Source of Truth)
 `Code.gs` contains a full API contract comment block listing every server-callable function, its parameters, and its return type. Keep this block updated whenever you add or modify server functions. It is the canonical contract between the frontend and backend.
