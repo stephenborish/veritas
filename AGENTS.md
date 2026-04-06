@@ -399,5 +399,5 @@ When making any change:
 
 You have full authorization to deploy directly via `clasp`. Do not ask for permission to push — just push when the code is ready.
 
-### Performance Optimization: TextFinder for Rows Lookups
-Instead of loading entire sheets into V8's memory using `getDataRange().getValues()` and iterating O(N) over them, use `createTextFinder` on a specific column to let Google Apps Script natively locate the matching row. This provides an O(1) latency overhead and avoids massive network payloads, particularly useful when querying rows by ID or unique timestamps.
+### Performance Note: Fast Row Lookups
+To quickly find a matching row in a large sheet without pulling the entire dataset into memory via `getValues()`, use `createTextFinder`. Example: `const matches = sheet.createTextFinder(searchString).matchEntireCell(true).findAll();`. This operates natively within the Sheets API and runs orders of magnitude faster with ~0 runtime memory overhead compared to `getValues()` arrays in App Script's V8 engine.

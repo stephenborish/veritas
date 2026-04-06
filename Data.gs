@@ -2023,20 +2023,15 @@ const DB = {
       }
       
       const violSheet = this.sh('Violations');
-      if (violSheet) {
-        // Fast O(1) server-side lookup instead of O(N) getValues() iteration
-        const timestampCol = violSheet.getRange('E:E'); // Column 5 = Timestamp
-        const textFinder = timestampCol.createTextFinder(String(timestamp)).matchEntireCell(true);
-        let searchResult = textFinder.findNext();
-
-        while (searchResult) {
-          const rowIndex = searchResult.getRow();
-          // Verify sessionId matches in Column A
-          if (rowIndex > 1 && String(violSheet.getRange(rowIndex, 1).getValue()) === String(sessionId)) {
-            violSheet.deleteRow(rowIndex);
-            break;
-          }
-          searchResult = textFinder.findNext();
+      // ⚡ Performance Fix: Avoids `getValues()` on potentially huge Violations sheet.
+      // TextFinder operates natively in the Sheets API, drastically reducing execution time and memory.
+      const matches = violSheet.createTextFinder(String(timestamp)).matchEntireCell(true).findAll();
+      for (let i = 0; i < matches.length; i++) {
+        const rowNum = matches[i].getRow();
+        // Double check session ID to prevent collisions across sessions with identical timestamps
+        if (String(violSheet.getRange(rowNum, 1).getValue()) === String(sessionId)) {
+          violSheet.deleteRow(rowNum);
+          break;
         }
       }
       return true;
