@@ -2452,12 +2452,15 @@
 
       el.innerHTML = filtered.map(s => {
         const course = (window.__allCoursesData || []).find(c => c.id === s.courseId);
-        const courseBadge = course ? `<span class="badge" style="background:var(--s2); color:var(--tx2); font-size:11px; margin-top:8px; display:inline-block; border:1px solid var(--bd);">📚 ${course.name}</span>` : '';
-        return `<div class="card" style="display:flex;justify-content:space-between;align-items:center">
+        const courseBadge = course ? `<span class="badge" style="background:var(--s2); color:var(--tx2); font-size:11px; border:1px solid var(--bd);">📚 ${course.name}</span>` : '';
+        const modifiedStr = s.updatedAt ? new Date(s.updatedAt).toLocaleString(undefined, {month:'short', day:'numeric', year:'numeric', hour:'numeric', minute:'2-digit'}) : '';
+        return `<div class="card" style="display:flex;justify-content:space-between;align-items:flex-start">
           <div>
-            <div style="font-size:16px;font-weight:700;margin-bottom:4px;color:var(--teal)">${DOMPurify.sanitize(s.name)}</div>
-            <div style="font-size:13px; color:var(--tx2)">${s.questionCount} Questions (${s.mcCount} MC, ${s.saCount} SA)</div>
-            ${courseBadge}
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:16px;font-weight:700;color:var(--teal)">${DOMPurify.sanitize(s.name)}</span>
+              ${courseBadge}
+            </div>
+            <div style="font-size:13px; color:var(--tx2)">${s.questionCount} Questions (${s.mcCount} MC, ${s.saCount} SA)${modifiedStr ? ` · Modified ${modifiedStr}` : ''}</div>
           </div>
           <div style="display:flex;gap:6px">
             <button class="btn bg" onclick="openQEd('${s.id}')">Edit Set</button>
@@ -2661,6 +2664,7 @@
     function loadLaunch() {
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         google.script.run.withSuccessHandler(sets => {
+          sets.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
           window.__qSets = sets;
           document.getElementById('lSet').innerHTML = sets.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
           document.getElementById('lSet').onchange = updateBankSizeHint;
