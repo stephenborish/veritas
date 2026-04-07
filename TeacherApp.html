@@ -269,11 +269,11 @@
     /* Live Monitor 2-Column Dashboard */
     .live-dashboard {
       display: grid;
-      grid-template-columns: 370px 1fr;
-      gap: 24px;
+      grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+      gap: 16px;
       align-items: start;
       position: relative;
-      transition: grid-template-columns 0.3s ease;
+      transition: grid-template-columns 0.25s ease;
     }
 
     .live-dashboard.collapsed-left {
@@ -286,10 +286,10 @@
 
     .live-dashboard-left {
       position: sticky;
-      top: 24px;
+      top: 14px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 12px;
     }
 
     .live-dashboard-left::-webkit-scrollbar {
@@ -309,7 +309,8 @@
     .live-dashboard-right {
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 12px;
+      min-width: 0;
     }
 
     /* Top Global Fixed Bar — two-row layout */
@@ -321,7 +322,7 @@
       backdrop-filter: blur(12px);
       -webkit-backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--bd);
-      margin: -32px -32px 24px -32px;
+      margin: -32px -32px 14px -32px;
       display: flex;
       flex-direction: column;
     }
@@ -331,10 +332,10 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 24px;
+      padding: 10px 18px;
       border-bottom: 1px solid var(--bd);
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 10px;
     }
 
     /* Row 2: lockstep action controls */
@@ -343,18 +344,37 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 8px 24px;
+      padding: 8px 18px;
       background: var(--tBg);
       border-bottom: 1px solid var(--tBd);
       flex-wrap: wrap;
+    }
+
+    .live-status-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .live-stat-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(76px, auto));
+      gap: 8px;
+      justify-content: end;
     }
 
     /* Stat pills */
     .stat-pill {
       display: flex;
       flex-direction: column;
-      align-items: center;
-      min-width: 48px;
+      align-items: flex-start;
+      min-width: 74px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--bd);
+      background: rgba(255,255,255,0.72);
     }
 
     .stat-pill .sp-val {
@@ -372,6 +392,55 @@
       letter-spacing: 0.6px;
       color: var(--tx3);
       margin-top: 2px;
+    }
+
+    .live-panel {
+      border: 1px solid var(--bd);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.66);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      padding: 10px 12px;
+    }
+
+    .live-tab-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 10px;
+      border-bottom: 1px solid var(--bd);
+      margin-bottom: 10px;
+      padding-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .live-overview-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .live-overview-pill {
+      border-radius: 10px;
+      border: 1px solid var(--bd);
+      background: var(--s);
+      padding: 8px 10px;
+    }
+
+    .live-overview-pill .k {
+      font-size: 11px;
+      color: var(--tx3);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 2px;
+    }
+
+    .live-overview-pill .v {
+      font-weight: 700;
+      color: var(--tx);
+      font-size: 14px;
+      line-height: 1.2;
     }
 
     /* Lockstep Q label */
@@ -832,8 +901,8 @@
     }
 
     .tab {
-      padding: 14px 24px;
-      font-size: 15px;
+      padding: 10px 14px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--tx2);
       cursor: pointer;
@@ -1315,8 +1384,8 @@
 
     .student-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 16px
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px
     }
 
     .student-tile {
@@ -1324,7 +1393,7 @@
       backdrop-filter: blur(12px);
       border: 1px solid var(--bd);
       border-radius: 12px;
-      padding: 16px;
+      padding: 12px;
       cursor: pointer;
       transition: var(--tr);
       box-shadow: var(--sh);
@@ -1338,7 +1407,9 @@
 
     .student-tile .nm {
       font-weight: 700;
-      margin-bottom: 6px
+      margin-bottom: 5px;
+      line-height: 1.25;
+      font-size: 14px;
     }
 
     .student-tile .meta {
@@ -1396,6 +1467,23 @@
       font-size: 13px
     }
 
+    @media(max-width:1100px) {
+      .live-dashboard {
+        grid-template-columns: 1fr;
+      }
+      .live-dashboard-left {
+        position: static;
+      }
+      .live-stat-row {
+        width: 100%;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        justify-content: stretch;
+      }
+      #live-top-bar-header {
+        align-items: flex-start;
+      }
+    }
+
     @media(max-width:768px) {
       .sb {
         display: none
@@ -1424,6 +1512,12 @@
 
       .dash-hero {
         padding: 24px;
+      }
+      .live-stat-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      #live-top-bar {
+        margin: -14px -14px 12px -14px;
       }
     }
 
@@ -1722,8 +1816,8 @@
         <div id="live-top-bar">
           <!-- Row 1: session info (left) + stats (right) -->
           <div id="live-top-bar-header">
-            <div id="liveStatusBanner" style="display:flex; align-items:center; gap:10px;"></div>
-            <div id="liveStatsRow" style="display:flex; align-items:center; gap:20px;"></div>
+            <div id="liveStatusBanner" class="live-status-banner"></div>
+            <div id="liveStatsRow" class="live-stat-row"></div>
           </div>
           <!-- Row 2: lockstep controls (hidden until lockstep mode) -->
           <div id="lockstepControls">
@@ -1734,7 +1828,7 @@
             <div id="lsActions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
           </div>
           <!-- Row 3: question-jump strip (lockstep only, hidden until session starts) -->
-          <div id="lsQJump" style="display:none;gap:4px;flex-wrap:wrap;padding:4px 16px 6px;border-top:1px solid var(--bd);background:var(--s2)"></div>
+          <div id="lsQJump" style="display:none;gap:4px;flex-wrap:wrap;padding:4px 12px 6px;border-top:1px solid var(--bd);background:var(--s2)"></div>
         </div>
 
         <!-- NEW: 2-Column Dashboard Layout -->
@@ -1744,14 +1838,14 @@
 
           <!-- Right Column: Student Data (Tabs, Stats, Grid) -->
           <div class="live-dashboard-right" id="liveDashboardRight">
-            <div
-              style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid var(--bd); padding-bottom:8px; margin-bottom:12px;">
-              <div class="tabs" style="border-bottom:none; margin-bottom:0px; gap:24px;">
+            <div class="live-panel">
+            <div class="live-tab-header">
+              <div class="tabs" style="border-bottom:none; margin-bottom:0px; gap:14px;">
                 <div class="tab active" onclick="switchLiveTab('students')" style="padding-bottom:0;">Overview</div>
                 <div class="tab" onclick="switchLiveTab('details')" style="padding-bottom:0;">Detailed Responses</div>
                 <div class="tab" onclick="switchLiveTab('grading')" style="padding-bottom:0;">AI Grading</div>
               </div>
-              <div id="liveRightFilter" style="display:none; align-items:center; gap:6px;"></div>
+              <div id="liveRightFilter" style="display:none; align-items:center; gap:6px; flex-wrap:wrap;"></div>
             </div>
 
             <div id="tab-students" class="tab-content active">
@@ -1759,6 +1853,7 @@
             </div>
             <div id="tab-details" class="tab-content"></div>
             <div id="tab-grading" class="tab-content"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -3219,6 +3314,7 @@
 
       if (_ch.stats) {
         const _vCount = d.violations.filter(v => !v.resolved).length;
+        const _joinRate = d.totalJoined > 0 ? Math.round((d.totalFinished / Math.max(1, d.totalJoined)) * 100) : 0;
         document.getElementById('liveStatsRow').innerHTML = `
           <div class="stat-pill">
             <span class="sp-val">${d.totalJoined}</span>
@@ -3235,6 +3331,10 @@
           <div class="stat-pill">
             <span class="sp-val" style="color:${_vCount ? 'var(--red)' : 'var(--tx3)'}">${_vCount}</span>
             <span class="sp-lbl" style="${_vCount ? 'color:var(--red)' : ''}">Violations</span>
+          </div>
+          <div class="stat-pill">
+            <span class="sp-val">${_joinRate}%</span>
+            <span class="sp-lbl">Completion</span>
           </div>
         `;
       }
@@ -3678,7 +3778,16 @@
           document.getElementById('liveRightFilter').style.display = 'none';
         }
 
-        let rightHtml = '';
+        const _stateCounts = withStateAll.reduce((acc, s) => {
+          acc[s.tileState] = (acc[s.tileState] || 0) + 1;
+          return acc;
+        }, { all: withStateAll.length, correct: 0, incorrect: 0, none: 0 });
+        let rightHtml = `<div class="live-overview-bar">
+          <div class="live-overview-pill"><div class="k">Showing</div><div class="v">${withFilteredState.length} students</div></div>
+          <div class="live-overview-pill"><div class="k">Correct</div><div class="v" style="color:var(--grn)">${_stateCounts.correct || 0}</div></div>
+          <div class="live-overview-pill"><div class="k">Incorrect</div><div class="v" style="color:var(--red)">${_stateCounts.incorrect || 0}</div></div>
+          <div class="live-overview-pill"><div class="k">No Response</div><div class="v">${_stateCounts.none || 0}</div></div>
+        </div>`;
 
         if (unresolvedViolations.length) {
         rightHtml += `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong>Students locked out (${unresolvedViolations.length})</strong><span class="muted" style="font-size:12px">Resolve by re-admitting student</span></div><div style="margin-top:10px;display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${v.studentId}')">Re-admit</button></div>`).join('')}</div></div>`;
