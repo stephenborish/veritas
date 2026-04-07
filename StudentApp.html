@@ -1513,6 +1513,14 @@
     .conn-pill.ok { display: inline-block; background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.25); }
     .conn-pill.warn { display: inline-block; background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); animation: connPulse 1.5s ease-in-out infinite; }
     .conn-pill.hidden { display: none; }
+    .sync-pill {
+      position: fixed; bottom: 36px; right: 16px; padding: 4px 10px;
+      border-radius: 99px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
+      z-index: 200; transition: opacity 0.25s;
+      background: rgba(13,148,136,0.12); color: #2dd4bf; border: 1px solid rgba(13,148,136,0.35);
+    }
+    .sync-pill.warn { background: rgba(245,158,11,0.15); color: #fbbf24; border-color: rgba(245,158,11,0.45); }
+    .sync-pill.hidden { display: none; }
     @keyframes connPulse { 0%,100% { opacity:1; } 50% { opacity:0.55; } }
 
     @media (max-width: 720px) {
@@ -1607,6 +1615,7 @@
     </div>
   </div>
   <div class="conn-pill hidden" id="connPill">&#9679; Connected</div>
+  <div class="sync-pill hidden" id="syncPill">✓ Answers Saved</div>
 
   <button class="calc-btn" id="calcBtn">&#x1F522; Calculator</button>
   <div class="calc-win" id="calcWin">
@@ -1754,6 +1763,7 @@
       isProcessing: false,
       add: function (fnName, args) {
         this.items.push({ fnName: fnName, args: args, retries: 0 });
+        updateSyncPill_();
         this.process();
       },
       process: function () {
@@ -1779,6 +1789,7 @@
             }
             SyncQueue.items.shift();
             SyncQueue.isProcessing = false;
+            updateSyncPill_();
             SyncQueue.process();
             return;
           }
@@ -1792,6 +1803,7 @@
           }
           SyncQueue.items.shift();
           SyncQueue.isProcessing = false;
+          updateSyncPill_();
           SyncQueue.process();
         };
 
@@ -1800,9 +1812,11 @@
           if (item.retries > 10) {
             console.error('Dropped sync after 10 retries', item);
             SyncQueue.items.shift();
+            updateSyncPill_();
           }
           setTimeout(function () {
             SyncQueue.isProcessing = false;
+            updateSyncPill_();
             SyncQueue.process();
           }, 1000 * Math.pow(1.5, item.retries));
         };
@@ -1814,6 +1828,27 @@
         runner[item.fnName].apply(runner, item.args);
       }
     };
+
+    function updateSyncPill_() {
+      const pill = document.getElementById('syncPill');
+      if (!pill) return;
+      const pending = SyncQueue.items.length;
+      if (pending > 0) {
+        pill.className = 'sync-pill warn';
+        pill.classList.remove('hidden');
+        pill.textContent = 'Syncing ' + pending + ' pending...';
+        return;
+      }
+      pill.className = 'sync-pill';
+      pill.textContent = '✓ Answers Saved';
+      if (S.done) {
+        pill.classList.remove('hidden');
+        return;
+      }
+      setTimeout(function () {
+        if (SyncQueue.items.length === 0 && !S.done) pill.classList.add('hidden');
+      }, 1200);
+    }
 
     function normalizeClientCode(rawCode) {
       return String(rawCode || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 20);
