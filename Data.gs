@@ -396,6 +396,14 @@ const DB = {
     if (r[18]) { try { snapshotQuestions = JSON.parse(r[18]); } catch(e) { Logger.log('_parseSess: failed to parse snapshotQuestions: ' + e); } }
     return {sessionId:r[0],code:r[1],setId:r[2],setName:r[3],block:r[4],mode:r[5],randQ:r[6],randC:r[7],status:r[8],currentQ:(r[9]===''||r[9]===null||r[9]===undefined)?-1:Number(r[9]),startedAt:r[10],endedAt:r[11],config:JSON.parse(r[12]||'{}'),timer:JSON.parse(r[13]||'{}'),revealMode:r[14]||'end',summaryConfig:JSON.parse(r[15]||'{}'),revealedQs:JSON.parse(r[16]||'[]'),calcEnabled:r[17]===true||r[17]==='TRUE',snapshotQuestions,row};
   },
+  _getSessionQuestions_(sess) {
+    if (!sess) return [];
+    if (Array.isArray(sess.snapshotQuestions) && sess.snapshotQuestions.length) {
+      return sess.snapshotQuestions;
+    }
+    const qSet = this.getQSet(sess.setId);
+    return (qSet && Array.isArray(qSet.questions)) ? qSet.questions : [];
+  },
   _normalizeSessionState(sess, questionIds) {
     const ids = Array.isArray(questionIds) ? questionIds : [];
     const maxQ = Math.max(0, ids.length - 1);
@@ -513,8 +521,8 @@ const DB = {
           if(sd[i][8]===true||sd[i][8]==='TRUE') return {error:'Locked out. Wait for teacher.'};
           
           const needsFS = sd[i][10]===true||sd[i][10]==='TRUE';
-          const qSet=this.getQSet(sess.setId);
-          return {sessionId:sess.sessionId,studentId:sd[i][1],studentName:sd[i][2],mode:sess.mode,questionCount:qSet?qSet.questions.length:0,rejoined:true,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:needsFS,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
+          const sessionQuestions = this._getSessionQuestions_(sess);
+          return {sessionId:sess.sessionId,studentId:sd[i][1],studentName:sd[i][2],mode:sess.mode,questionCount:sessionQuestions.length,rejoined:true,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:needsFS,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
         }
       }
 
@@ -522,19 +530,19 @@ const DB = {
       
       // New Join
       let qOrder='';
-      const _newJoinQSet=this.getQSet(sess.setId);
+      const sessionQuestions = this._getSessionQuestions_(sess);
       if((sess.randQ||sess.mode==='randomized') && sess.mode !== 'lockstep'){
-        if(_newJoinQSet){
-          const idx=_newJoinQSet.questions.map((_,i)=>i);
+        if(sessionQuestions.length){
+          const idx=sessionQuestions.map((_,i)=>i);
           for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
           qOrder=JSON.stringify(idx);
         }
       }
       // Generate per-student shuffled choice order for all MC questions (stable across page reloads)
       let choiceOrders='';
-      if(_newJoinQSet){
+      if(sessionQuestions.length){
         const co={};
-        _newJoinQSet.questions.forEach(q=>{
+        sessionQuestions.forEach(q=>{
           if(q.type==='mc'&&q.choices&&q.choices.length>1){
             const idx=q.choices.map((_,i)=>i);
             for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
@@ -544,7 +552,7 @@ const DB = {
         choiceOrders=JSON.stringify(co);
       }
       ssSheet.appendRow([sess.sessionId, stuId, storedName, rosterEmail, 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken, storedNormalizedName, identityKey, choiceOrders, '', '', '', '']);
-      return {sessionId:sess.sessionId,studentId:stuId,studentName:storedName,mode:sess.mode,questionCount:_newJoinQSet?_newJoinQSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
+      return {sessionId:sess.sessionId,studentId:stuId,studentName:storedName,mode:sess.mode,questionCount:sessionQuestions.length,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
     });
   },
 
@@ -552,7 +560,7 @@ const DB = {
     const sess=this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
     // BUG 3 fix: prefer snapshot questions (taken at launch) over live QSet to prevent drift
     const qSet=this.getQSet(sess.setId); if(!qSet && !sess.snapshotQuestions) return {error:'Questions not found'};
-    const baseQuestions = sess.snapshotQuestions || qSet.questions;
+    const baseQuestions = this._getSessionQuestions_(sess);
     let questions=JSON.parse(JSON.stringify(baseQuestions)); const stimuli=(qSet&&qSet.stimuli)||[];
     const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues(); let qOrder=null; let choiceOrders=null; let stuRowIdx=-1; let existingFlaggedQs=[]; let eliminatedChoices=null;
     for(let i=1;i<sd.length;i++) {
@@ -568,7 +576,7 @@ const DB = {
     // If no choiceOrders yet (student joined before this feature), generate and persist now
     if(!choiceOrders && stuRowIdx>0){
       const co={};
-      qSet.questions.forEach(q=>{
+      baseQuestions.forEach(q=>{
         if(q.type==='mc'&&q.choices&&q.choices.length>1){
           const idx=q.choices.map((_,i)=>i);
           for(let i=idx.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
@@ -605,7 +613,8 @@ const DB = {
     return this.withLock(() => {
       const sess=this.getSessionById(sessId); if(!sess||sess.status!=='active') return {error:'Session ended'};
       if ((sess.config||{}).sessionPaused) return {error:'Session is paused'};
-      const qSet=this.getQSet(sess.setId); const q=qSet.questions.find(qq=>qq.id===qId); if(!q) return {error:'Q not found'};
+      const sessionQuestions = this._getSessionQuestions_(sess);
+      const q=sessionQuestions.find(qq=>qq.id===qId); if(!q) return {error:'Q not found'};
       const lockedQs = Array.isArray((sess.config || {}).lockedQs) ? sess.config.lockedQs : [];
       if (lockedQs.includes(qId)) return {error:'This question has been locked by the teacher.'};
       const stuName=this.getStudentName(sessId,stuId); const maxPts=q.points||1;
@@ -644,7 +653,7 @@ const DB = {
       } else if (q.type === 'sa') {
           points = 0;
       }
-      const qIdx=qSet.questions.findIndex(qq=>qq.id===qId);
+      const qIdx=sessionQuestions.findIndex(qq=>qq.id===qId);
       let ansStr=Array.isArray(answer)?JSON.stringify(answer):String(answer);
       // setNumberFormat('@') on the cell is sufficient to prevent auto-formatting;
       // do NOT prepend "'" — it becomes part of the stored value and corrupts MC matching.
@@ -745,18 +754,18 @@ const DB = {
     // Enforce access window close time — treat expired window as ended session
     const _closeAt = (sess.config||{}).closeAt ? new Date(sess.config.closeAt) : null;
     if (_closeAt && new Date() > _closeAt) return {sessionStatus:'ended'};
-    const qSet=this.getQSet(sess.setId);
-    const validIds = qSet ? qSet.questions.map(q=>q.id) : [];
+    const sessionQuestions = this._getSessionQuestions_(sess);
+    const validIds = sessionQuestions.map(q=>q.id);
     const sessionState = this._normalizeSessionState(sess, validIds);
     
     // Attach details for revealed questions
-    if (sess.revealedQs && sess.revealedQs.length > 0 && qSet) {
+    if (sess.revealedQs && sess.revealedQs.length > 0 && sessionQuestions.length) {
        sessionState.revealedDetails = {};
        const responses = this.getAllResponses(sessId).filter(r => r.studentId === stuId);
        const grades = this.getAIGrades(sessId).filter(g => g.studentId === stuId);
        const respMap = (responses || []).reduce((acc, r) => { acc[r.questionId] = r; return acc; }, {});
        const gradeMap = (grades || []).reduce((acc, g) => { acc[g.questionId] = g; return acc; }, {});
-       const qMap = (qSet.questions || []).reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
+       const qMap = sessionQuestions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
 
        sess.revealedQs.forEach(qId => {
           const q = qMap[qId];
@@ -813,7 +822,7 @@ const DB = {
   // Read functions do not strictly require locks for performance reasons.
   getLiveResults(sessId) {
     const sess=this.getSessionById(sessId);if(!sess)return null;
-    const qSet=this.getQSet(sess.setId);const questions=qSet?qSet.questions:[];
+    const questions=this._getSessionQuestions_(sess);
     const snapshot={};
     const stuSess=this.getStudentSessions(sessId,snapshot);const _rawResps=this.getAllResponses(sessId,snapshot);
     // Deduplicate: keep latest response per (studentId, questionId) in case of duplicate sheet rows
@@ -918,7 +927,10 @@ const DB = {
     });
     
     const _cfg=sess.config||{};
-    return {session:{...sess,questionCount:questions.length,sessionPaused:!!_cfg.sessionPaused,sessionTimerState:_cfg.sessionTimerState||null,qTimerState:_cfg.qTimerState||null,qTimerSeconds:_cfg.qTimerSeconds||0},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,gradeStatus:Grader.getStatus(sessId)};
+    const waitingToJoinCount = missing.length;
+    const inProgressCount = students.filter(s => s.status === 'active').length;
+    const noResponseCount = students.filter(s => s.status !== 'not-joined' && (!s.responses || s.responses.length === 0)).length;
+    return {session:{...sess,questionCount:questions.length,sessionPaused:!!_cfg.sessionPaused,sessionTimerState:_cfg.sessionTimerState||null,qTimerState:_cfg.qTimerState||null,qTimerSeconds:_cfg.qTimerSeconds||0},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,waitingToJoinCount,inProgressCount,noResponseCount,gradeStatus:Grader.getStatus(sessId)};
   },
 
 
@@ -946,8 +958,8 @@ const DB = {
   goToQuestion(id, qIndex) {
     return this.withLock(() => {
       const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
-      const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
-      const maxQ = Math.max(0, qSet.questions.length - 1);
+      const sessionQuestions=this._getSessionQuestions_(sess); if(!sessionQuestions.length) return {error:'Question set not found'};
+      const maxQ = Math.max(0, sessionQuestions.length - 1);
       const q=Math.max(0,Math.min(Number(qIndex)||0,maxQ));
       const sheet = this.sh('Sessions');
       sheet.getRange(sess.row,10).setValue(q);
@@ -962,7 +974,7 @@ const DB = {
       // Auto-start question timer for lockstep sessions that have a question time limit
       const qTimerSeconds = cfg.qTimerSeconds;
       if (qTimerSeconds && sess.mode === 'lockstep') {
-        const qId = qSet.questions[q] ? qSet.questions[q].id : null;
+        const qId = sessionQuestions[q] ? sessionQuestions[q].id : null;
         if (qId) {
           const _now = Date.now();
           cfg.qTimerState = {qId, startedAt: new Date(_now).toISOString(), endTime: _now + qTimerSeconds * 1000, originalSeconds: qTimerSeconds, paused: false, pausedRemaining: null, dismissed: false, cancelled: false};
@@ -972,7 +984,7 @@ const DB = {
       if (cfgDirty) sheet.getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const updatedSess = this.getSessionById(id);
       this.logTeacherAction(id, 'go_to_question', 'qIndex=' + q);
-      return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(qq=>qq.id))};
+      return {ok:true,session:this._normalizeSessionState(updatedSess,sessionQuestions.map(qq=>qq.id))};
     });
   },
 
@@ -995,23 +1007,23 @@ const DB = {
       this.sh('Sessions').getRange(sess.row, 13).setValue(JSON.stringify(cfg));
       
       const updatedSess = this.getSessionById(id);
-      const qSet = this.getQSet(sess.setId);
+      const sessionQuestions = this._getSessionQuestions_(sess);
       this.logTeacherAction(id, 'toggle_lock_question', 'qId=' + qId);
-      return {ok: true, session: this._normalizeSessionState(updatedSess, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok: true, session: this._normalizeSessionState(updatedSess, sessionQuestions.map(q=>q.id))};
     });
   },
   advanceQuestion(id) {
     return this.withLock(() => {
       const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
-      const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
-      const maxQ = Math.max(0, qSet.questions.length - 1);
+      const sessionQuestions=this._getSessionQuestions_(sess); if(!sessionQuestions.length) return {error:'Question set not found'};
+      const maxQ = Math.max(0, sessionQuestions.length - 1);
       const nextQ = Math.max(0, Math.min((Number(sess.currentQ)||0) + 1, maxQ));
       const sheet = this.sh('Sessions');
       sheet.getRange(sess.row,10).setValue(nextQ);
       // Auto-start question timer for lockstep sessions that have a question time limit
       const qTimerSeconds = (sess.config||{}).qTimerSeconds;
       if (qTimerSeconds && sess.mode === 'lockstep') {
-        const qId = qSet.questions[nextQ] ? qSet.questions[nextQ].id : null;
+        const qId = sessionQuestions[nextQ] ? sessionQuestions[nextQ].id : null;
         if (qId) {
           const cfg = sess.config || {};
           const _now2 = Date.now();
@@ -1021,14 +1033,14 @@ const DB = {
       }
       const updatedSess = this.getSessionById(id);
       this.logTeacherAction(id, 'advance_question', 'newQ=' + nextQ);
-      return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(q=>q.id))};
+      return {ok:true,session:this._normalizeSessionState(updatedSess,sessionQuestions.map(q=>q.id))};
     });
   },
   revealAnswer(id, qId) {
     return this.withLock(() => {
       const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
-      const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
-      const validIds = (qSet.questions||[]).map(q=>q.id);
+      const sessionQuestions=this._getSessionQuestions_(sess); if(!sessionQuestions.length) return {error:'Question set not found'};
+      const validIds = sessionQuestions.map(q=>q.id);
       if (validIds.indexOf(qId) === -1) return {error:'Question not found'};
       const cur = Array.isArray(sess.revealedQs) ? sess.revealedQs.filter(id2 => validIds.indexOf(id2) !== -1) : [];
       if (!cur.includes(qId)) cur.push(qId);
@@ -1041,8 +1053,8 @@ const DB = {
   revealAllAnswers(id) {
     return this.withLock(() => {
       const sess=this.getSessionById(id); if(!sess) return {error:'Session not found'};
-      const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Question set not found'};
-      const all=(qSet.questions||[]).map(q=>q.id);
+      const sessionQuestions=this._getSessionQuestions_(sess); if(!sessionQuestions.length) return {error:'Question set not found'};
+      const all=sessionQuestions.map(q=>q.id);
       this.sh('Sessions').getRange(sess.row,17).setValue(JSON.stringify(all));
       const updatedSess = this.getSessionById(id);
       this.logTeacherAction(id, 'reveal_all_answers', '');
@@ -1062,9 +1074,9 @@ const DB = {
       const cfg = sess.config || {};
       if (cfg.qTimerState) { cfg.qTimerState.dismissed = true; cfg.qTimerState.paused = false; cfg.qTimerState.cancelled = false; }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId);
+      const sessionQuestions = this._getSessionQuestions_(sess);
       const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   pauseQTimer(sessId) {
@@ -1076,9 +1088,9 @@ const DB = {
       cfg.qTimerState.pausedRemaining = Math.max(0, (cfg.qTimerState.endTime || Date.now()) - Date.now());
       cfg.qTimerState.paused = true;
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId);
+      const sessionQuestions = this._getSessionQuestions_(sess);
       const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   resumeQTimer(sessId) {
@@ -1090,9 +1102,9 @@ const DB = {
       cfg.qTimerState.paused = false;
       cfg.qTimerState.pausedRemaining = null;
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId);
+      const sessionQuestions = this._getSessionQuestions_(sess);
       const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   extendQTimer(sessId, additionalSeconds) {
@@ -1112,9 +1124,9 @@ const DB = {
         }
       }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId);
+      const sessionQuestions = this._getSessionQuestions_(sess);
       const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   resetQTimer(sessId) {
@@ -1129,9 +1141,9 @@ const DB = {
       cfg.qTimerState.dismissed = false;
       cfg.qTimerState.cancelled = false;
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId);
+      const sessionQuestions = this._getSessionQuestions_(sess);
       const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   cancelQTimer(sessId) {
@@ -1140,9 +1152,9 @@ const DB = {
       const cfg = sess.config || {};
       if (cfg.qTimerState) { cfg.qTimerState.cancelled = true; cfg.qTimerState.dismissed = true; cfg.qTimerState.paused = false; }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId);
+      const sessionQuestions = this._getSessionQuestions_(sess);
       const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   pauseSessionTimer(sessId) {
@@ -1154,9 +1166,9 @@ const DB = {
       cfg.sessionTimerState.pausedRemaining = Math.max(0, (cfg.sessionTimerState.endTime || Date.now()) - Date.now());
       cfg.sessionTimerState.paused = true;
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
       this.logTeacherAction(sessId, 'pause_session_timer', '');
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   resumeSessionTimer(sessId) {
@@ -1167,8 +1179,8 @@ const DB = {
       cfg.sessionTimerState.endTime = Date.now() + (cfg.sessionTimerState.pausedRemaining || 0);
       cfg.sessionTimerState.paused = false; cfg.sessionTimerState.pausedRemaining = null;
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   extendSessionTimer(sessId, additionalSeconds) {
@@ -1184,9 +1196,9 @@ const DB = {
         if (cfg.sessionTimerState.cancelled) cfg.sessionTimerState.cancelled = false;
       }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
       this.logTeacherAction(sessId, 'extend_session_timer', 'seconds=' + additionalSeconds);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   cancelSessionTimer(sessId) {
@@ -1195,8 +1207,8 @@ const DB = {
       const cfg = sess.config || {};
       if (cfg.sessionTimerState) { cfg.sessionTimerState.cancelled = true; cfg.sessionTimerState.paused = false; }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   startSessionTimer(sessId) {
@@ -1207,8 +1219,8 @@ const DB = {
       const _now = Date.now();
       cfg.sessionTimerState = {startedAt: new Date(_now).toISOString(), endTime: _now + sess.timer.seconds * 1000, originalSeconds: sess.timer.seconds, paused: false, pausedRemaining: null, cancelled: false};
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   // ── SESSION PAUSE (freezes student interaction) ──
@@ -1226,8 +1238,8 @@ const DB = {
         cfg.sessionTimerState.paused = true;
       }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
   resumeSession(sessId) {
@@ -1245,8 +1257,8 @@ const DB = {
         cfg.sessionTimerState.pausedRemaining = null;
       }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
-      const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
-      return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
+      const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
 

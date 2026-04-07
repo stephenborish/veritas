@@ -3315,18 +3315,33 @@
       if (_ch.stats) {
         const _vCount = d.violations.filter(v => !v.resolved).length;
         const _joinRate = d.totalJoined > 0 ? Math.round((d.totalFinished / Math.max(1, d.totalJoined)) * 100) : 0;
+        const _waiting = Number(d.waitingToJoinCount || 0);
+        const _inProgress = Number(d.inProgressCount || 0);
+        const _noResponse = Number(d.noResponseCount || 0);
         document.getElementById('liveStatsRow').innerHTML = `
           <div class="stat-pill">
             <span class="sp-val">${d.totalJoined}</span>
             <span class="sp-lbl">Joined</span>
           </div>
           <div class="stat-pill">
+            <span class="sp-val" style="color:${_waiting ? 'var(--amb)' : 'var(--tx3)'}">${_waiting}</span>
+            <span class="sp-lbl">Not Joined</span>
+          </div>
+          <div class="stat-pill">
             <span class="sp-val" style="color:var(--teal)">${d.totalActiveNow || 0}</span>
             <span class="sp-lbl">Active</span>
           </div>
           <div class="stat-pill">
+            <span class="sp-val" style="color:var(--blue)">${_inProgress}</span>
+            <span class="sp-lbl">In Progress</span>
+          </div>
+          <div class="stat-pill">
             <span class="sp-val" style="color:var(--grn)">${d.totalFinished}</span>
             <span class="sp-lbl">Finished</span>
+          </div>
+          <div class="stat-pill">
+            <span class="sp-val" style="color:${_noResponse ? 'var(--red)' : 'var(--tx3)'}">${_noResponse}</span>
+            <span class="sp-lbl">No Responses</span>
           </div>
           <div class="stat-pill">
             <span class="sp-val" style="color:${_vCount ? 'var(--red)' : 'var(--tx3)'}">${_vCount}</span>

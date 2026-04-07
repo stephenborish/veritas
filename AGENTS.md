@@ -61,6 +61,9 @@ Because 30+ students may submit answers simultaneously, every single write opera
 ### Data Serialization
 Complex objects (arrays of answers, session configs, student rosters) are stored as JSON strings in cells. Always `JSON.parse()` on read and `JSON.stringify()` on write. The `QSets` sheet stores `QuestionsJSON` and `StimuliJSON` in separate columns.
 
+### Snapshot-First Session Question Source (Reliability Critical)
+For any **live session behavior** (student question delivery, join payload question counts, live monitor stats, question navigation, reveal/lock controls, and session timer/question timer normalization), always resolve questions from `sess.snapshotQuestions` first and only fall back to the current QSet when the snapshot is missing (legacy sessions). Using live QSet rows during an active/archived session can create question-count drift after a teacher edits a set post-launch.
+
 ### Auto-Formatting Gotcha
 When writing student answers, prepend with a single quote (`'`) if the answer could be misinterpreted by Sheets (numbers, booleans, percent strings like `+100%` → `1`).
 
