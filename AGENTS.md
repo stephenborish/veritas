@@ -299,6 +299,13 @@ Veritas Assess has a premium glassmorphism aesthetic. Do not introduce Tailwind,
 * **Modals:** `.sys-modal-bg` / `.sys-modal-card`. 🛑 **NEVER** use `alert()`, `confirm()`, or `prompt()` — they trigger browser security warnings (especially in fullscreen). Always use `sysConfirm(title, desc, confirmText, callback, isDestructive)`.
 * **Toasts:** `toast('Message', 'ok' | 'err')` — transient notifications
 
+### Live Monitor UX Conventions (TeacherApp)
+* Keep live monitoring controls in a compact sticky top bar (`#live-top-bar`) with dense status chips (`.stat-pill`) to preserve vertical space.
+* Use a two-column live layout (`.live-dashboard`) with a narrow context rail and a wide student workspace; collapse to one column below ~1100px.
+* Keep tab framing consistent with `.live-panel` and `.live-tab-header` so teacher focus remains on active data rather than scattered controls.
+* Use summary micro-panels (`.live-overview-bar` / `.live-overview-pill`) above the student tile grid for immediate scanability (showing totals, correctness split, and no-response counts).
+* Student tiles should remain information-dense (compact spacing, concise metadata, rapid action buttons) to avoid wasting screen real estate during high-pressure proctoring.
+
 ### KaTeX Math Rendering
 Both `StudentApp.html` and `TeacherApp.html` load KaTeX (v0.16.9) from CDN. Math expressions are rendered as `<span class="katex-inline" data-latex="...">` elements. After any dynamic DOM update that may contain math, call `document.querySelectorAll('.katex-inline').forEach(el => katex.render(...))`. KaTeX render errors are caught and logged with `console.warn()` — never let a KaTeX error block UI rendering.
 
