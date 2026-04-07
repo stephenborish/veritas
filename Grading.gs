@@ -18,7 +18,7 @@
 const Grader = {
   MODEL: 'gemini-3-flash-preview',
   BATCH_SIZE: 3,
-  SYSTEM_INSTRUCTION: 'You are a rigorous, fair science teacher grading student short-answer responses. Your feedback style is direct, specific, and concise — like margin notes from an expert. Never restate the question. Never use filler phrases like "Great job" or "Good effort." Focus exclusively on the scientific accuracy of what the student wrote. Ignore spelling, grammar, and punctuation unless they change the factual meaning of a science concept. Only reference concepts the student actually wrote — never infer, assume, or fabricate content not present in the answer. If the answer is blank or nonsensical, score 0 and say so. Grade every student with equal care regardless of their position in the list. CRITICAL: You MUST read each student\'s answer EXACTLY as written — do NOT paraphrase, restate, or reinterpret the student\'s words. If a student wrote "reject the null hypothesis" do not change this to "fail to reject" or any other wording. Do NOT attribute one student\'s answer to another student under any circumstances. Every grade must reflect only what that specific student actually wrote.',
+  SYSTEM_INSTRUCTION: 'You are a rigorous, fair science teacher grading student short-answer responses. Your feedback style is direct, specific, and concise — like margin notes from an expert. Never restate the question. Never use filler phrases like "Great job" or "Good effort." Focus exclusively on the scientific accuracy of what the student wrote. Ignore spelling, grammar, and punctuation unless they change the factual meaning of a science concept. Only reference concepts the student actually wrote — never infer, assume, or fabricate content not present in the answer. If the answer is blank or nonsensical, score 0 and say so. Grade every student with equal care regardless of their position in the list. CRITICAL: You MUST read each student\'s answer EXACTLY as written — do NOT paraphrase, restate, or reinterpret the student\'s words. If a student wrote "reject the null hypothesis" do not change this to "fail to reject" or any other wording. Do NOT attribute one student\'s answer to another student under any circumstances. Every grade must reflect only what that specific student actually wrote. When grading, identify up to 3 key science concept labels (1-4 words each) that the student\'s answer addresses incorrectly or incompletely. Include these as a "concepts" array in your JSON output. If the answer is fully correct, return an empty concepts array.',
   QUEUE_KEY: 'VA_GRADE_QUEUE',
 
   statusKey(sessId) { return 'VA_GRADE_STATUS_' + sessId; },
@@ -102,13 +102,15 @@ const Grader = {
     }
 
     const qSet = DB.getQSet(sess.setId);
-    if (!qSet) {
+    // BUG 4 fix: prefer snapshot taken at launch; fall back to live QSet for pre-fix sessions
+    const allQuestions = sess.snapshotQuestions || (qSet && qSet.questions);
+    if (!allQuestions) {
       const msg = 'Question set not found.';
       this.setStatus(sessId, { state: 'error', sessionId: sessId, message: msg });
       return { error: msg };
     }
 
-    const saQs = qSet.questions.filter(q => q.type === 'sa');
+    const saQs = allQuestions.filter(q => q.type === 'sa');
     if (!saQs.length) {
       const out = { gradedCount: 0, errors: 0, message: 'No short-answer questions in this question set.' };
       this.setStatus(sessId, Object.assign({ state: 'done', sessionId: sessId }, out));
@@ -194,7 +196,7 @@ const Grader = {
               sessId, r.studentId, r.studentName, q.id,
               finalResult.score, q.points || 1, finalResult.feedback,
               r.answer, new Date().toISOString(),
-              false, '', '', ''
+              false, '', '', '', JSON.stringify(finalResult.concepts || []), ''
             ]);
 
             const responseEntry = responseRowByKey[sessId + '|' + r.studentId + '|' + q.id];
@@ -381,7 +383,8 @@ const Grader = {
        return result.map(res => ({
          studentId: String(res.id),
          score: Math.min(Math.max(Number(res.score) || 0, 0), maxPts),
-         feedback: res.feedback || 'No feedback generated.'
+         feedback: res.feedback || 'No feedback generated.',
+         concepts: Array.isArray(res.concepts) ? res.concepts.slice(0, 3) : []
        }));
     } catch(e) {
        console.error('Batch JSON parse completely failed:', e, 'Raw text:', text);
@@ -481,15 +484,43 @@ const Grader = {
           if (maxPoints > 0 && numScore > maxPoints) {
             return { error: 'Score (' + numScore + ') exceeds max points (' + maxPoints + ').' };
           }
+          const originalAIScore = d[i][4]; // col 5, index 4 — original AI score before override
           sheet.getRange(i + 1, 10).setValue(true);
           sheet.getRange(i + 1, 11).setValue(numScore);
           sheet.getRange(i + 1, 12).setValue(String(fb || '').slice(0, 2000));
+          if (d[i][14] === '' || d[i][14] === undefined || d[i][14] === null) {
+            sheet.getRange(i + 1, 15).setValue(originalAIScore); // OriginalAIScore — only set once
+          }
           this._syncResponseScore(sessId, stuId, qId, numScore);
           DB.logAuditEvent('OVERRIDE_SCORE', sessId + ':' + stuId + ':' + qId, 'score=' + numScore);
           return { ok: true };
         }
       }
       return { error: 'Grade record not found — run AI grading first.' };
+    });
+  },
+
+  revertToAIScore(sessId, stuId, qId) {
+    return DB.withLock(() => {
+      const sheet = DB.sh('AIGrades');
+      const d = sheet.getDataRange().getValues();
+      for (let i = 1; i < d.length; i++) {
+        if (d[i][0] === sessId && d[i][1] === stuId && d[i][3] === qId) {
+          const originalAIScore = d[i][14]; // col 15 — saved at override time
+          if (originalAIScore === '' || originalAIScore === null || originalAIScore === undefined) {
+            return { error: 'No original AI score saved — cannot revert.' };
+          }
+          const restoreScore = Number(originalAIScore);
+          sheet.getRange(i + 1, 10).setValue(false); // overridden = false
+          sheet.getRange(i + 1, 11).setValue('');    // overrideScore cleared
+          sheet.getRange(i + 1, 12).setValue('');    // overrideFeedback cleared
+          sheet.getRange(i + 1, 5).setValue(restoreScore); // restore original score
+          this._syncResponseScore(sessId, stuId, qId, restoreScore);
+          DB.logAuditEvent('REVERT_AI_SCORE', sessId + ':' + stuId + ':' + qId, 'restoredScore=' + restoreScore);
+          return { ok: true, restoredScore: restoreScore };
+        }
+      }
+      return { error: 'Grade record not found.' };
     });
   },
 
@@ -724,3 +755,9 @@ function startAIGrading(sessId)           { return Grader.startGradingAsync(sess
 function getGradingStatus(sessId)         { return Grader.getStatus(sessId); }
 function overrideGradeScore(sessId, stuId, qId, score, fb) { return Grader.overrideScore(sessId, stuId, qId, score, fb); }
 function regradeQuestion(sessId, qId, ctx){ return Grader.regradeWithContext(sessId, qId, ctx); }
+// Returns {installed: bool} — called by TeacherApp before attempting to grade
+function checkTriggerStatus() {
+  const triggers = ScriptApp.getProjectTriggers();
+  const installed = triggers.some(t => t.getHandlerFunction() === 'checkGradeQueue');
+  return { installed };
+}

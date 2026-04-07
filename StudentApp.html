@@ -1988,6 +1988,13 @@
     document.addEventListener('visibilitychange', function () {
       if (document.hidden && S.sid && !S.done && !S.locked) triggerLockout('tab_switch');
     });
+    // Fix 17: prevent copying during active exam
+    document.addEventListener('copy', function(evt) {
+      if (S.sid && !S.done && !S.locked) {
+        evt.preventDefault();
+        toast('Copying is not permitted during this assessment.');
+      }
+    });
 
     function onFSChange() {
       if (!document.fullscreenElement && S.sid && !S.done && !S.locked) triggerLockout('fullscreen_exit');
@@ -2062,6 +2069,13 @@
           if (d.flaggedQs && Array.isArray(d.flaggedQs)) {
             S.flagged = {};
             d.flaggedQs.forEach(function(qid) { if (qid) S.flagged[qid] = true; });
+          }
+          // Fix 15: restore eliminated choices
+          if (d.eliminatedChoices && typeof d.eliminatedChoices === 'object') {
+            S.eliminated = {};
+            Object.entries(d.eliminatedChoices).forEach(([qId, idxArr]) => {
+              S.eliminated[qId] = new Set(Array.isArray(idxArr) ? idxArr : []);
+            });
           }
           if (d.existing) {
             Object.assign(S.ans, d.existing);
@@ -2426,7 +2440,7 @@
             }
           }
         } else {
-          html += '<div class="sa"><textarea id="saIn" data-qid="' + q.id + '" placeholder="Type your detailed response here...">' + (S.ans[q.id] || '') + '</textarea></div>';
+          html += '<div class="sa"><textarea id="saIn" data-qid="' + q.id + '" placeholder="Type your detailed response here...">' + (S.ans[q.id] || '') + '</textarea><div id="saSaveStatus" style="font-size:11px;margin-top:4px;color:var(--tx2);min-height:14px"></div></div>';
           const _saLabel = (S.submittedAns[q.id] && S.mode !== 'lockstep') ? 'Update Answer' : 'Submit Answer';
           html += '<div style="margin-top: 24px; text-align: right;"><button class="nbtn nbtn-next" style="display:inline-flex" onclick="submitSA(\'' + q.id + '\')">' + _saLabel + '</button></div>';
         }
@@ -2439,6 +2453,8 @@
         let saTimeout;
         shortAnswerInput.addEventListener('input', function () {
           trackSA(shortAnswerInput.dataset.qid);
+          const _saStatus = document.getElementById('saSaveStatus');
+          if (_saStatus) { _saStatus.textContent = 'Saving...'; _saStatus.style.color = '#f59e0b'; }
           clearTimeout(saTimeout);
           saTimeout = setTimeout(function () {
             if (!S.submittedAns[shortAnswerInput.dataset.qid]) {
@@ -2553,6 +2569,11 @@
         }
       }
       renderQ();
+      // Fix 15: sync eliminations to server
+      const elimSerial = JSON.stringify(Object.fromEntries(
+        Object.entries(S.eliminated).map(([k,v]) => [k, v instanceof Set ? Array.from(v) : (Array.isArray(v) ? v : [])])
+      ));
+      SyncQueue.add('studentSaveEliminated', [S.sid, S.stuId, elimSerial]);
     }
 
     // Guard: prevent submission to locked questions (lockstep race condition)
@@ -2623,6 +2644,12 @@
     function saveSA(qId) {
       if (_isQLocked(qId)) return;
       SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, S.ans[qId]]);
+      const _saStatus = document.getElementById('saSaveStatus');
+      if (_saStatus) {
+        _saStatus.textContent = 'Saved ✓';
+        _saStatus.style.color = '#10b981';
+        setTimeout(function() { const el = document.getElementById('saSaveStatus'); if (el) el.textContent = ''; }, 3000);
+      }
     }
 
     function setConf(qId, confVal) {
@@ -2632,10 +2659,31 @@
       SyncQueue.add('studentSubmitMeta', [S.sid, S.stuId, qId, confVal]);
     }
 
+    // Auto-save pending multi-select choices before navigating away (BUG 1 fix)
+    function _flushPendingMulti(qId) {
+      const q = S.qs[S.cur];
+      if (!q || !q.multiSelect) return;
+      const arr = S.pendingMulti[qId || q.id] || [];
+      if (!arr.length) return;
+      const ansStr = JSON.stringify(arr);
+      S.ans[q.id] = ansStr;
+      S.submittedAns[q.id] = true;
+      SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, q.id, arr]);
+      logAction('answer_change', q.id, ansStr);
+      toast('Multi-select answer auto-saved.');
+    }
+
     function goPrev() {
       if (S.cur > 0 && S.mode !== 'lockstep') {
+        // Fix 18: log time spent on previous question
+        const _prevQ = S.qs && S.qs[S.cur];
+        if (_prevQ && S.viewedAt && S.viewedAt[_prevQ.id]) {
+          const _elapsed = Math.round((Date.now() - S.viewedAt[_prevQ.id]) / 1000);
+          logAction('time_on_q', _prevQ.id, String(_elapsed));
+        }
         const _saIn = document.getElementById('saIn');
         if (_saIn && !S.submittedAns[_saIn.dataset.qid]) saveSA(_saIn.dataset.qid);
+        _flushPendingMulti();
         S.cur--;
         S._justSubmittedQ = null;
         renderQ();
@@ -2660,9 +2708,18 @@
         return toast("Please select your confidence level before proceeding.");
       }
 
+      // Fix 18: log time spent on previous question
+      const _prevQ = S.qs && S.qs[S.cur];
+      if (_prevQ && S.viewedAt && S.viewedAt[_prevQ.id]) {
+        const _elapsed = Math.round((Date.now() - S.viewedAt[_prevQ.id]) / 1000);
+        logAction('time_on_q', _prevQ.id, String(_elapsed));
+      }
+
       if (S.cur === S.qs.length - 1) {
+        _flushPendingMulti();
         showSubmitModal();
       } else {
+        _flushPendingMulti();
         S.cur++;
         S._justSubmittedQ = null;
         if (S.mode === 'lockstep') {
@@ -3171,9 +3228,16 @@
       if (S.mode === 'lockstep') return;
       if (idx < 0 || idx >= S.qs.length) return;
       if (idx === S.cur) return;
-      // Auto-save SA before leaving
+      // Fix 18: log time spent on previous question
+      const _prevQ = S.qs && S.qs[S.cur];
+      if (_prevQ && S.viewedAt && S.viewedAt[_prevQ.id]) {
+        const _elapsed = Math.round((Date.now() - S.viewedAt[_prevQ.id]) / 1000);
+        logAction('time_on_q', _prevQ.id, String(_elapsed));
+      }
+      // Auto-save SA and pending multi-select before leaving
       var saIn = document.getElementById('saIn');
       if (saIn && !S.submittedAns[saIn.dataset.qid]) saveSA(saIn.dataset.qid);
+      _flushPendingMulti();
       logAction('navigate', S.qs[idx] ? S.qs[idx].id : '', String(idx));
       S.cur = idx;
       S._justSubmittedQ = null;

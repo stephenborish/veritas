@@ -240,6 +240,9 @@ function getQuestionSets(courseId) { return DB.getQSets(courseId); }
 function getQuestionSet(id) { return DB.getQSet(id); }
 function updateQuestionSet(id, name, courseId, questions, stimuli) { return DB.updateQSet(id, name, courseId, questions, stimuli || []); }
 function deleteQuestionSet(id) { return DB.deleteQSet(id); }
+function restoreQuestionSet(id) { return DB.restoreQSet(id); }
+function getDeletedQuestionSets() { return DB.getDeletedQSets(); }
+function duplicateQuestionSet(id) { return DB.duplicateQSet(id); }
 
 // ── Rosters ──
 function saveRoster(block, courseId, students) { return DB.saveRoster(block, courseId, students); }
@@ -270,7 +273,7 @@ function cancelQuestionTimer(sessId) { try { return DB.cancelQTimer(sessId); } c
 function updateSessionConfig(id, key, val) { return DB.updateSessionConfig(id, key, val); }
 function updateSummaryConfig(id, cfg) { return DB.updateSummaryConfig(id, cfg); }
 function archiveSession(id) { return DB.archiveSession(id); }
-function getArchivedSessions() { return DB.getArchivedSessions(); }
+function getArchivedSessions(opts) { return DB.getArchivedSessions(opts || {}); }
 function getArchivedSessionData(id) { return DB.getArchivedSessionData(id); }
 function rescoreQuestion(sessId, qId, newAnswerText) { return DB.rescoreQuestion(sessId, qId, newAnswerText); }
 function rescoreQuestionFull(sessId, qId, qJsonStr) { return DB.rescoreQuestionFull(sessId, qId, qJsonStr); }
@@ -326,6 +329,15 @@ function studentUpdateFlags(sessId, stuId, flaggedQIds) { return DB.studentUpdat
 function studentReportCurrentQ(sessId, stuId, qIndex) { return DB.studentReportCurrentQ(sessId, stuId, qIndex); }
 function studentLogAction(sessId, stuId, eventType, qId, value) { return DB.logStudentAction(sessId, stuId, eventType, qId, value); }
 function getStudentActionLog(sessId, stuId) { return DB.getStudentActionLog(sessId, stuId); }
+function studentSaveEliminated(sessId, stuId, eliminatedJSON) { return DB.studentSaveEliminated(sessId, stuId, eliminatedJSON); }
+
+// ── Session Templates ──
+function saveSessionTemplate(name, config) { return DB.saveSessionTemplate(name, config); }
+function getSessionTemplates() { return DB.getSessionTemplates(); }
+function deleteSessionTemplate(name) { return DB.deleteSessionTemplate(name); }
+
+// ── AI Grading Overrides ──
+function revertToAIScore(sessId, stuId, qId) { return Grader.revertToAIScore(sessId, stuId, qId); }
 
 // ── AI Analysis ──
 function generateAIClassReport(sessId) {
