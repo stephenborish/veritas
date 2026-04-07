@@ -1586,7 +1586,7 @@
           </div>
           <div style="display:flex; gap:10px">
             <button class="btn bg" onclick="closeQEd()">← Back to List</button>
-            <button class="btn bp" onclick="saveQS()">Save Question Set</button>
+            <button class="btn bp" onclick="saveQS()">Save Question Set</button><span id="qsDraftBadge" style="display:none;font-size:11px;color:#f59e0b;margin-left:8px">Unsaved changes</span>
           </div>
         </div>
 
@@ -1634,9 +1634,11 @@
         <div class="card">
           <div class="fg">
             <div class="fr"><label>Question Set</label><select id="lSet"></select></div>
-            <div class="fr"><label>Block Roster</label><select id="lBk">
+            <div class="fr"><label>Block Roster</label><select id="lBk" onchange="updateRosterCountPreview()">
                 <option value="">Loading Rosters...</option>
-              </select></div>
+              </select>
+              <div id="rosterCountPreview" style="font-size:12px;color:var(--tx2);margin-top:4px;min-height:18px"></div>
+              </div>
           </div>
           <div class="fg">
             <div class="fr"><label>Mode</label><select id="lMode" onchange="document.getElementById('lQTimerRow').style.display=this.value==='lockstep'?'flex':'none';checkBankLockstep()">
@@ -1667,8 +1669,8 @@
           </div>
 
           <div class="fg">
-            <div class="fr"><label>Opens At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lOpenAt"></div>
-            <div class="fr"><label>Closes At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lCloseAt"></div>
+            <div class="fr"><label>Opens At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lOpenAt"><span class="tz-label" style="font-size:11px;color:var(--tx2);margin-top:2px"></span></div>
+            <div class="fr"><label>Closes At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lCloseAt"><span class="tz-label" style="font-size:11px;color:var(--tx2);margin-top:2px"></span></div>
           </div>
 
           <div style="display:flex;gap:20px;margin:16px 0 16px;flex-wrap:wrap">
@@ -1693,6 +1695,18 @@
             </div>
             <div id="bankLockstepWarn" style="display:none;margin-top:10px;font-size:12px;color:var(--amb)">
               &#9888; Question bank drawing is not available in Lockstep mode.
+            </div>
+          </div>
+
+          <!-- Session Templates -->
+          <div class="fg" style="margin-bottom:12px">
+            <div class="fr">
+              <label>Session Template</label>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <select id="tplPicker" onchange="applyTemplate(this.value)" style="flex:1"><option value="">— No template —</option></select>
+                <button class="btn bg" onclick="saveTpl()" style="font-size:13px;white-space:nowrap">Save as Template</button>
+              </div>
+              <div id="tplChips" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"></div>
             </div>
           </div>
 
@@ -2002,8 +2016,9 @@
         }).getQuestionSets();
 
         // Fetch recent Archived Sessions (limit 3 UI side)
-        google.script.run.withSuccessHandler(res => {
+        google.script.run.withSuccessHandler(data => {
           const el = document.getElementById('dashArchList');
+          const res = data.sessions || (Array.isArray(data) ? data : []);
           if (!res.length) { el.innerHTML = '<div style="color:var(--tx3); font-size:13px; padding: 12px">No past sessions found.</div>'; return; }
           const recent = res.slice(0, 4);
           el.innerHTML = recent.map(s => {
@@ -2018,7 +2033,7 @@
                     <div><span class="badge ${badge}">${pct}% Avg</span></div>
                  </div>`;
           }).join('');
-        }).getArchivedSessions();
+        }).getArchivedSessions({limit:4, offset:0, search:'', sortBy:'newest'});
       } else {
         console.warn('Google Apps Script not connected. Dashboard mock static.');
         document.getElementById('dashSetsList').innerHTML = '<div style="padding:16px; color:var(--tx3)">Not connected to backend.</div>';
@@ -2450,6 +2465,20 @@
         return;
       }
 
+      // Add "Show Deleted" toggle below list if not already present
+      if (!document.getElementById('deletedQSetList')) {
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn bg';
+        toggleBtn.style.cssText = 'margin-top:12px;font-size:13px';
+        toggleBtn.textContent = 'Show Deleted Sets';
+        toggleBtn.onclick = toggleDeletedQSets;
+        el.parentNode.appendChild(toggleBtn);
+        const deletedDiv = document.createElement('div');
+        deletedDiv.id = 'deletedQSetList';
+        deletedDiv.style.display = 'none';
+        el.parentNode.appendChild(deletedDiv);
+      }
+
       el.innerHTML = filtered.map(s => {
         const course = (window.__allCoursesData || []).find(c => c.id === s.courseId);
         const courseBadge = course ? `<span class="badge" style="background:var(--s2); color:var(--tx2); font-size:11px; border:1px solid var(--bd);">📚 ${course.name}</span>` : '';
@@ -2464,6 +2493,7 @@
           </div>
           <div style="display:flex;gap:6px">
             <button class="btn bg" onclick="openQEd('${s.id}')">Edit Set</button>
+            <button class="btn bg" onclick="dupQSet('${s.id}')">Duplicate</button>
             <button class="btn bg" onclick="dupQS('${s.id}')">Copy</button>
             <button class="btn bs" style="background:var(--red); border-color:var(--red); color:#fff" onclick="delQS('${s.id}')">✕</button>
           </div>
@@ -2488,9 +2518,9 @@
         if (id) {
           document.getElementById('qEdList').innerHTML = '<div class="loading"><div class="mini-dots"><span></span><span></span><span></span></div>Loading...</div>';
           google.script.run.withSuccessHandler(s => {
-            if (!s) return; document.getElementById('qN').value = s.name; document.getElementById('qCourse').value = s.courseId || ''; edQ = s.questions; edStimuli = s.stimuli || []; renderEdQ();
+            if (!s) return; document.getElementById('qN').value = s.name; document.getElementById('qCourse').value = s.courseId || ''; edQ = s.questions; edStimuli = s.stimuli || []; renderEdQ(); _checkQsDraft(id);
           }).getQuestionSet(id);
-        } else { edStimuli = []; renderEdQ(); }
+        } else { edStimuli = []; renderEdQ(); _checkQsDraft(null); }
       } else {
         toast('Google Apps Script API not available.', 'err');
         renderEdQ();
@@ -2578,6 +2608,7 @@
           }
         }
       });
+      _qsDraftSave();
     }
 
     function togCI(qi, ci) { if (!edQ[qi].correctIndices) edQ[qi].correctIndices = []; const a = edQ[qi].correctIndices; const p = a.indexOf(ci); if (p >= 0) a.splice(p, 1); else a.push(ci); if (!a.length) a.push(ci); edQ[qi].correctIndex = a[0]; }
@@ -2629,6 +2660,39 @@
       `).join('');
     }
 
+    // ── QSet Draft Auto-Save ──
+    function _qsDraftSave() {
+      try {
+        const key = 'va_qs_draft_' + (window.curSetId || 'new');
+        const draft = { name: document.getElementById('qsName') ? document.getElementById('qsName').value : (document.getElementById('qN') ? document.getElementById('qN').value : ''), questions: window.edQ || [], stimuli: window.edStimuli || [], savedAt: Date.now() };
+        localStorage.setItem(key, JSON.stringify(draft));
+        const badge = document.getElementById('qsDraftBadge');
+        if (badge) { badge.textContent = 'Unsaved changes'; badge.style.display = ''; }
+      } catch(e) {}
+    }
+    function _checkQsDraft(id) {
+      try {
+        const key = 'va_qs_draft_' + (id || 'new');
+        const raw = localStorage.getItem(key);
+        if (!raw) return;
+        const draft = JSON.parse(raw);
+        if (!draft || !draft.savedAt) return;
+        sysConfirm('Restore Draft', 'Unsaved draft found for this question set. Restore it?', 'Restore', () => {
+          if (draft.name && document.getElementById('qN')) document.getElementById('qN').value = draft.name;
+          if (draft.questions) { window.edQ = draft.questions; }
+          if (draft.stimuli) { window.edStimuli = draft.stimuli; }
+          renderEdQ();
+        });
+      } catch(e) {}
+    }
+    function _qsDraftClear() {
+      try {
+        localStorage.removeItem('va_qs_draft_' + (window.curSetId || 'new'));
+        const badge = document.getElementById('qsDraftBadge');
+        if (badge) { badge.textContent = ''; badge.style.display = 'none'; }
+      } catch(e) {}
+    }
+
     function saveQS() {
       const name = document.getElementById('qN').value.trim(); if (!name) return toast('Assessment Title required', 'err'); if (!edQ.length) return toast('Please add at least one question', 'err');
 
@@ -2647,8 +2711,8 @@
 
       const cid = document.getElementById('qCourse').value;
       showLoad('Saving Question Set...');
-      const cb = () => { hideLoad(); toast('Set Saved Successfully!', 'ok'); closeQEd(); };
-      const failCb = (e) => { hideLoad(); toast('⚠ ' + (e.message || e), 'err'); };
+      const cb = () => { hideLoad(); _qsDraftClear(); toast('Set Saved Successfully!', 'ok'); closeQEd(); };
+      const failCb = (e) => { hideLoad(); _qsDraftSave(); toast('⚠ ' + (e.message || e), 'err'); };
 
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         if (curSetId) google.script.run.withFailureHandler(failCb).withSuccessHandler(cb).updateQuestionSet(curSetId, name, cid, edQ, edStimuli);
@@ -2694,6 +2758,10 @@
             <div style="display:flex;gap:8px"><button class="btn bg" onclick="sendEmails()">📧 Send Email Links</button><button class="btn bg" onclick="document.querySelector('[data-s=live]').click()">📡 Monitor</button><button class="btn bd" onclick="endS()">End Session</button></div></div>`;
           } else { aSid = null; el.innerHTML = ''; }
         }).getActiveSession();
+
+        _loadSessionTemplates();
+        _showTzLabel();
+        updateRosterCountPreview();
       } else {
         console.warn('Google Apps Script API not available. Cannot load launch options.');
       }
@@ -2840,8 +2908,13 @@
           const accurateUrl = window.location.href.split('?')[0];
           google.script.run.withSuccessHandler(r => {
             hideLoad();
-            if (r.error) toast(r.error, 'err');
-            else toast(`Successfully sent ${r.sent} emails!`, 'ok');
+            if (r.error) { toast(r.error, 'err'); return; }
+            const skipped = r.skipped || 0, errs = r.errors || [], sent = r.sent || 0;
+            if (skipped === 0 && !errs.length) { toast(`Successfully sent ${sent} email${sent!==1?'s':''}!`, 'ok'); return; }
+            let msg = `<b>Email delivery summary</b><br><br>✓ Sent: ${sent} student${sent!==1?'s':''}`;
+            if (skipped > 0) msg += `<br>⚠ Skipped (no email on file): ${skipped}`;
+            if (errs.length) msg += `<br>✗ Failed: ${errs.length}<br><small style="color:var(--tx2)">${errs.slice(0,5).map(e=>DOMPurify.sanitize(String(e))).join('<br>')}</small>`;
+            sysConfirm('Email Summary', msg, 'OK', () => {}, {hideCancel:true});
           }).withFailureHandler(e => { hideLoad(); toast('System Error: ' + e.message, 'err'); })
             .sendAssessmentEmails(aSid, accurateUrl);
         } else {
@@ -3370,10 +3443,10 @@
           leftHtml += `<div class="card" style="border:1px solid var(--red)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <div style="font-weight:700;color:var(--red)">⚠ Students Locked Out (${unresolvedViolations.length})</div>
-              ${unresolvedViolations.length > 1 ? `<button class="btn bp" style="font-size:12px;padding:4px 10px" onclick="readmitAllS('${d.session.sessionId}')">Re-admit All</button>` : ''}
+              ${unresolvedViolations.length > 1 ? `<button class="btn bp" style="font-size:12px;padding:4px 10px;background:var(--teal)" title="Clears lockout so all locked students can re-enter the exam" onclick="readmitAllS('${d.session.sessionId}')">Unlock All Students</button>` : ''}
             </div>
-            <div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Resolve by re-admitting student</div>
-            <div style="display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="readmitS('${d.session.sessionId}','${v.studentId}')">Re-admit</button></div>`).join('')}</div>
+            <div style="font-size:12px;color:var(--tx2);margin-bottom:8px">Resolve by unlocking the student so they can re-enter</div>
+            <div style="display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" title="Clears this student's lockout so they can re-enter the exam" style="background:var(--teal)" onclick="readmitS('${d.session.sessionId}','${v.studentId}')">Unlock Student</button></div>`).join('')}</div>
           </div>`;
         }
       }
@@ -3626,7 +3699,7 @@
           } else if (isLS && q) {
             ansSnippet = `<div style="margin-top:8px; padding:6px; background:var(--bd); border-radius:4px; font-size:12px; text-align:center; color:var(--tx3); font-style:italic;">No response</div>`;
           }
-          let reAd = readmitByStudent[s.studentId] ? `<div style="margin-top:8px"><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${s.studentId}')">Re-admit student</button></div>` : '';
+          let reAd = readmitByStudent[s.studentId] ? `<div style="margin-top:8px"><button class="btn bp" style="background:var(--teal)" title="Clears this student's lockout so they can re-enter the exam" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${s.studentId}')">Unlock Student</button></div>` : '';
           // For not-joined roster students with a known email, show a resend link button
           const resendBtn = (s.status === 'not-joined' && s.email)
             ? `<div style="margin-top:8px"><button class="btn bg" style="width:100%;font-size:11px" onclick="event.stopPropagation();sendSingleEmail('${d.session.sessionId}','${DOMPurify.sanitize(s.email)}')">📧 Resend Link</button></div>`
@@ -3738,6 +3811,7 @@
               const pctScore = score !== null ? Math.round((Number(score) / maxPts) * 100) : null;
               const scoreColor = pctScore !== null ? (pctScore >= 80 ? 'var(--grn)' : pctScore >= 50 ? 'var(--amb)' : 'var(--red)') : 'var(--tx3)';
               const overrideBadge = r.overridden ? `<span style="font-size:10px;background:var(--amb);color:#fff;border-radius:4px;padding:1px 5px;margin-left:6px">edited</span>` : '';
+              const revertBtn = (r.overridden && r.originalAIScore !== undefined && r.originalAIScore !== '') ? `<button onclick="revertAIScore('${sessId}','${r.studentId}','${q.id}',${r.originalAIScore})" style="font-size:10px;padding:2px 7px;background:#6b7280;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-top:4px;width:100%" title="Restore original AI score">Revert to AI (${r.originalAIScore}/${maxPts})</button>` : '';
 
               html += `<div style="border:1px solid var(--bd);border-radius:8px;padding:12px;background:var(--s2)" id="grade-row-${r.studentId}-${q.id}">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
@@ -3755,6 +3829,7 @@
                         <span style="font-size:12px;color:var(--tx3)">/${maxPts}</span>
                       </div>
                       <button class="btn bg bs" style="margin-top:6px;font-size:11px;width:100%" onclick="saveOverride('${sessId}','${r.studentId}','${q.id}',${maxPts})">Save</button>
+                      ${revertBtn}
                     ` : ''}
                   </div>
                 </div>
@@ -3986,12 +4061,12 @@
       }
     }, 500);
 
-    function readmitS(sid, stuId) { if ((typeof google !== 'undefined' && google.script && google.script.run)) google.script.run.withSuccessHandler(() => { toast('Student Re-admitted.', 'ok'); refreshLive(); }).readmitStudent(sid, stuId); }
+    function readmitS(sid, stuId) { if ((typeof google !== 'undefined' && google.script && google.script.run)) google.script.run.withSuccessHandler(() => { toast('Student unlocked — they can now re-enter the exam.', 'ok'); refreshLive(); }).readmitStudent(sid, stuId); }
     function readmitAllS(sid) {
       if (typeof google !== 'undefined' && google.script && google.script.run)
         google.script.run
-          .withSuccessHandler(res => { toast('All students re-admitted (' + (res.readmitted || 0) + ').', 'ok'); refreshLive(); })
-          .withFailureHandler(e => toast('⚠ Re-admit all failed: ' + (e.message || 'Unknown error'), 'err'))
+          .withSuccessHandler(res => { toast((res.readmitted || 0) + ' student(s) unlocked.', 'ok'); refreshLive(); })
+          .withFailureHandler(e => toast('⚠ Unlock all failed: ' + (e.message || 'Unknown error'), 'err'))
           .readmitAllStudents(sid);
     }
 
@@ -4026,6 +4101,59 @@
       if (!sid) { toast('No active session to grade.', 'err'); return; }
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
 
+      // BUG 2 fix: check trigger is installed before attempting to grade
+      showLoad('Checking grading setup...');
+      google.script.run
+        .withSuccessHandler(ts => {
+          hideLoad();
+          if (!ts || !ts.installed) {
+            // Show step-by-step setup modal instead of a raw error toast
+            showTriggerSetupModal(sid);
+            return;
+          }
+          _doRunGrade(sid);
+        })
+        .withFailureHandler(e => {
+          hideLoad();
+          toast('⚠ Could not check grading setup: ' + (e.message || e), 'err');
+        })
+        .checkTriggerStatus();
+    }
+
+    function showTriggerSetupModal(sid) {
+      document.getElementById('sysModalTitle').textContent = '⚙️ One-Time Grading Setup Required';
+      const desc = document.getElementById('sysModalDesc');
+      desc.innerHTML = [
+        '<p style="margin:0 0 12px">The background grading trigger is not yet installed. This is a <strong>one-time setup</strong> that takes about 60 seconds.</p>',
+        '<ol style="margin:0 0 12px;padding-left:20px;line-height:1.8">',
+        '<li>Click <strong>Open Apps Script Editor</strong> below to open the project in a new tab.</li>',
+        '<li>In the editor, click the <strong>Run</strong> menu → <strong>Run function</strong> → <code>setupGradingTrigger</code>.</li>',
+        '<li>Grant any requested permissions and wait for "Execution completed" in the log.</li>',
+        '<li>Return here and click <strong>Grade Session</strong> again — grading will start immediately.</li>',
+        '</ol>',
+        '<p style="margin:0;font-size:12px;color:var(--tx2)">This trigger runs every minute in the background and only needs to be set up once per Apps Script project.</p>'
+      ].join('');
+      desc.style.display = 'block';
+      document.getElementById('sysModalInput').style.display = 'none';
+      document.getElementById('sysModalTextarea').style.display = 'none';
+
+      const cancel = document.getElementById('sysModalCancel');
+      cancel.textContent = 'Cancel';
+      cancel.style.display = 'inline-flex';
+
+      const btn = document.getElementById('sysModalConfirm');
+      btn.textContent = 'Open Apps Script Editor';
+      btn.className = 'btn bp';
+      btn.onclick = () => {
+        closeSysModal();
+        const scriptUrl = 'https://script.google.com/home/projects';
+        window.open(scriptUrl, '_blank');
+      };
+
+      document.getElementById('sysModal').classList.add('show');
+    }
+
+    function _doRunGrade(sid) {
       // Optimistically show queued state
       window.__gradeStatus = { state: 'queued', message: 'Queuing grading job...', sessionId: sid };
       if (window.__liveD) renderGradingTab(window.__liveD);
@@ -4035,7 +4163,14 @@
       google.script.run
         .withSuccessHandler(r => {
           hideLoad();
-          if (r.error) {
+          if (r && r.error) {
+            // Check again if the error is specifically about the trigger
+            if (r.error.includes('trigger not installed') || r.error.includes('Grading trigger')) {
+              window.__gradeStatus = { state: 'error', message: r.error, sessionId: sid };
+              if (window.__liveD) renderGradingTab(window.__liveD);
+              showTriggerSetupModal(sid);
+              return;
+            }
             window.__gradeStatus = { state: 'error', message: r.error, sessionId: sid };
             if (window.__liveD) renderGradingTab(window.__liveD);
             toast('⚠ ' + r.error, 'err');
@@ -4071,6 +4206,18 @@
         .overrideScore(sessId, stuId, qId, parsed, '');
     }
 
+    function revertAIScore(sessId, stuId, qId, origScore) {
+      showLoad('Reverting to AI score...');
+      google.script.run
+        .withSuccessHandler(r => {
+          hideLoad();
+          if (r && r.ok) { toast('Reverted to AI score (' + (r.restoredScore !== undefined ? r.restoredScore : origScore) + ')', 'ok'); refreshLive(); }
+          else toast('⚠ ' + (r && r.error ? r.error : 'Revert failed'), 'err');
+        })
+        .withFailureHandler(e => { hideLoad(); toast('⚠ ' + e.message, 'err'); })
+        .revertToAIScore(sessId, stuId, qId);
+    }
+
     function regradeAll(sessId, qId, ctx) {
       if (!ctx || !ctx.trim()) return toast('Please add context/notes before regrading — describe what the AI should look for.', 'err');
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
@@ -4092,6 +4239,104 @@
     }
 
     function toast(m, t) { const el = document.createElement('div'); el.className = 'toast ' + (t || ''); el.innerHTML = m; document.body.appendChild(el); setTimeout(() => el.remove(), 3500); }
+
+    // ── Fix 20: Timezone + time formatting ──
+    function formatLocalTime(isoStr) {
+      if (!isoStr) return '';
+      try { return new Date(isoStr).toLocaleString(undefined, {dateStyle:'short', timeStyle:'short', timeZoneName:'short'}); }
+      catch(e) { return new Date(isoStr).toLocaleDateString(); }
+    }
+    function _showTzLabel() {
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.querySelectorAll('.tz-label').forEach(el => { el.textContent = '(' + tz + ')'; });
+      } catch(e) {}
+    }
+
+    // ── Fix 9: Roster count preview at launch ──
+    function updateRosterCountPreview() {
+      const sel = document.getElementById('lBk');
+      const el = document.getElementById('rosterCountPreview');
+      if (!sel || !el) return;
+      const val = sel.value;
+      if (!val) { el.textContent = ''; return; }
+      const parts = val.split('|');
+      const courseId = parts[0], block = parts[1];
+      el.textContent = 'Checking roster...';
+      google.script.run
+        .withSuccessHandler(students => {
+          if (!students || !students.length) {
+            el.innerHTML = '<span style="color:#f59e0b">⚠ No students on roster — add students in Setup first</span>';
+          } else {
+            el.innerHTML = '<span style="color:#10b981">✓ ' + students.length + ' student' + (students.length!==1?'s':'') + ' on roster</span>';
+          }
+        })
+        .withFailureHandler(() => { el.textContent = ''; })
+        .getRoster(block, courseId);
+    }
+
+    // ── Fix 7: Session Templates ──
+    function _loadSessionTemplates() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(tpls => {
+          const picker = document.getElementById('tplPicker');
+          if (picker) picker.innerHTML = '<option value="">— No template —</option>' + (tpls||[]).map(t=>`<option value="${encodeURIComponent(JSON.stringify(t.config))}">${DOMPurify.sanitize(t.name)}</option>`).join('');
+          const chips = document.getElementById('tplChips');
+          if (chips) chips.innerHTML = (tpls||[]).map(t=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg2);border:1px solid var(--bd);border-radius:14px;padding:2px 10px;font-size:12px">${DOMPurify.sanitize(t.name)}<span onclick="deleteTpl('${t.name.replace(/'/g,'\\\'')}')" style="cursor:pointer;color:var(--tx2);margin-left:3px" title="Delete template">✕</span></span>`).join('');
+        })
+        .withFailureHandler(()=>{})
+        .getSessionTemplates();
+    }
+    function applyTemplate(encoded) {
+      if (!encoded) return;
+      try {
+        const cfg = JSON.parse(decodeURIComponent(encoded));
+        if (cfg.setId && document.getElementById('lSet')) document.getElementById('lSet').value = cfg.setId;
+        if (cfg.mode && document.getElementById('lMode')) { document.getElementById('lMode').value = cfg.mode; document.getElementById('lMode').dispatchEvent(new Event('change')); }
+        if (cfg.timer && document.getElementById('lTT')) { document.getElementById('lTT').value = cfg.timer.type||'none'; document.getElementById('lTT').dispatchEvent(new Event('change')); }
+        if (cfg.revealMode && document.getElementById('lRev')) document.getElementById('lRev').value = cfg.revealMode;
+        toast('Template applied.', 'ok');
+      } catch(e) { toast('Could not apply template.', 'err'); }
+    }
+    function saveTpl() {
+      const name = prompt('Save as template name:');
+      if (!name || !name.trim()) return;
+      const config = {
+        setId: document.getElementById('lSet') ? document.getElementById('lSet').value : '',
+        mode: document.getElementById('lMode') ? document.getElementById('lMode').value : '',
+        timer: { type: document.getElementById('lTT') ? document.getElementById('lTT').value : 'none', seconds: document.getElementById('lTM') ? Number(document.getElementById('lTM').value)*60 : 0 },
+        revealMode: document.getElementById('lRev') ? document.getElementById('lRev').value : ''
+      };
+      google.script.run
+        .withSuccessHandler(() => { toast('Template saved.', 'ok'); _loadSessionTemplates(); })
+        .withFailureHandler(e => toast('Error: '+e.message, 'err'))
+        .saveSessionTemplate(name.trim(), config);
+    }
+    function deleteTpl(name) {
+      google.script.run
+        .withSuccessHandler(() => { toast('Template deleted.', 'ok'); _loadSessionTemplates(); })
+        .withFailureHandler(e => toast('Error: '+e.message, 'err'))
+        .deleteSessionTemplate(name);
+    }
+
+    // ── Fix 19: Export session JSON ──
+    function exportSessionJSON(sessId, setName) {
+      showLoad('Preparing export...');
+      google.script.run
+        .withSuccessHandler(data => {
+          hideLoad();
+          if (!data) return toast('No data to export', 'err');
+          const json = JSON.stringify(data, null, 2);
+          const a = document.createElement('a');
+          a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
+          a.download = 'veritas_session_' + (setName || sessId).replace(/[^a-zA-Z0-9_-]/g,'_') + '.json';
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          toast('Export ready.', 'ok');
+        })
+        .withFailureHandler(e => { hideLoad(); toast('Export failed: ' + e.message, 'err'); })
+        .getArchivedSessionData(sessId);
+    }
 
     // Init Editor Image Resizer
     document.addEventListener('click', e => {
@@ -4123,22 +4368,38 @@
       document.getElementById('anaList').innerHTML = `<div class="loading"><div class="mini-dots"><span></span><span></span><span></span></div>Loading Sessions...</div>`;
 
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      const opts = {limit:50, offset: window.__anaOffset||0, search: window.__anaSearch||'', sortBy: window.__anaSort||'newest'};
       google.script.run
-        .withSuccessHandler(res => {
-          if (!res || !res.length) {
-            document.getElementById('anaList').innerHTML = `<div style="text-align:center;padding:40px;color:var(--tx3)">No past sessions found.</div>`;
+        .withSuccessHandler(data => {
+          const res = data.sessions || (Array.isArray(data) ? data : []);
+          const total = data.total || res.length;
+          const hasMore = data.hasMore || false;
+          window.__anaSessions = res;
+
+          let topHtml = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+            <input id="anaSearch" value="${window.__anaSearch||''}" placeholder="Search by name or block..." oninput="_debounceAna()" style="padding:6px 10px;border:1px solid var(--bd);border-radius:6px;font-size:13px;background:var(--bg2);color:var(--tx1);flex:1;min-width:160px">
+            <select id="anaSort" onchange="reloadAnaList()" style="padding:6px;border:1px solid var(--bd);border-radius:6px;background:var(--bg2);color:var(--tx1);font-size:13px">
+              <option value="newest" ${(window.__anaSort||'newest')==='newest'?'selected':''}>Newest first</option>
+              <option value="oldest" ${window.__anaSort==='oldest'?'selected':''}>Oldest first</option>
+              <option value="score_desc" ${window.__anaSort==='score_desc'?'selected':''}>Highest score</option>
+              <option value="score_asc" ${window.__anaSort==='score_asc'?'selected':''}>Lowest score</option>
+            </select>
+            <span id="anaTotalCount" style="font-size:12px;color:var(--tx2);white-space:nowrap">Showing ${res.length} of ${total}</span>
+          </div>`;
+
+          if (!res.length) {
+            document.getElementById('anaList').innerHTML = topHtml + `<div style="text-align:center;padding:40px;color:var(--tx3)">No past sessions found.</div>`;
             return;
           }
-          let html = `<div class="card" style="padding:0; overflow:hidden"><table>`;
+          let html = topHtml + `<div class="card" style="padding:0; overflow:hidden"><table>`;
           html += `<tr><th>Date</th><th>Question Set</th><th>Block</th><th>Students</th><th>Avg Score</th><th></th></tr>`;
           res.forEach(s => {
-            const dStr = new Date(s.startedAt).toLocaleDateString() + ' ' + new Date(s.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             html += `<tr>
-              <td style="font-weight:500">${dStr}</td>
-              <td style="font-weight:600">${s.setName}</td>
-              <td>${s.block}</td>
-              <td>${s.studentCount}</td>
-              <td><span class="badge ${s.avgPct >= 80 ? 'b-a' : s.avgPct >= 60 ? 'b-w' : 'b-l'}">${s.avgPct}%</span></td>
+              <td style="font-weight:500">${formatLocalTime(s.startedAt)}</td>
+              <td style="font-weight:600">${DOMPurify.sanitize(s.setName||'')}</td>
+              <td>${DOMPurify.sanitize(s.block||'')}</td>
+              <td>${s.studentCount||0}</td>
+              <td><span class="badge ${s.avgPct >= 80 ? 'b-a' : s.avgPct >= 60 ? 'b-w' : 'b-l'}">${s.avgPct||0}%</span></td>
               <td style="text-align:right; white-space:nowrap">
                 <button class="btn bp bs" onclick="loadAnaDetail('${s.id}')">Analyze</button>
                 <button class="btn bs" style="background:var(--red); border-color:var(--red); color:#fff; margin-left:8px; padding:6px 10px" onclick="delArchive('${s.id}')" title="Delete History">✕</button>
@@ -4146,12 +4407,53 @@
             </tr>`;
           });
           html += `</table></div>`;
+          if (hasMore) html += `<div style="text-align:center;margin-top:12px"><button class="btn bg" id="anaLoadMore" onclick="loadMoreAna()">Load More</button></div>`;
           document.getElementById('anaList').innerHTML = html;
+          // Re-bind search input
+          const si = document.getElementById('anaSearch');
+          if (si) si.oninput = _debounceAna;
         })
         .withFailureHandler(e => {
           document.getElementById('anaList').innerHTML = `<div style="color:var(--red);padding:20px">Error loading sessions: ${DOMPurify.sanitize(e.message || e)}</div>`;
         })
-        .getArchivedSessions();
+        .getArchivedSessions(opts);
+    }
+
+    let _anaDebTimer = null;
+    function _debounceAna() { clearTimeout(_anaDebTimer); _anaDebTimer = setTimeout(reloadAnaList, 350); }
+    function reloadAnaList() {
+      window.__anaOffset = 0;
+      window.__anaSearch = document.getElementById('anaSearch') ? document.getElementById('anaSearch').value : '';
+      window.__anaSort = document.getElementById('anaSort') ? document.getElementById('anaSort').value : 'newest';
+      loadAnaList();
+    }
+    function loadMoreAna() {
+      window.__anaOffset = (window.__anaOffset||0) + 50;
+      window.__anaSearch = document.getElementById('anaSearch') ? document.getElementById('anaSearch').value : '';
+      window.__anaSort = document.getElementById('anaSort') ? document.getElementById('anaSort').value : 'newest';
+      showLoad('Loading more...');
+      const opts = {limit:50, offset: window.__anaOffset, search: window.__anaSearch||'', sortBy: window.__anaSort||'newest'};
+      google.script.run
+        .withSuccessHandler(data => {
+          hideLoad();
+          const more = data.sessions || [];
+          window.__anaSessions = (window.__anaSessions||[]).concat(more);
+          // Find existing table and append rows
+          const tbl = document.querySelector('#anaList table tbody') || document.querySelector('#anaList table');
+          if (tbl && more.length) {
+            more.forEach(s => {
+              const tr = document.createElement('tr');
+              tr.innerHTML = `<td style="font-weight:500">${formatLocalTime(s.startedAt)}</td><td style="font-weight:600">${DOMPurify.sanitize(s.setName||'')}</td><td>${DOMPurify.sanitize(s.block||'')}</td><td>${s.studentCount||0}</td><td><span class="badge ${s.avgPct>=80?'b-a':s.avgPct>=60?'b-w':'b-l'}">${s.avgPct||0}%</span></td><td style="text-align:right;white-space:nowrap"><button class="btn bp bs" onclick="loadAnaDetail('${s.id}')">Analyze</button><button class="btn bs" style="background:var(--red);border-color:var(--red);color:#fff;margin-left:8px;padding:6px 10px" onclick="delArchive('${s.id}')" title="Delete History">✕</button></td>`;
+              tbl.appendChild(tr);
+            });
+          }
+          const cnt = document.getElementById('anaTotalCount');
+          if (cnt) cnt.textContent = `Showing ${window.__anaSessions.length} of ${data.total||0}`;
+          const lm = document.getElementById('anaLoadMore');
+          if (lm) lm.style.display = data.hasMore ? '' : 'none';
+        })
+        .withFailureHandler(e => { hideLoad(); toast('Error: '+e.message,'err'); })
+        .getArchivedSessions(opts);
     }
 
     function loadAnaDetail(sessId) {
@@ -4301,7 +4603,7 @@
               </div>
               <div style="font-size:12px; font-weight:700; color:var(--red); margin-bottom:4px; display:flex; justify-content:space-between; align-items:flex-end">
                 <div>${d} · SECURITY VIOLATION</div>
-                <button class="btn" style="padding:2px 8px; font-size:10px; background:var(--bg); border:1px solid rgba(220, 38, 38, 0.5); color:var(--red); border-radius:4px" onclick="doDismissViolation('${data.session.id}', '${v.timestamp}', event)">Dismiss</button>
+                <button class="btn" style="padding:2px 8px; font-size:10px; background:var(--bg); border:1px solid var(--bd); color:var(--tx2); border-radius:4px" title="Marks this violation as acknowledged in the analytics record. Does not affect the live session." onclick="doDismissViolation('${data.session.id}', '${v.timestamp}', event)">Mark Resolved</button>
               </div>
               <div style="padding:12px 16px; background:var(--rBg); border:1px solid rgba(220, 38, 38, 0.3); border-radius:8px; font-weight:600; color:var(--red);">
                 ${typeMap[v.type] || v.type}
@@ -4664,7 +4966,10 @@
             <p>Block ${sess.block} · ${dStr} · ${students.length} Students</p>
           </div>
           <div>
-            <button class="btn bg" onclick="loadAnaList()">← Back to List</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn bg" onclick="loadAnaList()">← Back to List</button>
+              <button class="btn bg" onclick="exportSessionJSON('${sess.sessionId||sess.id}','${(sess.setName||'').replace(/'/g,'\\\'')}')" title="Download full session data as JSON">⬇ Export JSON</button>
+            </div>
           </div>
         </div>
 
@@ -4878,6 +5183,16 @@
                         </div>
                       </div>
                       ${distractorHtml}
+                      ${(() => {
+                        if (q.type !== 'sa') return '';
+                        const conceptCounts = {};
+                        (grades||[]).filter(g => g.questionId === q.id && g.concepts && g.concepts.length).forEach(g => {
+                          g.concepts.forEach(c => { conceptCounts[c] = (conceptCounts[c]||0)+1; });
+                        });
+                        const sorted = Object.entries(conceptCounts).sort((a,b)=>b[1]-a[1]);
+                        if (!sorted.length) return '';
+                        return `<div style="margin-top:10px;font-size:12px;color:var(--tx2)"><span style="font-weight:600">Common misconception tags:</span> ${sorted.map(([c,n])=>`<span style="display:inline-block;background:var(--aBg);border:1px solid var(--amb);border-radius:12px;padding:1px 9px;margin:2px;font-size:11px;color:var(--amb)">${DOMPurify.sanitize(c)} (${n})</span>`).join('')}</div>`;
+                      })()}
                     </div>
                   `;
           });
@@ -5060,7 +5375,7 @@
 
     function doDismissViolation(sessId, timestamp, ev) {
       if (ev) ev.stopPropagation();
-      sysConfirm('Dismiss Violation', "Are you sure you want to completely dismiss this violation from the student's analytics record?", 'Dismiss', () => {
+      sysConfirm('Mark Violation Resolved', "Mark this violation as resolved in the analytics record? This does not affect the live session.", 'Mark Resolved', () => {
         showLoad('Dismissing violation...');
         google.script.run
           .withSuccessHandler(() => {
@@ -5100,6 +5415,44 @@
       html = html.replace(/\n(?!<br>|<h|<ul|<\/ul)/g, '<br>');
 
       return `<div style="font-family:inherit; padding-bottom:32px">${DOMPurify.sanitize(html)}</div>`;
+    }
+
+    // ── QSET DUPLICATE / RESTORE DELETED ──
+    function dupQSet(id) {
+      showLoad('Duplicating...');
+      google.script.run
+        .withSuccessHandler(r => { hideLoad(); if(r&&r.id){toast('Duplicate created'); loadQS();} else toast('Duplication failed','err'); })
+        .withFailureHandler(e => { hideLoad(); toast('Error: '+e.message,'err'); })
+        .duplicateQuestionSet(id);
+    }
+    function toggleDeletedQSets() {
+      const div = document.getElementById('deletedQSetList');
+      if (!div) return;
+      if (div.style.display === 'none') {
+        div.style.display = '';
+        showLoad('Loading deleted sets...');
+        google.script.run
+          .withSuccessHandler(sets => {
+            hideLoad();
+            if (!sets || !sets.length) { div.innerHTML = '<p style="color:var(--tx2);font-size:13px">No deleted question sets.</p>'; return; }
+            div.innerHTML = '<h4 style="margin:12px 0 8px;color:var(--tx2)">Deleted Question Sets</h4>' +
+              sets.map(s => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--br)">
+                <span style="flex:1">${s.name} <span style="color:var(--tx2);font-size:12px">(${s.questionCount} Qs)</span></span>
+                <button onclick="restoreQSet('${s.id}')" style="background:var(--teal);color:#fff;border:none;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:12px">Restore</button>
+              </div>`).join('');
+          })
+          .withFailureHandler(e => { hideLoad(); toast('Error: '+e.message,'err'); })
+          .getDeletedQuestionSets();
+      } else {
+        div.style.display = 'none';
+      }
+    }
+    function restoreQSet(id) {
+      showLoad('Restoring...');
+      google.script.run
+        .withSuccessHandler(() => { hideLoad(); toast('Question set restored'); loadQS(); document.getElementById('deletedQSetList').style.display='none'; })
+        .withFailureHandler(e => { hideLoad(); toast('Error: '+e.message,'err'); })
+        .restoreQuestionSet(id);
     }
 
     // ── DELETION TOOLS ──

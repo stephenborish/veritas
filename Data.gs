@@ -93,6 +93,14 @@ const DB = {
     }
   },
 
+  logTeacherAction(sessId, action, details) {
+    try {
+      const sheet = this.sh('ActionLog');
+      if (!sheet) return;
+      sheet.appendRow([sessId, '', 'TEACHER', action, String(details || ''), new Date().toISOString()]);
+    } catch(e) { Logger.log('logTeacherAction error: ' + e.toString()); }
+  },
+
   // ── STUDENT ACTION LOG ──
   // Fire-and-forget append to ActionLog. No lock needed — Sheets row appends are atomic.
   // EventTypes: view_q, navigate, flag, unflag, answer_change, submit
@@ -146,6 +154,25 @@ const DB = {
         }
       }
       return { ok: false, error: 'Student session not found' };
+    });
+  },
+
+  // Persists a student's eliminated choice indices to col 19 of StudentSessions (1-indexed).
+  // EliminatedChoices stored as JSON: {qId: [idx, ...]}
+  studentSaveEliminated(sessId, stuId, eliminatedJSON) {
+    return this.withLock(() => {
+      const sheet = this.sh('StudentSessions');
+      const lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+        for (let i = 0; i < data.length; i++) {
+          if (data[i][0] === sessId && data[i][1] === stuId) {
+            sheet.getRange(i + 2, 19).setValue(eliminatedJSON || '');
+            return { saved: true };
+          }
+        }
+      }
+      return { saved: false, error: 'Student session not found' };
     });
   },
 
@@ -206,14 +233,23 @@ const DB = {
     const safeName = String(name).trim();
     const s=this.sh('QSets'); const id='qs_'+Utilities.getUuid().slice(0,8); const now=new Date().toISOString();
     questions.forEach((q,i)=>{if(!q.id)q.id='q'+(i+1)+'_'+Date.now().toString(36)});
-    s.appendRow([id,safeName,courseId||'',now,now,JSON.stringify(questions),JSON.stringify(stimuli||[])]);
+    // Fix 6: col 8 = Status ('active'/'deleted') for soft-delete support
+    s.appendRow([id,safeName,courseId||'',now,now,JSON.stringify(questions),JSON.stringify(stimuli||[]),'active']);
     return {id,name:safeName,questionCount:questions.length};
   },
   getQSets(courseId) {
     const d=this.sh('QSets').getDataRange().getValues();
-    return d.slice(1).filter(r=>!courseId||r[2]===courseId||!r[2]).map(r=>{
+    // Fix 6: exclude soft-deleted rows (r[7] === 'deleted')
+    return d.slice(1).filter(r=>(!courseId||r[2]===courseId||!r[2]) && r[7]!=='deleted').map(r=>{
       const qs=JSON.parse(r[5]||'[]');
       return {id:r[0],name:r[1],courseId:r[2],createdAt:r[3],updatedAt:r[4],questionCount:qs.length,mcCount:qs.filter(q=>q.type==='mc').length,saCount:qs.filter(q=>q.type==='sa').length};
+    });
+  },
+  getDeletedQSets() {
+    const d=this.sh('QSets').getDataRange().getValues();
+    return d.slice(1).filter(r=>r[7]==='deleted').map(r=>{
+      const qs=JSON.parse(r[5]||'[]');
+      return {id:r[0],name:r[1],courseId:r[2],updatedAt:r[4],questionCount:qs.length};
     });
   },
   getQSet(id) {
@@ -236,7 +272,36 @@ const DB = {
     }
     return null;
   },
-  deleteQSet(id) { const s=this.sh('QSets'); const d=s.getDataRange().getValues(); for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);this.logAuditEvent('DELETE_QSET', id, '');return true;} return false; },
+  // Fix 6: soft-delete — sets Status='deleted' instead of removing the row
+  deleteQSet(id) {
+    const s=this.sh('QSets'); const d=s.getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][0]===id){
+      s.getRange(i+1,8).setValue('deleted');
+      this.logAuditEvent('DELETE_QSET', id, 'soft-deleted');
+      return true;
+    }
+    return false;
+  },
+  // Fix 6: restore a soft-deleted QSet
+  restoreQSet(id) {
+    const s=this.sh('QSets'); const d=s.getDataRange().getValues();
+    for(let i=1;i<d.length;i++) if(d[i][0]===id){
+      s.getRange(i+1,8).setValue('active');
+      this.logAuditEvent('RESTORE_QSET', id, '');
+      return true;
+    }
+    return false;
+  },
+  // Fix 14: duplicate a QSet with a new ID and "(Copy)" suffix
+  duplicateQSet(id) {
+    const orig=this.getQSet(id); if(!orig) return {error:'Question set not found'};
+    const newId='qs_'+Utilities.getUuid().slice(0,8); const now=new Date().toISOString();
+    const newName=orig.name+' (Copy)';
+    const s=this.sh('QSets');
+    s.appendRow([newId,newName,orig.courseId||'',now,now,JSON.stringify(orig.questions),JSON.stringify(orig.stimuli||[]),'active']);
+    this.logAuditEvent('DUPLICATE_QSET', id, 'newId='+newId);
+    return {id:newId,name:newName,questionCount:orig.questions.length};
+  },
   saveRoster(block, courseId, students) {
     const s=this.sh('Rosters'); const d=s.getDataRange().getValues(); const now=new Date().toISOString();
     for(let i=1;i<d.length;i++) if(String(d[i][0])===String(block) && String(d[i][1])===String(courseId||'')){s.getRange(i+1,3).setValue(JSON.stringify(students));s.getRange(i+1,4).setValue(now);return {block,count:students.length};}
@@ -310,7 +375,9 @@ const DB = {
     const id='sess_'+Utilities.getUuid().slice(0,8); const code=this.makeCode(); const now=new Date().toISOString();
     const mode = config.mode || 'self-paced';
     const initialQ = -1;
-    s.appendRow([id,code,config.setId,qSet.name,config.block,mode,config.randomizeQuestions||false,config.randomizeChoices||false,'active',initialQ,now,'',JSON.stringify(config),JSON.stringify(config.timer||{type:'none'}),config.revealMode||'end',JSON.stringify(config.summaryConfig||{showScore:true}),'[]',config.calculatorEnabled||false]);
+    // BUG 3 fix: snapshot questions at launch time so QSet edits never affect live/archived sessions
+    const snapshotQuestionsJSON = JSON.stringify(qSet.questions);
+    s.appendRow([id,code,config.setId,qSet.name,config.block,mode,config.randomizeQuestions||false,config.randomizeChoices||false,'active',initialQ,now,'',JSON.stringify(config),JSON.stringify(config.timer||{type:'none'}),config.revealMode||'end',JSON.stringify(config.summaryConfig||{showScore:true}),'[]',config.calculatorEnabled||false,snapshotQuestionsJSON]);
     return {sessionId:id,code,setName:qSet.name,block:config.block,mode:config.mode,questionCount:qSet.questions.length};
   },
   getActiveSession() {
@@ -324,7 +391,10 @@ const DB = {
     return null;
   },
   _parseSess(r,row) {
-    return {sessionId:r[0],code:r[1],setId:r[2],setName:r[3],block:r[4],mode:r[5],randQ:r[6],randC:r[7],status:r[8],currentQ:(r[9]===''||r[9]===null||r[9]===undefined)?-1:Number(r[9]),startedAt:r[10],endedAt:r[11],config:JSON.parse(r[12]||'{}'),timer:JSON.parse(r[13]||'{}'),revealMode:r[14]||'end',summaryConfig:JSON.parse(r[15]||'{}'),revealedQs:JSON.parse(r[16]||'[]'),calcEnabled:r[17]===true||r[17]==='TRUE',row};
+    // r[18] = SnapshotQuestionsJSON (col 19, added BUG 3 fix) — may be empty for sessions created before this fix
+    let snapshotQuestions = null;
+    if (r[18]) { try { snapshotQuestions = JSON.parse(r[18]); } catch(e) { Logger.log('_parseSess: failed to parse snapshotQuestions: ' + e); } }
+    return {sessionId:r[0],code:r[1],setId:r[2],setName:r[3],block:r[4],mode:r[5],randQ:r[6],randC:r[7],status:r[8],currentQ:(r[9]===''||r[9]===null||r[9]===undefined)?-1:Number(r[9]),startedAt:r[10],endedAt:r[11],config:JSON.parse(r[12]||'{}'),timer:JSON.parse(r[13]||'{}'),revealMode:r[14]||'end',summaryConfig:JSON.parse(r[15]||'{}'),revealedQs:JSON.parse(r[16]||'[]'),calcEnabled:r[17]===true||r[17]==='TRUE',snapshotQuestions,row};
   },
   _normalizeSessionState(sess, questionIds) {
     const ids = Array.isArray(questionIds) ? questionIds : [];
@@ -364,6 +434,7 @@ const DB = {
         const ss=this.sh('StudentSessions'); const sd=ss.getDataRange().getValues();
         for(let j=1;j<sd.length;j++) if(sd[j][0]===id&&(sd[j][8]===true||sd[j][8]==='TRUE')){ss.getRange(j+1,9).setValue(false);}
         this.logAuditEvent('END_SESSION', id, '');
+        this.logTeacherAction(id, 'end_session', '');
         return true;
       }
       return false;
@@ -472,22 +543,25 @@ const DB = {
         });
         choiceOrders=JSON.stringify(co);
       }
-      ssSheet.appendRow([sess.sessionId, stuId, storedName, rosterEmail, 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken, storedNormalizedName, identityKey, choiceOrders]);
+      ssSheet.appendRow([sess.sessionId, stuId, storedName, rosterEmail, 'active', new Date().toISOString(), '', 0, false, qOrder, false, clientToken, storedNormalizedName, identityKey, choiceOrders, '', '', '', '']);
       return {sessionId:sess.sessionId,studentId:stuId,studentName:storedName,mode:sess.mode,questionCount:_newJoinQSet?_newJoinQSet.questions.length:0,rejoined:false,calcEnabled:sess.calcEnabled,timer:sess.timer,revealMode:sess.revealMode,needsFullscreen:false,metacognitionEnabled:sess.config.metacognitionEnabled!==false};
     });
   },
 
   studentGetQuestions(sessId,stuId) {
     const sess=this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
-    const qSet=this.getQSet(sess.setId); if(!qSet) return {error:'Questions not found'};
-    let questions=JSON.parse(JSON.stringify(qSet.questions)); const stimuli=qSet.stimuli||[];
-    const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues(); let qOrder=null; let choiceOrders=null; let stuRowIdx=-1; let existingFlaggedQs=[];
+    // BUG 3 fix: prefer snapshot questions (taken at launch) over live QSet to prevent drift
+    const qSet=this.getQSet(sess.setId); if(!qSet && !sess.snapshotQuestions) return {error:'Questions not found'};
+    const baseQuestions = sess.snapshotQuestions || qSet.questions;
+    let questions=JSON.parse(JSON.stringify(baseQuestions)); const stimuli=(qSet&&qSet.stimuli)||[];
+    const ssSheet=this.sh('StudentSessions'); const sd=ssSheet.getDataRange().getValues(); let qOrder=null; let choiceOrders=null; let stuRowIdx=-1; let existingFlaggedQs=[]; let eliminatedChoices=null;
     for(let i=1;i<sd.length;i++) {
       if(sd[i][0]===sessId&&sd[i][1]===stuId){
         stuRowIdx=i+1;
         if(sd[i][9]){try{qOrder=JSON.parse(sd[i][9]);}catch(e){Logger.log('Error parsing qOrder for student '+stuId+': '+e.toString());}}
         if(sd[i][14]){try{choiceOrders=JSON.parse(sd[i][14]);}catch(e){Logger.log('Error parsing choiceOrders for student '+stuId+': '+e.toString());}}
         if(sd[i][15]){try{existingFlaggedQs=JSON.parse(sd[i][15]);}catch(e){existingFlaggedQs=[];}}
+        if(sd[i][18]){try{eliminatedChoices=JSON.parse(sd[i][18]);}catch(e){eliminatedChoices=null;}}
         break;
       }
     }
@@ -523,7 +597,7 @@ const DB = {
     const metaResps=this.getAllMeta(sessId).filter(m=>m.studentId===stuId);
     const existingMeta={};metaResps.forEach(m=>{existingMeta[m.questionId]=m.confidence;});
     const sessionState = this._normalizeSessionState(sess, studentQs.map(q=>q.id));
-    return {questions:studentQs,stimuli,existing,existingMeta,flaggedQs:existingFlaggedQs,...sessionState};
+    return {questions:studentQs,stimuli,existing,existingMeta,flaggedQs:existingFlaggedQs,eliminatedChoices,...sessionState};
   },
   
   // ── CONCURRENT SECURE SUBMISSION ──
@@ -639,6 +713,7 @@ const DB = {
         v.getRange(i+1,6).setValue(true);
       }
       this.logAuditEvent('READMIT_STUDENT', sessId, 'stuId=' + stuId);
+      this.logTeacherAction(sessId, 'readmit_student', 'stuId=' + stuId);
       return {readmitted:true};
     });
   },
@@ -660,6 +735,7 @@ const DB = {
         if (vd[i][0] === sessId && !vd[i][5]) v.getRange(i + 1, 6).setValue(true);
       }
       this.logAuditEvent('READMIT_ALL_STUDENTS', sessId, 'count=' + count);
+      this.logTeacherAction(sessId, 'readmit_all', 'count=' + count);
       return {readmitted: count};
     });
   },
@@ -895,6 +971,7 @@ const DB = {
       }
       if (cfgDirty) sheet.getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const updatedSess = this.getSessionById(id);
+      this.logTeacherAction(id, 'go_to_question', 'qIndex=' + q);
       return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(qq=>qq.id))};
     });
   },
@@ -919,6 +996,7 @@ const DB = {
       
       const updatedSess = this.getSessionById(id);
       const qSet = this.getQSet(sess.setId);
+      this.logTeacherAction(id, 'toggle_lock_question', 'qId=' + qId);
       return {ok: true, session: this._normalizeSessionState(updatedSess, qSet ? qSet.questions.map(q=>q.id) : [])};
     });
   },
@@ -942,6 +1020,7 @@ const DB = {
         }
       }
       const updatedSess = this.getSessionById(id);
+      this.logTeacherAction(id, 'advance_question', 'newQ=' + nextQ);
       return {ok:true,session:this._normalizeSessionState(updatedSess,qSet.questions.map(q=>q.id))};
     });
   },
@@ -955,6 +1034,7 @@ const DB = {
       if (!cur.includes(qId)) cur.push(qId);
       this.sh('Sessions').getRange(sess.row,17).setValue(JSON.stringify(cur));
       const updatedSess = this.getSessionById(id);
+      this.logTeacherAction(id, 'reveal_answer', 'qId=' + qId);
       return {ok:true,session:this._normalizeSessionState(updatedSess,validIds)};
     });
   },
@@ -965,6 +1045,7 @@ const DB = {
       const all=(qSet.questions||[]).map(q=>q.id);
       this.sh('Sessions').getRange(sess.row,17).setValue(JSON.stringify(all));
       const updatedSess = this.getSessionById(id);
+      this.logTeacherAction(id, 'reveal_all_answers', '');
       return {ok:true,session:this._normalizeSessionState(updatedSess,all)};
     });
   },
@@ -1074,6 +1155,7 @@ const DB = {
       cfg.sessionTimerState.paused = true;
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      this.logTeacherAction(sessId, 'pause_session_timer', '');
       return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
     });
   },
@@ -1103,6 +1185,7 @@ const DB = {
       }
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const qSet = this.getQSet(sess.setId); const updated = this.getSessionById(sessId);
+      this.logTeacherAction(sessId, 'extend_session_timer', 'seconds=' + additionalSeconds);
       return {ok:true, session:this._normalizeSessionState(updated, qSet ? qSet.questions.map(q=>q.id) : [])};
     });
   },
@@ -1290,22 +1373,38 @@ const DB = {
     return true;
   },
 
-  getArchivedSessions() {
+  getArchivedSessions(opts) {
     const archive = this.sh('Archive');
-    if (!archive) return [];
+    if (!archive) return {sessions:[], total:0, hasMore:false};
     const values = archive.getDataRange().getValues();
-    if (values.length <= 1) return [];
-    
-    return values.slice(1).map(r => ({
-      id: r[0],
-      code: r[1],
-      setName: r[2],
-      block: r[3],
-      startedAt: r[4],
-      endedAt: r[5],
-      studentCount: r[6],
-      avgPct: r[7]
-    })).sort((a,b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+    if (values.length <= 1) return {sessions:[], total:0, hasMore:false};
+    const o = opts || {};
+    const limit = Number(o.limit) || 50;
+    const offset = Number(o.offset) || 0;
+    const search = (o.search || '').toLowerCase();
+    const sortBy = o.sortBy || 'newest';
+    let rows = values.slice(1).map(r => ({
+      id: r[0], code: r[1], setName: r[2], block: r[3],
+      startedAt: r[4], endedAt: r[5], studentCount: r[6], avgPct: r[7]
+    }));
+    if (search) {
+      rows = rows.filter(r =>
+        (String(r.setName || '').toLowerCase().includes(search)) ||
+        (String(r.block || '').toLowerCase().includes(search))
+      );
+    }
+    if (sortBy === 'oldest') {
+      rows.sort((a,b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+    } else if (sortBy === 'score_desc') {
+      rows.sort((a,b) => (Number(b.avgPct)||0) - (Number(a.avgPct)||0));
+    } else if (sortBy === 'score_asc') {
+      rows.sort((a,b) => (Number(a.avgPct)||0) - (Number(b.avgPct)||0));
+    } else {
+      rows.sort((a,b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+    }
+    const total = rows.length;
+    const page = rows.slice(offset, offset + limit);
+    return {sessions: page, total, hasMore: offset + limit < total};
   },
 
   getArchivedSessionData(sessionId) {
@@ -2041,6 +2140,37 @@ const DB = {
     }
   },
 
+  // ── SESSION TEMPLATES ──
+  saveSessionTemplate(name, config) {
+    try {
+      const props = PropertiesService.getScriptProperties();
+      const raw = props.getProperty('VA_SESSION_TEMPLATES') || '[]';
+      const templates = JSON.parse(raw);
+      const idx = templates.findIndex(t => t.name === name);
+      const entry = {name, config, savedAt: new Date().toISOString()};
+      if (idx > -1) { templates[idx] = entry; } else { templates.push(entry); }
+      props.setProperty('VA_SESSION_TEMPLATES', JSON.stringify(templates));
+      return {saved: true};
+    } catch(e) { return {saved: false, error: e.toString()}; }
+  },
+
+  getSessionTemplates() {
+    try {
+      const raw = PropertiesService.getScriptProperties().getProperty('VA_SESSION_TEMPLATES') || '[]';
+      return JSON.parse(raw);
+    } catch(e) { return []; }
+  },
+
+  deleteSessionTemplate(name) {
+    try {
+      const props = PropertiesService.getScriptProperties();
+      const raw = props.getProperty('VA_SESSION_TEMPLATES') || '[]';
+      const templates = JSON.parse(raw).filter(t => t.name !== name);
+      props.setProperty('VA_SESSION_TEMPLATES', JSON.stringify(templates));
+      return {deleted: true};
+    } catch(e) { return {deleted: false, error: e.toString()}; }
+  },
+
   // Helpers
   getStudentName(sessId,stuId){const d=this.sh('StudentSessions').getDataRange().getValues();for(let i=1;i<d.length;i++)if(d[i][0]===sessId&&d[i][1]===stuId)return d[i][2];return 'Unknown';},
   _getSheetValues(sheetName,snapshot){
@@ -2069,7 +2199,7 @@ const DB = {
   getAllResponses(sessId,snapshot){const rows=this._getSessionRows('Responses',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],qIndex:r[4],answer:this._cleanAnswer(r[5]),isCorrect:r[6],points:r[7],maxPoints:r[8],submittedAt:r[9],partialCredit:r[10]}));},
   getAllMeta(sessId,snapshot){const rows=this._getSessionRows('Metacognition',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],confidence:r[4],submittedAt:r[5]}));},
   getActiveViolations(sessId,snapshot){const rows=this._getSessionRows('Violations',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],type:r[3],timestamp:r[4],resolved:r[5]===true||r[5]==='TRUE'}));},
-  getAIGrades(sessId,snapshot){const rows=this._getSessionRows('AIGrades',sessId,snapshot);return rows.map(r=>({studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12]}));},
+  getAIGrades(sessId,snapshot){const rows=this._getSessionRows('AIGrades',sessId,snapshot);return rows.map(r=>{let _concepts=[];try{if(r[13])_concepts=JSON.parse(r[13]);}catch(e){}return{studentId:r[1],studentName:r[2],questionId:r[3],score:r[4],maxScore:r[5],feedback:r[6],answer:r[7],gradedAt:r[8],overridden:r[9]===true||r[9]==='TRUE',overrideScore:r[10],overrideFeedback:r[11],context:r[12],concepts:_concepts,originalAIScore:r[14]};});},
   normalizeStudentName(name){return String(name||'').toLowerCase().replace(/\s+/g,' ').trim();},
   normalizeStudentEmail(email){return String(email||'').trim().toLowerCase();}
 };
