@@ -64,6 +64,8 @@
       background: var(--bg);
       color: var(--tx);
       min-height: 100vh;
+      margin: 0;
+      padding: 0;
       -webkit-user-select: none;
       user-select: none;
       overflow-x: hidden;
@@ -565,8 +567,8 @@
 
     /* Content area */
     .q-area {
-      max-width: 860px;
-      width: 90%;
+      max-width: 1160px;
+      width: 96%;
       margin: 0 auto;
       padding: 24px 0 96px;
     }
@@ -627,7 +629,7 @@
 
     .q-text {
       font-family: 'Noto Serif', Georgia, serif;
-      font-size: 24px;
+      font-size: 18px;
       line-height: 1.68;
       color: var(--tx);
       margin-bottom: 28px;
@@ -774,6 +776,8 @@
       flex: 1;
       min-width: 0;
       font-family: 'Noto Serif', Georgia, serif;
+      font-size: 18px;
+      line-height: 1.68;
     }
 
     .mc-opt .ctxt img {
@@ -2113,7 +2117,8 @@
       if (sa) { sa.disabled = false; sa.style.opacity = ''; }
     }
 
-    function renderQ() {
+    function renderQ(opts) {
+      const keepScroll = !!(opts && opts.keepScroll);
       // Holding room: session joined but teacher hasn't started yet
       if (S.cur === -1) {
         // Skip re-render if already showing the holding room (prevents flash on each poll)
@@ -2220,7 +2225,7 @@
           _ptsEarned = S.confirmedScores[q.id].points;
         }
         const ptStr = (_ptsEarned !== undefined && _ptsEarned !== null) ? `<span style="float:right; color:var(--teal)">Score: ${_ptsEarned} / ${q.points || 1}</span>` : '';
-        html += `<div style="font-size:16px; margin-bottom:16px"><strong style="color:var(--tx2)">Your Answer:</strong>${ptStr}<br/>` + (DOMPurify.sanitize(S.ans[q.id]) || '<em style="color:var(--tx3)">No answer submitted</em>') + '</div>';
+        html += `<div style="font-size:18px; margin-bottom:16px"><strong style="color:var(--tx2)">Your Answer:</strong>${ptStr}<br/>` + (DOMPurify.sanitize(S.ans[q.id]) || '<em style="color:var(--tx3)">No answer submitted</em>') + '</div>';
 
         if (S.metaEnabled && S.conf[q.id]) {
           const confMap = { 1: 'Guessing', 2: 'Somewhat Sure', 3: 'Very Sure', 4: 'Absolutely Certain' };
@@ -2228,7 +2233,7 @@
         }
 
         if (isMC) {
-          html += '<div style="font-size:16px; margin-top:16px"><strong style="color:var(--tx2)">Correct Answer:</strong><br/>' + (DOMPurify.sanitize(q.clientCorrectAnswer) || 'Not set') + '</div>';
+          html += '<div style="font-size:18px; margin-top:16px"><strong style="color:var(--tx2)">Correct Answer:</strong><br/>' + (DOMPurify.sanitize(q.clientCorrectAnswer) || 'Not set') + '</div>';
         } else {
           if (q.aiFeedback) {
             html += `<div style="font-size:14px; margin-top:16px; padding:12px; background:var(--tealBg); color:var(--teal); border: 2px solid var(--teal); border-radius:6px"><strong>RESPONSE FEEDBACK:</strong><br/>${DOMPurify.sanitize(q.aiFeedback)}</div>`;
@@ -2409,7 +2414,7 @@
           console.warn('KaTeX rendering error:', e);
         }
       });
-      window.scrollTo(0, 0);
+      if (!keepScroll) window.scrollTo(0, 0);
     }
 
     document.getElementById('qArea').addEventListener('click', function (evt) {
@@ -2496,7 +2501,7 @@
           if (pi > -1) S.pendingMulti[qId].splice(pi, 1);
         }
       }
-      renderQ();
+      renderQ({ keepScroll: true });
       // Fix 15: sync eliminations to server
       const elimSerial = JSON.stringify(Object.fromEntries(
         Object.entries(S.eliminated).map(([k,v]) => [k, v instanceof Set ? Array.from(v) : (Array.isArray(v) ? v : [])])
@@ -2513,7 +2518,7 @@
       S.ans[qId] = c;
       S.submittedAns[qId] = true;
       S._justSubmittedQ = qId;
-      renderQ();
+      renderQ({ keepScroll: true });
       SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, c]);
       logAction('answer_change', qId, c);
     }
@@ -2534,7 +2539,7 @@
           if (ci > -1) S.eliminated[qId].delete(ci);
         }
       }
-      renderQ(); // re-render to show updated checkboxes
+      renderQ({ keepScroll: true }); // re-render to show updated checkboxes
     }
 
     // Multi-select MC: explicit submit button
@@ -2546,7 +2551,7 @@
       S.ans[qId] = ansStr;
       S.submittedAns[qId] = true;
       S._justSubmittedQ = qId;
-      renderQ();
+      renderQ({ keepScroll: true });
       SyncQueue.add('studentSubmitAnswer', [S.sid, S.stuId, qId, arr]);
       logAction('answer_change', qId, ansStr);
     }
@@ -2562,7 +2567,7 @@
       S._justSubmittedQ = qId;
       saveSA(qId);
       logAction('answer_change', qId, '');
-      renderQ();
+      renderQ({ keepScroll: true });
     }
 
     function trackSA(qId) {
@@ -2583,7 +2588,7 @@
     function setConf(qId, confVal) {
       S.conf[qId] = confVal;
       if (S.submittedAns[qId]) S._justSubmittedQ = qId;
-      renderQ();
+      renderQ({ keepScroll: true });
       SyncQueue.add('studentSubmitMeta', [S.sid, S.stuId, qId, confVal]);
     }
 

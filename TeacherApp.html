@@ -273,6 +273,7 @@
     /* Academic content: Noto Serif for question text and answer choices in teacher view */
     .q-text, .rte-content {
       font-family: 'Noto Serif', Georgia, serif;
+      font-size: 16px;
       line-height: 1.72;
     }
     /* Choice letter labels: Arial Black — bold, compact, visually distinct */
@@ -298,8 +299,8 @@
       font-family: 'Noto Serif', Georgia, serif;
       flex: 1;
       min-width: 0;
-      font-size: 14px;
-      line-height: 1.6;
+      font-size: 16px;
+      line-height: 1.72;
       color: var(--tx);
     }
 
@@ -439,11 +440,47 @@
       display: none;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      padding: 7px 20px;
+      gap: 12px;
+      padding: 8px 20px;
       background: var(--tBg);
       border-bottom: 1px solid var(--tBd);
+      min-height: 44px;
+    }
+    .ls-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      min-width: 0;
+    }
+    .ls-group-center {
+      flex: 1;
+      justify-content: center;
+    }
+    .ls-group-right {
+      margin-left: auto;
+      justify-content: flex-end;
       flex-wrap: wrap;
+    }
+    .ls-timer-group { display:flex; align-items:center; gap:6px; }
+    .ls-timer-pill {
+      font-size:13px; font-weight:700; padding:4px 12px; border-radius:12px;
+      background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid #ef4444;
+      cursor:pointer; white-space:nowrap; user-select:none; transition:background 0.15s;
+    }
+    .ls-timer-pill.paused {
+      background:rgba(217,119,6,0.12); color:#d97706; border-color:#d97706;
+    }
+    .ls-timer-pill:hover { filter:brightness(1.08); }
+    .ls-timer-input {
+      font-size:13px; font-weight:700; padding:4px 10px; border-radius:8px;
+      border:2px solid var(--teal); outline:none; width:76px; text-align:center;
+      font-family:'Inter',sans-serif;
+    }
+    .ls-timer-btn {
+      width:30px; height:30px; border-radius:50%; padding:0;
+      display:flex; align-items:center; justify-content:center; font-size:13px;
+      font-weight:700;
     }
 
     .live-status-banner {
@@ -1625,6 +1662,46 @@
 
     /* Action row within tile */
     .st-actions { display: flex; gap: 4px; }
+    .st-timer-btn {
+      font-size:11px;
+      padding:3px 8px;
+      border-radius:6px;
+      display:flex;
+      align-items:center;
+      gap:4px;
+      width:100%;
+      justify-content:center;
+      font-weight:700;
+    }
+    .st-timer-btn.bypassed {
+      background:rgba(13,148,136,0.12);
+      color:var(--teal);
+      border-color:rgba(13,148,136,0.4);
+    }
+    .st-timer-icon { line-height:1; font-size:12px; }
+    .st-timer-x { font-size:10px; color:var(--red); font-weight:800; line-height:1; }
+
+    .live-meta-widget {
+      background: var(--s2);
+      border: 1px solid var(--bd);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .live-meta-title { font-size:13px; font-weight:700; color:var(--tx2); margin-bottom:8px; }
+    .live-meta-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px; }
+    .lmg-cell { padding:8px; border-radius:7px; text-align:center; }
+    .lmg-pct { font-size:18px; font-weight:800; }
+    .lmg-lbl { font-size:10px; font-weight:700; text-transform:uppercase; margin-top:2px; }
+    .lmg-sr { background:var(--gBg); border:1px solid rgba(5,150,105,.2); }
+    .lmg-sr .lmg-pct { color:var(--grn); } .lmg-sr .lmg-lbl { color:var(--grn); }
+    .lmg-sw { background:var(--rBg); border:1px solid rgba(220,38,38,.2); }
+    .lmg-sw .lmg-pct { color:var(--red); } .lmg-sw .lmg-lbl { color:var(--red); }
+    .lmg-ur { background:var(--aBg); border:1px solid rgba(217,119,6,.2); }
+    .lmg-ur .lmg-pct { color:var(--amb); } .lmg-ur .lmg-lbl { color:var(--amb); }
+    .lmg-uw { background:var(--s3); border:1px solid var(--bd); }
+    .lmg-uw .lmg-pct { color:var(--tx2); } .lmg-uw .lmg-lbl { color:var(--tx2); }
+    .live-meta-note { font-size:11px; color:var(--tx3); text-align:center; }
 
     .frow {
       display: flex;
@@ -2016,11 +2093,11 @@
           </div>
           <!-- Row 2: lockstep controls (hidden until lockstep mode) -->
           <div id="lockstepControls">
-            <div style="display:flex; align-items:center; gap:10px;">
+            <div style="display:none; align-items:center; gap:10px;">
               <span class="ls-q-label" id="lsQText">Lockstep</span>
               <span id="lsParticipation" style="font-size:13px;font-weight:700;padding:3px 10px;border-radius:20px;border:1.5px solid var(--bd);white-space:nowrap;display:none"></span>
             </div>
-            <div id="lsActions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
+            <div id="lsActions" style="display:flex; gap:8px; align-items:center; width:100%;"></div>
           </div>
           <!-- Row 3: question-jump strip (lockstep only, hidden until session starts) -->
           <div id="lsQJump" style="display:none;gap:4px;flex-wrap:wrap;padding:4px 12px 6px;border-top:1px solid var(--bd);background:var(--s2)"></div>
@@ -3364,26 +3441,29 @@
         if (!_t.type || _t.type === 'none' || !_t.seconds) return '';
         const _s = session.sessionTimerState;
         if (!_s) {
-          return `<span style="font-size:12px;color:var(--tx2);padding:4px 0;white-space:nowrap">⏱ ${Math.floor(_t.seconds/60)} min · starts when session begins</span>`;
+          return `<span class="ls-timer-pill" title="Session timer starts when the session starts">⏱ ${String(Math.floor(_t.seconds / 60)).padStart(2,'0')}:${String(_t.seconds % 60).padStart(2,'0')}</span>`;
         }
-        if (_s.cancelled) {
-          return `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(107,114,128,0.1);color:var(--tx2);border:1px solid var(--bd);white-space:nowrap">Session Timer Cancelled</span><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';startSessionTimer()">↺ Restart</button>`;
-        }
-        if (_s.paused) {
-          const _rem=Math.max(0,Math.floor((_s.pausedRemaining||0)/1000));
-          const _pmm=String(Math.floor(_rem/60)).padStart(2,'0'), _pss=String(_rem%60).padStart(2,'0');
-          return `<span id="teacherSessionTimerPill" data-end="0" data-paused="1" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(217,119,6,0.12);color:#d97706;border:1px solid #d97706;white-space:nowrap">⏸ ${_pmm}:${_pss}</span><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';resumeSessionTimer()">▶ Resume</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendSessionTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendSessionTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';cancelSessionTimer()">✕ Cancel</button>`;
-        }
-        const _endMs=_s.endTime, _rem=Math.max(0,Math.floor((_endMs-Date.now())/1000));
-        const _mm=String(Math.floor(_rem/60)).padStart(2,'0'), _ss=String(_rem%60).padStart(2,'0');
-        return `<span id="teacherSessionTimerPill" data-end="${_endMs}" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;white-space:nowrap">⏱ ${_mm}:${_ss}</span><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';pauseSessionTimer()">⏸ Pause</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendSessionTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendSessionTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';cancelSessionTimer()">✕ Cancel</button>`;
+        const _isPaused = !!_s.paused;
+        const _remainingMs = _isPaused ? (_s.pausedRemaining || 0) : Math.max(0, (_s.endTime || Date.now()) - Date.now());
+        const _remSec = Math.max(0, Math.floor(_remainingMs / 1000));
+        const _mm = String(Math.floor(_remSec / 60)).padStart(2, '0');
+        const _ss = String(_remSec % 60).padStart(2, '0');
+        const _endMs = _isPaused ? 0 : (_s.endTime || Date.now());
+        return `
+          <div class="ls-timer-group">
+            <button class="btn ls-timer-btn" onclick="toggleSessionTimer()" title="${_isPaused ? 'Resume' : 'Pause'} session timer">${_isPaused ? '▶' : '⏸'}</button>
+            <span id="teacherSessionTimerPill" class="ls-timer-pill ${_isPaused ? 'paused' : ''}" data-end="${_endMs}" data-paused="${_isPaused ? '1' : '0'}" onclick="editSessionTimerStart(this)" title="Click to set session timer">
+              ${_isPaused ? '⏸' : '⏱'} ${_mm}:${_ss}
+            </span>
+          </div>
+        `;
       };
 
       // Session pause button helper
       const _isPaused = !!(d.session && d.session.sessionPaused);
       const _pauseBtnHtml = _isPaused
-        ? `<button class="btn" style="background:#d97706;color:#fff;border:none;font-weight:700;font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';resumeSessionNow()">▶ Resume Session</button>`
-        : `<button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';pauseSessionNow()">⏸ Pause Session</button>`;
+        ? `<button class="btn" style="background:#d97706;color:#fff;border:none;font-weight:700;font-size:12px" onclick="resumeSessionNow()">▶ Resume Session</button>`
+        : `<button class="btn bd" style="font-size:12px" onclick="pauseSessionNow()">⏸ Pause Session</button>`;
       const _pauseIndicator = _isPaused
         ? `<span style="font-size:13px;font-weight:700;padding:4px 12px;border-radius:12px;background:rgba(217,119,6,0.15);color:#d97706;border:1px solid #d97706;white-space:nowrap;animation:pulse 2s ease-in-out infinite">⏸ SESSION PAUSED</span>`
         : '';
@@ -3395,43 +3475,45 @@
           const isLocked = curQIdx >= 0 ? lockedQsList.includes(d.qStats[curQIdx].id) : false;
           document.getElementById('lockstepControls').style.display = 'flex';
 
-          // Participation pill
-          const _partPill = document.getElementById('lsParticipation');
+          let participationText = '';
+          let participationColor = 'var(--bd)';
           if (curQIdx >= 0 && _q) {
-            const _totalJoined = (d.students || []).filter(s => s.status !== 'not-joined').length;
+            const _totalJoined = (d.students || []).filter(st => st.status !== 'not-joined').length;
             const _answeredNow = (_q.studentResponses || []).filter(r => r.answer).length;
             const _pct = _totalJoined > 0 ? _answeredNow / _totalJoined : 0;
-            const _pColor = _pct >= 0.8 ? 'var(--grn)' : _pct >= 0.5 ? 'var(--amb)' : 'var(--red)';
-            _partPill.style.display = 'block';
-            _partPill.style.color = _pColor;
-            _partPill.style.borderColor = _pColor;
-            _partPill.textContent = `${_answeredNow} / ${_totalJoined} answered`;
-          } else {
-            _partPill.style.display = 'none';
+            participationColor = _pct >= 0.8 ? 'var(--grn)' : _pct >= 0.5 ? 'var(--amb)' : 'var(--red)';
+            participationText = `${_answeredNow} / ${_totalJoined} answered`;
           }
 
           if (curQIdx === -1) {
-            document.getElementById('lsQText').textContent = `Lockstep: Not Started`;
-            document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="lsNext()">▶ Begin Q1</button>${_buildSessionTimerHtml(d.session) ? '<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + _buildSessionTimerHtml(d.session) + '</span>' : ''}`;
+            document.getElementById('lsActions').innerHTML = `
+              <div class="ls-group">
+                <span class="ls-q-label">Lockstep: Not Started</span>
+              </div>
+              <div class="ls-group ls-group-center">${_buildSessionTimerHtml(d.session)}</div>
+              <div class="ls-group ls-group-right">
+                <button class="btn bp" onclick="lsNext()">▶ Begin Q1</button>
+              </div>
+            `;
           } else {
-            document.getElementById('lsQText').textContent = `Lockstep: Q${curQIdx + 1} of ${d.session.questionCount}`;
-
-            // Clear action-first labels: green = unlocked (can lock), red = locked (can unlock)
+            const qLabel = `Q${curQIdx + 1} of ${d.session.questionCount}`;
+            const partHtml = participationText
+              ? `<span style="font-size:13px;font-weight:700;padding:3px 10px;border-radius:20px;border:1.5px solid ${participationColor};color:${participationColor};white-space:nowrap;">${participationText}</span>`
+              : '';
             const lockBtnHtml = isLocked
-            ? `<button class="btn" style="background:#dc2626;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔒 Locked</button>`
-            : `<button class="btn" style="background:#059669;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsInitiateLock('${d.qStats[curQIdx].id}')">🔓 Lock</button>`;
+              ? `<button class="btn" style="background:#dc2626;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔒 Locked</button>`
+              : `<button class="btn" style="background:#059669;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsInitiateLock('${d.qStats[curQIdx].id}')">🔓 Lock</button>`;
 
             const isLastQ = curQIdx === d.session.questionCount - 1;
             const nextBtnHtml = isLastQ
-              ? `<button class="btn bd" onclick="this.disabled=true;this.style.opacity='0.55';endS()">🏁 End Archive</button>`
-              : `<button class="btn bp" onclick="this.disabled=true;this.style.opacity='0.55';lsNext()">Next →</button>`;
+              ? `<button class="btn bd" onclick="endS()">🏁 End Archive</button>`
+              : `<button class="btn bp" onclick="lsNext()">Next →</button>`;
 
             const isSA = d.qStats[curQIdx].type === 'sa';
             const gradeBtnHtml = (isLocked && isSA)
-              ? `<button class="btn bp" style="background:var(--teal);color:white" onclick="this.disabled=true;this.style.opacity='0.55';runGrade(aSid)">🤖 AI Grade</button>`
+              ? `<button class="btn bp" style="background:var(--teal);color:white" onclick="runGrade(aSid)">🤖 AI Grade</button>`
               : '';
 
-            // Grading status pill in controls bar
             const gs = window.__gradeStatus || {};
             const gradeIndicator = (gs.state === 'running' || gs.state === 'queued')
               ? `<span style="font-size:12px;padding:4px 8px;border-radius:12px;background:rgba(245,158,11,0.15);color:var(--amb);border:1px solid var(--amb);white-space:nowrap"><span class="spinner" style="width:10px;height:10px;border-width:2px;vertical-align:middle;margin-right:4px;display:inline-block"></span>Grading${gs.gradedCount !== undefined ? ' ' + gs.gradedCount + '/' + (gs.totalToGrade || '?') : ''}</span>`
@@ -3439,65 +3521,70 @@
               ? `<span style="font-size:12px;padding:4px 8px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--grn);border:1px solid var(--grn)">✓ Graded</span>`
               : '';
 
-            // Question timer pill for lockstep
             let qTimerHtml = '';
             const _qts = d.session && d.session.qTimerState;
             const _qTimerSec = d.session && d.session.qTimerSeconds;
             const _curQId = d.qStats[curQIdx] && d.qStats[curQIdx].id;
             if (_qts && _qts.qId === _curQId && _qTimerSec) {
-              if (_qts.cancelled) {
-                qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(107,114,128,0.1);color:var(--tx2);border:1px solid var(--bd)">Timer Cancelled</span><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';resetQTimer()">↺ Restart</button>`;
-              } else if (_qts.dismissed) {
-                qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(16,185,129,0.1);color:var(--grn);border:1px solid var(--grn)">Timer Dismissed</span><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';resetQTimer()">↺ Restart</button>`;
-              } else if (_qts.paused) {
-                const _pausedRem = Math.max(0, Math.floor((_qts.pausedRemaining || 0) / 1000));
-                const _pmm = String(Math.floor(_pausedRem/60)).padStart(2,'0');
-                const _pss = String(_pausedRem%60).padStart(2,'0');
-                qTimerHtml = `<span id="teacherQTimerPill" data-end="0" data-paused="1" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(217,119,6,0.12);color:#d97706;border:1px solid #d97706;white-space:nowrap">⏸ ${_pmm}:${_pss}</span><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';resumeQTimer()">▶ Resume</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendQTimer(30)">+30s</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendQTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendQTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';resetQTimer()">↺ Reset</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';cancelQTimer()">✕ Cancel</button>`;
-              } else {
-                const _endMs = _qts.endTime || (new Date(_qts.startedAt).getTime() + _qTimerSec*1000);
-                const _rem = Math.max(0, Math.floor((_endMs - Date.now()) / 1000));
-                const _mm = String(Math.floor(_rem/60)).padStart(2,'0');
-                const _ss = String(_rem%60).padStart(2,'0');
-                qTimerHtml = `<span id="teacherQTimerPill" data-end="${_endMs}" style="font-size:13px;font-weight:700;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid #ef4444;white-space:nowrap">⏱ ${_mm}:${_ss}</span><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';pauseQTimer()">⏸ Pause</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendQTimer(30)">+30s</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendQTimer(60)">+1m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';extendQTimer(120)">+2m</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';resetQTimer()">↺ Reset</button><button class="btn bd" style="font-size:12px" onclick="this.disabled=true;this.style.opacity='0.55';dismissQTimer()">Dismiss</button>`;
-              }
+              const _paused = !!_qts.paused;
+              const _remainingMs = _paused ? (_qts.pausedRemaining || 0) : Math.max(0, (_qts.endTime || Date.now()) - Date.now());
+              const _remSec = Math.max(0, Math.floor(_remainingMs / 1000));
+              const _mm = String(Math.floor(_remSec / 60)).padStart(2, '0');
+              const _ss = String(_remSec % 60).padStart(2, '0');
+              const _endMs = _paused ? 0 : (_qts.endTime || Date.now());
+              qTimerHtml = `
+                <div class="ls-timer-group">
+                  <button class="btn ls-timer-btn" id="btnTimerToggle" onclick="toggleQTimer()" title="${_paused ? 'Resume' : 'Pause'} timer">${_paused ? '▶' : '⏸'}</button>
+                  <span id="teacherQTimerPill" class="ls-timer-pill ${_paused ? 'paused' : ''}" data-end="${_endMs}" data-paused="${_paused ? '1' : '0'}" onclick="editQTimerStart(this)" title="Click to set time">
+                    ${_paused ? '⏸' : '⏱'} ${_mm}:${_ss}
+                  </span>
+                </div>
+              `;
             } else if (_qTimerSec && _curQId) {
-              qTimerHtml = `<span style="font-size:12px;padding:4px 10px;border-radius:12px;background:rgba(107,114,128,0.1);color:var(--tx2);border:1px solid var(--bd);white-space:nowrap">⏱ ${_qTimerSec}s per Q</span>`;
+              qTimerHtml = `<span class="ls-timer-pill" data-end="0" data-paused="1" title="Question timer starts when this question is opened">⏱ ${String(Math.floor(_qTimerSec / 60)).padStart(2,'0')}:${String(_qTimerSec % 60).padStart(2,'0')}</span>`;
             }
 
             if (!lsConfirmPending) {
               document.getElementById('lsActions').innerHTML = `
-            <button class="btn bg" onclick="this.disabled=true;this.style.opacity='0.55';lsPrev()">← Prev</button>
-            ${lockBtnHtml}
-            ${_pauseBtnHtml}
-            ${_pauseIndicator}
-            ${qTimerHtml}
-            ${_buildSessionTimerHtml(d.session)}
-            ${gradeIndicator}
-            ${gradeBtnHtml}
-            <button class="btn bg" onclick="this.disabled=true;this.style.opacity='0.55';lsReveal()">👁 Reveal</button>
-            ${nextBtnHtml}
-          `;
+                <div class="ls-group">
+                  <button class="btn bg" onclick="lsPrev()">← Prev</button>
+                  <span class="ls-q-label">${qLabel}</span>
+                  ${partHtml}
+                </div>
+                <div class="ls-group ls-group-center">
+                  ${qTimerHtml}
+                  ${_buildSessionTimerHtml(d.session)}
+                </div>
+                <div class="ls-group ls-group-right">
+                  ${lockBtnHtml}
+                  ${_pauseBtnHtml}
+                  ${_pauseIndicator}
+                  ${gradeIndicator}
+                  ${gradeBtnHtml}
+                  <button class="btn bg" onclick="lsReveal()">👁 Reveal</button>
+                  ${nextBtnHtml}
+                </div>
+              `;
             }
           }
         } else {
-          // Non-lockstep: keep controls bar visible at all times so timer is always accessible
           document.getElementById('lockstepControls').style.display = 'flex';
-          document.getElementById('lsParticipation').style.display = 'none';
           const _modeLabel = d.session.mode === 'randomized' ? 'Randomized' : 'Self-Paced';
+          const _timerStr = _buildSessionTimerHtml(d.session);
           if (curQIdx === -1) {
-            document.getElementById('lsQText').textContent = `${_modeLabel}: Not Started`;
-            const _timerStr = _buildSessionTimerHtml(d.session);
-            document.getElementById('lsActions').innerHTML = `<button class="btn bp" onclick="this.disabled=true;this.style.opacity='0.55';lsNext()">▶ Start Session</button>${_timerStr ? '<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' + _timerStr + '</span>' : ''}`;
+            document.getElementById('lsActions').innerHTML = `
+              <div class="ls-group"><span class="ls-q-label">${_modeLabel}: Not Started</span></div>
+              <div class="ls-group ls-group-center">${_timerStr}</div>
+              <div class="ls-group ls-group-right"><button class="btn bp" onclick="lsNext()">▶ Start Session</button></div>
+            `;
           } else {
-            const _finished = (d.students || []).filter(s => s.status === 'finished').length;
-            const _totalJoined = (d.students || []).filter(s => s.status !== 'not-joined').length;
-            document.getElementById('lsQText').textContent = `${_modeLabel}: ${d.session.questionCount} Q · ${_finished}/${_totalJoined} finished`;
-            const _timerStr = _buildSessionTimerHtml(d.session);
-            let _spControls = `${_pauseBtnHtml} ${_pauseIndicator} `;
-            if (_timerStr) _spControls += `<span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${_timerStr}</span>`;
-            _spControls += `<button class="btn bd" onclick="endS()">🏁 End Session</button>`;
-            document.getElementById('lsActions').innerHTML = _spControls;
+            const _finished = (d.students || []).filter(st => st.status === 'finished').length;
+            const _totalJoined = (d.students || []).filter(st => st.status !== 'not-joined').length;
+            document.getElementById('lsActions').innerHTML = `
+              <div class="ls-group"><span class="ls-q-label">${_modeLabel}: ${d.session.questionCount} Q · ${_finished}/${_totalJoined} finished</span></div>
+              <div class="ls-group ls-group-center">${_timerStr}</div>
+              <div class="ls-group ls-group-right">${_pauseBtnHtml}${_pauseIndicator}<button class="btn bd" onclick="endS()">🏁 End Session</button></div>
+            `;
           }
         }
 
@@ -4009,6 +4096,34 @@
           <div class="live-overview-pill ov-red"><div class="k">Incorrect</div><div class="v">${_stateCounts.incorrect || 0}</div></div>
           <div class="live-overview-pill"><div class="k">No Response</div><div class="v">${_stateCounts.none || 0}</div></div>
         </div>`;
+        let liveMetaHtml = '';
+        if (isLS && q) {
+          let t_sr = 0, t_sw = 0, t_ur = 0, t_uw = 0;
+          withStateAll.forEach(s => {
+            const conf = s.qResp && s.qResp.confidence ? Number(s.qResp.confidence) : 0;
+            if (!conf || !s.qResp || s.tileState === 'none') return;
+            const isC = s.tileState === 'correct';
+            if (conf >= 3) { if (isC) t_sr++; else t_sw++; }
+            else { if (isC) t_ur++; else t_uw++; }
+          });
+          const total = t_sr + t_sw + t_ur + t_uw;
+          if (total > 0) {
+            const p = n => Math.round((n / total) * 100) + '%';
+            liveMetaHtml = `
+              <div class="live-meta-widget">
+                <div class="live-meta-title">🧠 Confidence Calibration — Q${q.idx + 1}</div>
+                <div class="live-meta-grid">
+                  <div class="lmg-cell lmg-sr"><div class="lmg-pct">${p(t_sr)}</div><div class="lmg-lbl">Sure & Right</div></div>
+                  <div class="lmg-cell lmg-sw"><div class="lmg-pct">${p(t_sw)}</div><div class="lmg-lbl">Sure & Wrong ⚠</div></div>
+                  <div class="lmg-cell lmg-ur"><div class="lmg-pct">${p(t_ur)}</div><div class="lmg-lbl">Unsure & Right</div></div>
+                  <div class="lmg-cell lmg-uw"><div class="lmg-pct">${p(t_uw)}</div><div class="lmg-lbl">Unsure & Wrong</div></div>
+                </div>
+                <div class="live-meta-note">${total} rated response${total !== 1 ? 's' : ''} for this question</div>
+              </div>
+            `;
+          }
+        }
+        rightHtml += liveMetaHtml;
 
         if (unresolvedViolations.length) {
           rightHtml += `<div class="card" style="border-color:rgba(225,29,72,0.3);background:rgba(225,29,72,0.04);margin-bottom:4px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong style="color:var(--red)">⚠ Locked out (${unresolvedViolations.length})</strong><span class="muted" style="font-size:12px">Unlock to re-admit</span></div><div style="margin-top:10px;display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid rgba(225,29,72,0.2);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${v.studentId}')">Unlock</button></div>`).join('')}</div></div>`;
@@ -4043,7 +4158,9 @@
             ? `<span class="st-badge-chip bc-qpos">Q${(s.currentQIndex || 0) + 1}</span>` : '';
           const _flagChip = (s.flaggedQs && s.flaggedQs.length > 0)
             ? `<span class="st-badge-chip bc-flag">★ ${s.flaggedQs.length}</span>` : '';
-          const _extChip = s.timerExtensionMs
+          const BYPASS_MS = 999999000;
+          const isBypassed = (s.timerExtensionMs || 0) >= BYPASS_MS;
+          const _extChip = (s.timerExtensionMs && s.timerExtensionMs < BYPASS_MS)
             ? `<span class="st-badge-chip bc-ext">+${Math.round(s.timerExtensionMs/1000)}s</span>` : '';
           const _confChip = (() => {
             const c = (s.qResp && s.qResp.confidence) ? s.qResp.confidence : s.avgConf;
@@ -4062,7 +4179,7 @@
             ? `<button class="btn bg" style="font-size:11px;width:100%;" onclick="event.stopPropagation();sendSingleEmail('${d.session.sessionId}','${DOMPurify.sanitize(s.email)}')">Resend Link</button>`
             : '';
           const _extendBtns = (s.status === 'active' && s.studentId)
-            ? `<div class="st-actions"><button class="btn bg" style="font-size:10px;padding:2px 6px;flex:1" onclick="event.stopPropagation();extendStudentTime('${d.session.sessionId}','${s.studentId}',60)">+1m</button><button class="btn bg" style="font-size:10px;padding:2px 6px;flex:1" onclick="event.stopPropagation();extendStudentTime('${d.session.sessionId}','${s.studentId}',300)">+5m</button></div>`
+            ? `<div class="st-actions"><button class="btn st-timer-btn ${isBypassed ? 'bypassed' : ''}" onclick="event.stopPropagation();toggleStudentTimerBypass('${d.session.sessionId}','${s.studentId}',${isBypassed})" title="${isBypassed ? 'Restore timer for this student' : 'Bypass timer — extend indefinitely'}"><span class="st-timer-icon">⏱</span>${isBypassed ? '<span class="st-timer-x">✕</span>' : ''}</button></div>`
             : '';
 
           return `<div class="student-tile ${_tileStateCls}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')">
@@ -4327,6 +4444,12 @@
         .withFailureHandler(e => toast('Failed to dismiss timer: ' + (e.message||'Unknown error'), 'err'))
         .dismissQuestionTimer(aSid);
     }
+    function toggleQTimer() {
+      const pill = document.getElementById('teacherQTimerPill');
+      const isPaused = pill && pill.dataset.paused === '1';
+      if (isPaused) resumeQTimer();
+      else pauseQTimer();
+    }
     function pauseQTimer() {
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run
@@ -4341,29 +4464,52 @@
         .withFailureHandler(e => toast('Failed to resume timer: ' + (e.message||'Unknown error'), 'err'))
         .resumeQuestionTimer(aSid);
     }
-    function extendQTimer(seconds) {
-      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-      google.script.run
-        .withSuccessHandler(() => { refreshLive(); toast('+' + seconds + 's added to timer.', 'ok'); })
-        .withFailureHandler(e => toast('Failed to extend timer: ' + (e.message||'Unknown error'), 'err'))
-        .extendQuestionTimer(aSid, seconds);
+    function editQTimerStart(pillEl) {
+      if (!pillEl) return;
+      const cur = (pillEl.textContent || '').replace(/[^0-9:]/g, '').trim();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = cur;
+      input.className = 'ls-timer-input';
+      input.placeholder = 'MM:SS';
+      input.onblur = () => editQTimerCommit(input);
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') {
+          input.onblur = null;
+          input.replaceWith(pillEl);
+        }
+      };
+      pillEl.replaceWith(input);
+      input.focus();
+      input.select();
     }
-    function resetQTimer() {
+    function editQTimerCommit(input) {
+      const raw = (input.value || '').trim();
+      let totalSec = 0;
+      if (raw.includes(':')) {
+        const parts = raw.split(':');
+        const mm = Number(parts[0]);
+        const ss = Number(parts[1]);
+        totalSec = (isFinite(mm) ? mm : 0) * 60 + (isFinite(ss) ? ss : 0);
+      } else {
+        totalSec = parseInt(raw, 10) || 0;
+      }
+      if (totalSec <= 0) { refreshLive(); return; }
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run
-        .withSuccessHandler(() => { refreshLive(); toast('Timer reset to full duration.', 'ok'); })
-        .withFailureHandler(e => toast('Failed to reset timer: ' + (e.message||'Unknown error'), 'err'))
-        .resetQuestionTimer(aSid);
-    }
-    function cancelQTimer() {
-      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-      google.script.run
-        .withSuccessHandler(() => { refreshLive(); toast('Timer cancelled — students may continue answering.', 'ok'); })
-        .withFailureHandler(e => toast('Failed to cancel timer: ' + (e.message||'Unknown error'), 'err'))
-        .cancelQuestionTimer(aSid);
+        .withSuccessHandler(() => { refreshLive(); toast('Question timer updated.', 'ok'); })
+        .withFailureHandler(e => { refreshLive(); toast('Failed to update timer: ' + (e.message || 'Unknown error'), 'err'); })
+        .setQuestionTimerValue(aSid, totalSec);
     }
 
     // ── Session Timer Controls ────────────────────────────────────────
+    function toggleSessionTimer() {
+      const pill = document.getElementById('teacherSessionTimerPill');
+      const isPaused = pill && pill.dataset.paused === '1';
+      if (isPaused) resumeSessionTimer();
+      else pauseSessionTimer();
+    }
     function pauseSessionTimer() {
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer paused.', 'ok'); }).withFailureHandler(e => toast('Failed to pause session timer: ' + (e.message||'Unknown error'), 'err')).pauseSessionTimer(aSid);
@@ -4372,17 +4518,43 @@
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer resumed.', 'ok'); }).withFailureHandler(e => toast('Failed to resume session timer: ' + (e.message||'Unknown error'), 'err')).resumeSessionTimer(aSid);
     }
-    function extendSessionTimer(seconds) {
-      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-      google.script.run.withSuccessHandler(() => { refreshLive(); toast('+' + seconds + 's added to session timer.', 'ok'); }).withFailureHandler(e => toast('Failed to extend session timer: ' + (e.message||'Unknown error'), 'err')).extendSessionTimer(aSid, seconds);
+    function editSessionTimerStart(pillEl) {
+      if (!pillEl) return;
+      const cur = (pillEl.textContent || '').replace(/[^0-9:]/g, '').trim();
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = cur;
+      input.className = 'ls-timer-input';
+      input.placeholder = 'MM:SS';
+      input.onblur = () => editSessionTimerCommit(input);
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') input.blur();
+        if (e.key === 'Escape') {
+          input.onblur = null;
+          input.replaceWith(pillEl);
+        }
+      };
+      pillEl.replaceWith(input);
+      input.focus();
+      input.select();
     }
-    function cancelSessionTimer() {
+    function editSessionTimerCommit(input) {
+      const raw = (input.value || '').trim();
+      let totalSec = 0;
+      if (raw.includes(':')) {
+        const parts = raw.split(':');
+        const mm = Number(parts[0]);
+        const ss = Number(parts[1]);
+        totalSec = (isFinite(mm) ? mm : 0) * 60 + (isFinite(ss) ? ss : 0);
+      } else {
+        totalSec = parseInt(raw, 10) || 0;
+      }
+      if (totalSec <= 0) { refreshLive(); return; }
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-      google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer cancelled.', 'ok'); }).withFailureHandler(e => toast('Failed to cancel session timer: ' + (e.message||'Unknown error'), 'err')).cancelSessionTimer(aSid);
-    }
-    function startSessionTimer() {
-      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-      google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer restarted.', 'ok'); }).withFailureHandler(e => toast('Failed to restart session timer: ' + (e.message||'Unknown error'), 'err')).startSessionTimer(aSid);
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('Session timer updated.', 'ok'); })
+        .withFailureHandler(e => { refreshLive(); toast('Failed to update session timer: ' + (e.message || 'Unknown error'), 'err'); })
+        .setSessionTimerValue(aSid, totalSec);
     }
 
     // ── Session Pause Controls ──────────────────────────────────────
@@ -4395,10 +4567,15 @@
       google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session resumed.', 'ok'); }).withFailureHandler(e => toast('Failed to resume session: ' + (e.message||'Unknown error'), 'err')).resumeSession(aSid);
     }
 
-    // ── Individual Student Timer Extension ──────────────────────────
-    function extendStudentTime(sessId, stuId, seconds) {
+    // ── Individual Student Timer Toggle ──────────────────────────
+    function toggleStudentTimerBypass(sessId, stuId, isBypassed) {
+      const BYPASS_MS = 999999000;
+      const newMs = isBypassed ? 0 : BYPASS_MS;
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
-      google.script.run.withSuccessHandler(() => { refreshLive(); toast('+' + seconds + 's for student.', 'ok'); }).withFailureHandler(e => toast('Failed to extend: ' + (e.message||'Unknown error'), 'err')).extendStudentTimer(sessId, stuId, seconds);
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast(isBypassed ? 'Timer restored for student.' : 'Timer bypassed for student.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to update timer: ' + (e.message||'Unknown error'), 'err'))
+        .setStudentTimerExtension(sessId, stuId, newMs);
     }
 
     // Tick the teacher-side question and session timer pills every 500ms (lightweight, DOM-only)
@@ -5338,6 +5515,59 @@
       const dStr = new Date(sess.startedAt).toLocaleDateString() + ' ' + new Date(sess.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const finishedCount = students.filter(st => st.status === 'finished').length;
       const completionPct = students.length > 0 ? Math.round((finishedCount / students.length) * 100) : 0;
+      const qMapMatrix = questions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
+      const metaMapMatrix = meta.reduce((acc, m) => { acc[m.studentId + '|' + m.questionId] = m; return acc; }, {});
+      let totalMeta = 0, t_sr = 0, t_sw = 0, t_ur = 0, t_uw = 0;
+      const profiles = { sr: [], sw: [], ur: [], uw: [] };
+      Object.keys(studentMap).forEach(sId => {
+        const s = studentMap[sId];
+        let c_sr = 0, c_sw = 0, c_ur = 0, c_uw = 0;
+        s.resps.forEach(r => {
+          const q = qMapMatrix[r.questionId];
+          const eval_ = reEvalMC(r, q);
+          const confMeta = metaMapMatrix[r.studentId + '|' + r.questionId];
+          const confVal = confMeta ? Number(confMeta.confidence) : 0;
+          const isC = eval_.isCorrect;
+          if (confVal >= 3) {
+            if (isC) { c_sr++; t_sr++; } else { c_sw++; t_sw++; }
+            totalMeta++;
+          } else if (confVal > 0 && confVal < 3) {
+            if (isC) { c_ur++; t_ur++; } else { c_uw++; t_uw++; }
+            totalMeta++;
+          }
+        });
+        const maxVal = Math.max(c_sr, c_sw, c_ur, c_uw);
+        if (maxVal > 0) {
+          let maxLabel = 'sr';
+          if (c_sw > 0 && c_sw >= maxVal) maxLabel = 'sw';
+          else if (c_uw > 0 && c_uw >= maxVal) maxLabel = 'uw';
+          else if (c_ur > 0 && c_ur >= maxVal) maxLabel = 'ur';
+          profiles[maxLabel].push(s.name);
+        }
+      });
+      const pct = (n) => totalMeta > 0 ? Math.round((n / totalMeta) * 100) + '%' : '—';
+      const rSt = (arr) => arr.length > 0 ? arr.map(n => `<div style="padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.05); font-size:12px; font-weight:600">${n}</div>`).join('') : '<div style="font-style:italic; opacity:0.6; padding:4px 0; font-size:12px">None</div>';
+      const metaSectionHtml = `
+        <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px">
+          <div style="padding:16px; border-bottom:1px solid var(--bd); background:var(--s2); font-weight:700; font-size:15px">🧠 Confidence Calibration</div>
+          <div style="padding:16px">
+            <p style="font-size:13px; color:var(--tx2); margin-bottom:16px">Compares student accuracy against their reported confidence. Ideally, most responses should fall into "Sure &amp; Right" or "Unsure &amp; Wrong". ${totalMeta > 0 ? `Based on <strong>${totalMeta}</strong> rated responses.` : 'No confidence data recorded for this session.'}</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:20px">
+              <div style="padding:12px; background:var(--gBg); border:1px solid rgba(5,150,105,.2); border-radius:8px; text-align:center"><div style="font-size:22px; font-weight:800; color:var(--grn)">${pct(t_sr)}</div><div style="font-size:11px; font-weight:700; color:var(--grn); text-transform:uppercase; margin-top:4px">Sure &amp; Right</div></div>
+              <div style="padding:12px; background:var(--rBg); border:1px solid rgba(220,38,38,.2); border-radius:8px; text-align:center"><div style="font-size:22px; font-weight:800; color:var(--red)">${pct(t_sw)}</div><div style="font-size:11px; font-weight:700; color:var(--red); text-transform:uppercase; margin-top:4px">Sure &amp; Wrong ⚠️</div></div>
+              <div style="padding:12px; background:var(--aBg); border:1px solid rgba(217,119,6,.2); border-radius:8px; text-align:center"><div style="font-size:22px; font-weight:800; color:var(--amb)">${pct(t_ur)}</div><div style="font-size:11px; font-weight:700; color:var(--amb); text-transform:uppercase; margin-top:4px">Unsure &amp; Right</div></div>
+              <div style="padding:12px; background:var(--s3); border:1px solid var(--bd); border-radius:8px; text-align:center"><div style="font-size:22px; font-weight:800; color:var(--tx2)">${pct(t_uw)}</div><div style="font-size:11px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-top:4px">Unsure &amp; Wrong</div></div>
+            </div>
+            <div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:8px">Dominant Profile Per Student</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px">
+              <div style="padding:12px; background:var(--gBg); border:1px solid rgba(5,150,105,.2); border-radius:8px"><div style="font-size:11px; font-weight:700; color:var(--grn); text-transform:uppercase; margin-bottom:8px">Sure &amp; Right</div>${rSt(profiles.sr)}</div>
+              <div style="padding:12px; background:var(--rBg); border:1px solid rgba(220,38,38,.2); border-radius:8px"><div style="font-size:11px; font-weight:700; color:var(--red); text-transform:uppercase; margin-bottom:8px">Sure &amp; Wrong</div>${rSt(profiles.sw)}${profiles.sw.length > 0 ? '<div style="font-size:10px; color:var(--red); margin-top:8px; font-weight:600">Priority: needs review</div>' : ''}</div>
+              <div style="padding:12px; background:var(--aBg); border:1px solid rgba(217,119,6,.2); border-radius:8px"><div style="font-size:11px; font-weight:700; color:var(--amb); text-transform:uppercase; margin-bottom:8px">Unsure &amp; Right</div>${rSt(profiles.ur)}</div>
+              <div style="padding:12px; background:var(--s3); border:1px solid var(--bd); border-radius:8px"><div style="font-size:11px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-bottom:8px">Unsure &amp; Wrong</div>${rSt(profiles.uw)}</div>
+            </div>
+          </div>
+        </div>
+      `;
 
       let html = `
         <div class="sec-hdr" style="margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end">
@@ -5396,6 +5626,8 @@
             </table>
           </div>
         </div>
+
+        ${metaSectionHtml}
 
         <!-- Item Analysis -->
         <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px">
@@ -5588,93 +5820,6 @@
           </div>
         </div>
       `;
-
-      // ── Metacognition Section (full-width, after item analysis) ──
-      {
-        const qMapMatrix = questions.reduce((acc, q) => { acc[q.id] = q; return acc; }, {});
-        const metaMapMatrix = meta.reduce((acc, m) => { acc[m.studentId + '|' + m.questionId] = m; return acc; }, {});
-
-        let totalMeta = 0, t_sr = 0, t_sw = 0, t_ur = 0, t_uw = 0;
-        const profiles = { sr: [], sw: [], ur: [], uw: [] };
-
-        Object.keys(studentMap).forEach(sId => {
-          const s = studentMap[sId];
-          let c_sr = 0, c_sw = 0, c_ur = 0, c_uw = 0;
-          s.resps.forEach(r => {
-            const q = qMapMatrix[r.questionId];
-            const eval_ = reEvalMC(r, q);
-            const confMeta = metaMapMatrix[r.studentId + '|' + r.questionId];
-            const confVal = confMeta ? Number(confMeta.confidence) : 0;
-            const isC = eval_.isCorrect;
-            if (confVal >= 3) {
-              if (isC) { c_sr++; t_sr++; } else { c_sw++; t_sw++; }
-              totalMeta++;
-            } else if (confVal > 0 && confVal < 3) {
-              if (isC) { c_ur++; t_ur++; } else { c_uw++; t_uw++; }
-              totalMeta++;
-            }
-          });
-
-          const maxVal = Math.max(c_sr, c_sw, c_ur, c_uw);
-          if (maxVal > 0) {
-            let maxLabel = 'sr';
-            if (c_sw > 0 && c_sw >= maxVal) maxLabel = 'sw';
-            else if (c_uw > 0 && c_uw >= maxVal) maxLabel = 'uw';
-            else if (c_ur > 0 && c_ur >= maxVal) maxLabel = 'ur';
-            profiles[maxLabel].push(s.name);
-          }
-        });
-
-        const pct = (n) => totalMeta > 0 ? Math.round((n / totalMeta) * 100) + '%' : '—';
-        const rSt = (arr) => arr.length > 0 ? arr.map(n => `<div style="padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.05); font-size:12px; font-weight:600">${n}</div>`).join('') : '<div style="font-style:italic; opacity:0.6; padding:4px 0; font-size:12px">None</div>';
-
-        html += `
-        <div class="card" style="padding:0; overflow:hidden; margin-bottom:24px">
-          <div style="padding:16px; border-bottom:1px solid var(--bd); background:var(--s2); font-weight:700; font-size:15px">🧠 Confidence Calibration</div>
-          <div style="padding:16px">
-            <p style="font-size:13px; color:var(--tx2); margin-bottom:16px">Compares student accuracy against their reported confidence. Ideally, most responses should fall into "Sure &amp; Right" or "Unsure &amp; Wrong". ${totalMeta > 0 ? `Based on <strong>${totalMeta}</strong> rated responses.` : 'No confidence data recorded for this session.'}</p>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:20px">
-              <div style="padding:12px; background:var(--gBg); border:1px solid rgba(5,150,105,.2); border-radius:8px; text-align:center">
-                <div style="font-size:22px; font-weight:800; color:var(--grn)">${pct(t_sr)}</div>
-                <div style="font-size:11px; font-weight:700; color:var(--grn); text-transform:uppercase; margin-top:4px">Sure &amp; Right</div>
-              </div>
-              <div style="padding:12px; background:var(--rBg); border:1px solid rgba(220,38,38,.2); border-radius:8px; text-align:center">
-                <div style="font-size:22px; font-weight:800; color:var(--red)">${pct(t_sw)}</div>
-                <div style="font-size:11px; font-weight:700; color:var(--red); text-transform:uppercase; margin-top:4px">Sure &amp; Wrong ⚠️</div>
-              </div>
-              <div style="padding:12px; background:var(--aBg); border:1px solid rgba(217,119,6,.2); border-radius:8px; text-align:center">
-                <div style="font-size:22px; font-weight:800; color:var(--amb)">${pct(t_ur)}</div>
-                <div style="font-size:11px; font-weight:700; color:var(--amb); text-transform:uppercase; margin-top:4px">Unsure &amp; Right</div>
-              </div>
-              <div style="padding:12px; background:var(--s3); border:1px solid var(--bd); border-radius:8px; text-align:center">
-                <div style="font-size:22px; font-weight:800; color:var(--tx2)">${pct(t_uw)}</div>
-                <div style="font-size:11px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-top:4px">Unsure &amp; Wrong</div>
-              </div>
-            </div>
-            <div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:8px">Dominant Profile Per Student</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px">
-              <div style="padding:12px; background:var(--gBg); border:1px solid rgba(5,150,105,.2); border-radius:8px">
-                <div style="font-size:11px; font-weight:700; color:var(--grn); text-transform:uppercase; margin-bottom:8px">Sure &amp; Right</div>
-                ${rSt(profiles.sr)}
-              </div>
-              <div style="padding:12px; background:var(--rBg); border:1px solid rgba(220,38,38,.2); border-radius:8px">
-                <div style="font-size:11px; font-weight:700; color:var(--red); text-transform:uppercase; margin-bottom:8px">Sure &amp; Wrong</div>
-                ${rSt(profiles.sw)}
-                ${profiles.sw.length > 0 ? '<div style="font-size:10px; color:var(--red); margin-top:8px; font-weight:600">Priority: needs review</div>' : ''}
-              </div>
-              <div style="padding:12px; background:var(--aBg); border:1px solid rgba(217,119,6,.2); border-radius:8px">
-                <div style="font-size:11px; font-weight:700; color:var(--amb); text-transform:uppercase; margin-bottom:8px">Unsure &amp; Right</div>
-                ${rSt(profiles.ur)}
-              </div>
-              <div style="padding:12px; background:var(--s3); border:1px solid var(--bd); border-radius:8px">
-                <div style="font-size:11px; font-weight:700; color:var(--tx2); text-transform:uppercase; margin-bottom:8px">Unsure &amp; Wrong</div>
-                ${rSt(profiles.uw)}
-              </div>
-            </div>
-          </div>
-        </div>
-        `;
-      }
 
       // ── AI Deep Analysis Card ──
       html += `

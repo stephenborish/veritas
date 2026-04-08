@@ -1129,6 +1129,25 @@ const DB = {
       return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
+  setQuestionTimerValue(sessId, newSeconds) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.qTimerState) return {error:'No timer active'};
+      const newMs = Math.max(0, Number(newSeconds) || 0) * 1000;
+      if (cfg.qTimerState.paused) {
+        cfg.qTimerState.pausedRemaining = newMs;
+      } else {
+        cfg.qTimerState.endTime = Date.now() + newMs;
+      }
+      cfg.qTimerState.cancelled = false;
+      cfg.qTimerState.dismissed = false;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const sessionQuestions = this._getSessionQuestions_(sess);
+      const updated = this.getSessionById(sessId);
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
+    });
+  },
   resetQTimer(sessId) {
     return this.withLock(() => {
       const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
@@ -1198,6 +1217,24 @@ const DB = {
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
       this.logTeacherAction(sessId, 'extend_session_timer', 'seconds=' + additionalSeconds);
+      return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
+    });
+  },
+  setSessionTimerValue(sessId, newSeconds) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
+      const cfg = sess.config || {};
+      if (!cfg.sessionTimerState) return {error:'No session timer active'};
+      const newMs = Math.max(0, Number(newSeconds) || 0) * 1000;
+      if (cfg.sessionTimerState.paused) {
+        cfg.sessionTimerState.pausedRemaining = newMs;
+      } else {
+        cfg.sessionTimerState.endTime = Date.now() + newMs;
+      }
+      cfg.sessionTimerState.cancelled = false;
+      this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
+      const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
+      this.logTeacherAction(sessId, 'set_session_timer', 'seconds=' + Number(newSeconds || 0));
       return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
     });
   },
@@ -1277,6 +1314,23 @@ const DB = {
           stuSheet.getRange(i + 1, 18).setValue(existing + addMs);
           this.logAuditEvent('EXTEND_STUDENT_TIMER', stuId, 'Added ' + additionalSeconds + 's for session ' + sessId);
           return {ok:true, extensionMs: existing + addMs};
+        }
+      }
+      return {error:'Student not found'};
+    });
+  },
+  setStudentTimerExtension(sessId, stuId, ms) {
+    return this.withLock(() => {
+      const sess = this.getSessionById(sessId);
+      if (!sess) return {error:'Session not found'};
+      const setMs = Math.max(0, Number(ms) || 0);
+      const stuSheet = this.sh('StudentSessions');
+      const d = stuSheet.getDataRange().getValues();
+      for (let i = 1; i < d.length; i++) {
+        if (d[i][0] === sessId && d[i][1] === stuId) {
+          stuSheet.getRange(i + 1, 18).setValue(setMs);
+          this.logAuditEvent('SET_STUDENT_TIMER_EXT', stuId, 'Set to ' + setMs + 'ms for session ' + sessId);
+          return {ok:true, extensionMs: setMs};
         }
       }
       return {error:'Student not found'};

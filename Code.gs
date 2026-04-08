@@ -268,6 +268,7 @@ function dismissQuestionTimer(sessId) { try { return DB.dismissQuestionTimer(ses
 function pauseQuestionTimer(sessId) { try { return DB.pauseQTimer(sessId); } catch(e) { return {error:e.message}; } }
 function resumeQuestionTimer(sessId) { try { return DB.resumeQTimer(sessId); } catch(e) { return {error:e.message}; } }
 function extendQuestionTimer(sessId, additionalSeconds) { try { return DB.extendQTimer(sessId, additionalSeconds); } catch(e) { return {error:e.message}; } }
+function setQuestionTimerValue(sessId, seconds) { try { return DB.setQuestionTimerValue(sessId, seconds); } catch(e) { return {error:e.message}; } }
 function resetQuestionTimer(sessId) { try { return DB.resetQTimer(sessId); } catch(e) { return {error:e.message}; } }
 function cancelQuestionTimer(sessId) { try { return DB.cancelQTimer(sessId); } catch(e) { return {error:e.message}; } }
 function updateSessionConfig(id, key, val) { return DB.updateSessionConfig(id, key, val); }
@@ -304,6 +305,7 @@ function readmitAllStudents(sessId) { try { return DB.readmitAllStudents(sessId)
 function pauseSessionTimer(sessId) { return DB.pauseSessionTimer(sessId); }
 function resumeSessionTimer(sessId) { return DB.resumeSessionTimer(sessId); }
 function extendSessionTimer(sessId, seconds) { return DB.extendSessionTimer(sessId, seconds); }
+function setSessionTimerValue(sessId, seconds) { return DB.setSessionTimerValue(sessId, seconds); }
 function cancelSessionTimer(sessId) { return DB.cancelSessionTimer(sessId); }
 function startSessionTimer(sessId) { return DB.startSessionTimer(sessId); }
 
@@ -313,6 +315,7 @@ function resumeSession(sessId) { return DB.resumeSession(sessId); }
 
 // ── Individual Student Timer ──
 function extendStudentTimer(sessId, stuId, additionalSeconds) { return DB.extendStudentTimer(sessId, stuId, additionalSeconds); }
+function setStudentTimerExtension(sessId, stuId, ms) { return DB.setStudentTimerExtension(sessId, stuId, ms); }
 
 // ── Student ──
 function studentJoin(code, first, last, clientToken, studentToken) { return DB.studentJoin(code, first, last, clientToken, studentToken); }
