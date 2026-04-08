@@ -292,9 +292,19 @@ Veritas Assess has a premium glassmorphism aesthetic. Do not introduce Tailwind,
 * **Text:** `--tx`, `--tx2`, `--tx3` (primary, secondary, muted)
 
 ### Typography (Google Fonts, loaded via CDN)
-* `Outfit` — headers, branding, buttons, large numbers
-* `Inter` — body text, inputs, textareas
+
+**UI chrome** — buttons, labels, navigation, status text, timers:
+* `Outfit` — headers, branding, stat values, large numbers
+* `Inter` — body text, inputs, metadata, badges, chips
 * `JetBrains Mono` — timers, session codes (monospace precision)
+
+**Academic content** — question text, answer choices, stimulus passages, any reading material:
+* `Noto Serif` (ital, wght 400–700) — applied via `.q-text`, `.rte-content`, `.mc-ctxt`, `.stim-body`, and `textarea` in SA questions. Both `StudentApp.html` and `TeacherApp.html` load Noto Serif.
+
+**Answer choice labels** (A, B, C, D only — NOT the answer text):
+* `Arial Black` — applied via `.mc-ltr` (teacher preview) and `.mc-opt .ltr` (student view). Bold, compact circle, visually distinct from answer body text. **Never** apply Arial Black to full answer text.
+
+🛑 Do not remove Noto Serif from academic content classes — it is required for exam-quality readability and distinguishes assessment content from UI chrome.
 
 ### Standardized Components
 * **Buttons:** `.btn.bp` (primary, teal gradient), `.btn.bg` (ghost/secondary), `.btn.bd` (destructive/red)
@@ -307,10 +317,23 @@ Veritas Assess has a premium glassmorphism aesthetic. Do not introduce Tailwind,
 * Use a two-column live layout (`.live-dashboard`) with a narrow context rail and a wide student workspace; collapse to one column below ~1100px.
 * Keep tab framing consistent with `.live-panel` and `.live-tab-header` so teacher focus remains on active data rather than scattered controls.
 * Use summary micro-panels (`.live-overview-bar` / `.live-overview-pill`) above the student tile grid for immediate scanability (showing totals, correctness split, and no-response counts).
-* Student tiles should remain information-dense (compact spacing, concise metadata, rapid action buttons) to avoid wasting screen real estate during high-pressure proctoring.
+* Student tiles use semantic CSS classes for layout: `.st-header`, `.st-name`, `.st-status-badge` (with `.sb-active`, `.sb-done`, `.sb-locked`, `.sb-absent`), `.st-prog-wrap`/`.st-prog-bar` (mini progress bar), `.st-meta-row`, `.st-badge-chip` (with `.bc-qpos`, `.bc-flag`, `.bc-ext`, `.bc-conf`), `.st-active-dot`, `.st-ans-snippet`/`.st-ans-none`. Do not revert to inline-style tiles.
+* MC answer choice distribution in the left column uses `.choice-row` / `.choice-row-correct` with `.mc-ltr` (letter label), `.mc-ctxt` (Noto Serif answer text), `.choice-bar-track`/`.choice-bar-fill` (visual percentage bar), and `.choice-stats` (count + %). This gives teachers immediate visual insight into answer distribution without reading numbers.
+* Stat pills use semantic modifier classes: `.sp-teal` (active users), `.sp-grn` (completed/success), `.sp-red` (violations/errors), `.sp-amb` (warnings/pending). Pills without a modifier use neutral styling.
 
 ### KaTeX Math Rendering
-Both `StudentApp.html` and `TeacherApp.html` load KaTeX (v0.16.9) from CDN. Math expressions are rendered as `<span class="katex-inline" data-latex="...">` elements. After any dynamic DOM update that may contain math, call `document.querySelectorAll('.katex-inline').forEach(el => katex.render(...))`. KaTeX render errors are caught and logged with `console.warn()` — never let a KaTeX error block UI rendering.
+Both `StudentApp.html` and `TeacherApp.html` load KaTeX (v0.16.9) from CDN. Math expressions are rendered as `<span class="katex-inline" data-latex="...">` elements.
+
+**After every dynamic DOM update** that may contain math (especially in the live monitor), use the dedicated helper:
+```js
+renderKaTeX_(container);   // defined in TeacherApp.html near startLive()
+```
+
+This helper safely iterates all `.katex-inline` elements within the given container, calls `katex.render()`, and logs failures with `console.warn()` without blocking rendering. It is called automatically after every `innerHTML` assignment in `renderLive()` — do not remove these calls.
+
+For the student app, call `document.querySelectorAll('.katex-inline').forEach(el => katex.render(...))` directly (no dedicated helper needed there, since rendering is one-shot after question load).
+
+🛑 Never let a KaTeX error block UI rendering. Always wrap in `try/catch` and use `throwOnError: false`.
 
 The teacher question editor has a rich-text toolbar (`rteTB()`) with math insertion shortcuts for fractions (`frac`), square roots (`sqrt`), and other common expressions.
 

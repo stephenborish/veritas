@@ -12,7 +12,7 @@
   <link rel="apple-touch-icon"
     href="https://raw.githubusercontent.com/stephenborish/veritas/008a8431c35df4622e78f8edcbfd7123d90bebdd/favicon.ico">
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
@@ -266,6 +266,101 @@
     .mini-dots span:nth-child(2) { animation-delay: 0.22s; }
     .mini-dots span:nth-child(3) { animation-delay: 0.44s; }
 
+    /* ═══════════════════════════════════════════════════════
+       LIVE MONITOR — 2-Column Dashboard
+       ═══════════════════════════════════════════════════════ */
+
+    /* Academic content: Noto Serif for question text and answer choices in teacher view */
+    .q-text, .rte-content {
+      font-family: 'Noto Serif', Georgia, serif;
+      line-height: 1.72;
+    }
+    /* Choice letter labels: Arial Black — bold, compact, visually distinct */
+    .mc-ltr {
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-weight: 900;
+      font-size: 12px;
+      min-width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: var(--s3);
+      border: 1.5px solid var(--bd2);
+      color: var(--tx2);
+      line-height: 1;
+      transition: var(--tr);
+    }
+    /* Answer choice text in teacher preview: Noto Serif */
+    .mc-ctxt {
+      font-family: 'Noto Serif', Georgia, serif;
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--tx);
+    }
+
+    /* MC answer choice distribution rows */
+    .choice-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--bd);
+      background: var(--s);
+      transition: var(--tr);
+    }
+    .choice-row-correct {
+      border-color: rgba(5,150,105,0.4);
+      background: rgba(5,150,105,0.05);
+    }
+    .choice-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .choice-bar-track {
+      height: 5px;
+      background: rgba(226,232,240,0.8);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 7px;
+    }
+    .choice-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .choice-stats {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      white-space: nowrap;
+      gap: 2px;
+      min-width: 54px;
+      padding-top: 1px;
+    }
+    .choice-count {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--tx2);
+      font-family: 'Outfit', sans-serif;
+      line-height: 1.2;
+    }
+    .choice-pct {
+      font-size: 11px;
+      color: var(--tx3);
+      font-family: 'Inter', sans-serif;
+    }
+    .choice-correct-mark {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--grn);
+    }
+
     /* Live Monitor 2-Column Dashboard */
     .live-dashboard {
       display: grid;
@@ -318,21 +413,22 @@
       position: sticky;
       top: 0;
       z-index: 990;
-      background: var(--s2);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: rgba(248,250,252,0.96);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--bd);
-      margin: -32px -32px 14px -32px;
+      margin: -32px -32px 16px -32px;
       display: flex;
       flex-direction: column;
+      box-shadow: 0 2px 8px rgba(15,23,42,0.04);
     }
 
-    /* Row 1: session info + stats */
+    /* Row 1: session info (left) + stats (right) */
     #live-top-bar-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 18px;
+      padding: 10px 20px;
       border-bottom: 1px solid var(--bd);
       flex-wrap: wrap;
       gap: 10px;
@@ -343,8 +439,8 @@
       display: none;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      padding: 8px 18px;
+      gap: 10px;
+      padding: 7px 20px;
       background: var(--tBg);
       border-bottom: 1px solid var(--tBd);
       flex-wrap: wrap;
@@ -353,38 +449,38 @@
     .live-status-banner {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       flex-wrap: wrap;
       min-width: 0;
     }
 
     .live-stat-row {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(76px, auto));
+      display: flex;
       gap: 8px;
-      justify-content: end;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
 
-    /* Stat pills */
+    /* Stat pills — larger, clearer, color-coded */
     .stat-pill {
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      min-width: 74px;
-      padding: 8px 10px;
+      min-width: 80px;
+      padding: 7px 12px;
       border-radius: 10px;
       border: 1px solid var(--bd);
-      background: rgba(255,255,255,0.72);
+      background: rgba(255,255,255,0.85);
+      transition: var(--tr);
     }
-
     .stat-pill .sp-val {
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 800;
       line-height: 1.1;
       font-family: 'Outfit', sans-serif;
       color: var(--tx);
     }
-
     .stat-pill .sp-lbl {
       font-size: 10px;
       font-weight: 600;
@@ -392,15 +488,26 @@
       letter-spacing: 0.6px;
       color: var(--tx3);
       margin-top: 2px;
+      font-family: 'Inter', sans-serif;
     }
+    /* Semantic color modifiers for stat pills */
+    .sp-teal .sp-val { color: var(--teal); }
+    .sp-teal { border-color: var(--tBd); background: var(--tBg); }
+    .sp-grn .sp-val  { color: var(--grn); }
+    .sp-grn  { border-color: rgba(5,150,105,0.25); background: rgba(5,150,105,0.06); }
+    .sp-red .sp-val  { color: var(--red); }
+    .sp-red  { border-color: rgba(225,29,72,0.25); background: rgba(225,29,72,0.06); }
+    .sp-amb .sp-val  { color: var(--amb); }
+    .sp-amb  { border-color: rgba(217,119,6,0.25); background: rgba(217,119,6,0.06); }
 
     .live-panel {
       border: 1px solid var(--bd);
-      border-radius: 12px;
-      background: rgba(255,255,255,0.66);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.72);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
-      padding: 10px 12px;
+      padding: 12px 14px;
+      box-shadow: var(--sh);
     }
 
     .live-tab-header {
@@ -409,39 +516,45 @@
       align-items: flex-end;
       gap: 10px;
       border-bottom: 1px solid var(--bd);
-      margin-bottom: 10px;
+      margin-bottom: 12px;
       padding-bottom: 8px;
       flex-wrap: wrap;
     }
 
+    /* Overview summary bar above student grid */
     .live-overview-bar {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
       gap: 8px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
-
     .live-overview-pill {
       border-radius: 10px;
       border: 1px solid var(--bd);
-      background: var(--s);
-      padding: 8px 10px;
+      background: rgba(255,255,255,0.85);
+      padding: 9px 12px;
+      transition: var(--tr);
     }
-
     .live-overview-pill .k {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--tx3);
       text-transform: uppercase;
-      letter-spacing: 0.4px;
-      margin-bottom: 2px;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 600;
     }
-
     .live-overview-pill .v {
-      font-weight: 700;
+      font-weight: 800;
       color: var(--tx);
-      font-size: 14px;
-      line-height: 1.2;
+      font-size: 18px;
+      line-height: 1.15;
+      font-family: 'Outfit', sans-serif;
     }
+    .ov-grn { border-color: rgba(5,150,105,0.3); background: rgba(5,150,105,0.06); }
+    .ov-grn .v { color: var(--grn); }
+    .ov-red { border-color: rgba(225,29,72,0.3); background: rgba(225,29,72,0.06); }
+    .ov-red .v { color: var(--red); }
 
     /* Lockstep Q label */
     .ls-q-label {
@@ -449,6 +562,7 @@
       font-weight: 700;
       color: var(--teal2);
       white-space: nowrap;
+      font-family: 'Outfit', sans-serif;
     }
 
     /* Semantic active states for filter chips */
@@ -1384,52 +1498,133 @@
 
     .student-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 10px
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 9px;
     }
 
+    /* ── Student Tile — redesigned ── */
     .student-tile {
-      background: rgba(255, 255, 255, 0.6);
+      background: rgba(255,255,255,0.7);
       backdrop-filter: blur(12px);
       border: 1px solid var(--bd);
+      border-left: 4px solid var(--bd2);
       border-radius: 12px;
-      padding: 12px;
+      padding: 10px 12px;
       cursor: pointer;
       transition: var(--tr);
       box-shadow: var(--sh);
-    }
-
-    .student-tile:hover {
-      border-color: var(--teal);
-      transform: translateY(-2px);
-      box-shadow: var(--sh2);
-    }
-
-    .student-tile .nm {
-      font-weight: 700;
-      margin-bottom: 5px;
-      line-height: 1.25;
-      font-size: 14px;
-    }
-
-    .student-tile .meta {
-      font-size: 12px;
-      color: var(--tx2);
       display: flex;
-      justify-content: space-between
+      flex-direction: column;
+      gap: 5px;
+    }
+    .student-tile:hover {
+      border-color: rgba(13,148,136,0.5);
+      border-left-color: var(--teal);
+      box-shadow: var(--sh2);
+      transform: translateY(-1px);
+    }
+    .tile-ok  { border-left-color: var(--grn); }
+    .tile-bad { border-left-color: var(--red); }
+    .tile-none { border-left-color: var(--bd2); }
+
+    /* Header row: name + status badge */
+    .st-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .st-name {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--tx);
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+      min-width: 0;
+      font-family: 'Inter', sans-serif;
+    }
+    .st-status-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 99px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      font-family: 'Inter', sans-serif;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .sb-active  { background:rgba(13,148,136,0.1);  color:var(--teal); border:1px solid rgba(13,148,136,0.3); }
+    .sb-done    { background:rgba(5,150,105,0.1);   color:var(--grn);  border:1px solid rgba(5,150,105,0.3); }
+    .sb-locked  { background:rgba(225,29,72,0.1);   color:var(--red);  border:1px solid rgba(225,29,72,0.3); }
+    .sb-absent  { background:var(--s3); color:var(--tx3); border:1px solid var(--bd); }
+
+    /* Progress bar */
+    .st-prog-wrap { height: 3px; background: var(--bd); border-radius: 2px; overflow: hidden; }
+    .st-prog-bar  { height: 100%; background: var(--teal); border-radius: 2px; transition: width 0.4s ease; }
+    .tile-ok  .st-prog-bar { background: var(--grn); }
+    .tile-bad .st-prog-bar { background: var(--red); }
+
+    /* Meta row: progress label + context chips */
+    .st-meta-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .st-meta-label {
+      font-size: 11px;
+      color: var(--tx3);
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+    }
+    .st-badge-chip {
+      font-size: 10px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-family: 'Inter', sans-serif;
+      white-space: nowrap;
+      font-weight: 600;
+    }
+    .bc-qpos { background:rgba(13,148,136,0.1); color:var(--teal); border:1px solid rgba(13,148,136,0.2); }
+    .bc-flag { background:rgba(217,119,6,0.1);  color:var(--amb);  border:1px solid rgba(217,119,6,0.2); }
+    .bc-ext  { background:rgba(37,99,235,0.1);  color:var(--blue); border:1px solid rgba(37,99,235,0.2); }
+    .bc-conf { background:var(--s3); color:var(--tx2); border:1px solid var(--bd); }
+
+    /* Active dot indicator */
+    .st-active-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--grn);
+      flex-shrink: 0;
+      box-shadow: 0 0 0 2px rgba(5,150,105,0.22);
     }
 
-    .tile-ok {
-      border-left: 4px solid var(--grn)
+    /* Answer snippet for lockstep */
+    .st-ans-snippet {
+      padding: 5px 8px;
+      background: var(--s3);
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      color: var(--tx2);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: 'Inter', sans-serif;
+    }
+    .st-ans-none {
+      padding: 4px 8px;
+      background: rgba(203,213,225,0.25);
+      border-radius: 6px;
+      font-size: 11px;
+      text-align: center;
+      color: var(--tx3);
+      font-style: italic;
+      font-family: 'Inter', sans-serif;
     }
 
-    .tile-bad {
-      border-left: 4px solid var(--red)
-    }
-
-    .tile-none {
-      border-left: 4px solid var(--bd2)
-    }
+    /* Action row within tile */
+    .st-actions { display: flex; gap: 4px; }
 
     .frow {
       display: flex;
@@ -3069,6 +3264,20 @@
         .getLiveResults(aSid);
     }
 
+    // Safely renders all .katex-inline elements within a container after dynamic DOM updates.
+    // Call after any innerHTML assignment that may contain math expressions.
+    function renderKaTeX_(container) {
+      if (!container || typeof katex === 'undefined') return;
+      container.querySelectorAll('.katex-inline').forEach(function(el) {
+        if (!el.dataset.latex) return;
+        try {
+          katex.render(el.dataset.latex, el, { throwOnError: false, displayMode: false });
+        } catch(e) {
+          console.warn('KaTeX live render error:', e);
+        }
+      });
+    }
+
     function startLive() {
       if (liveInt) clearInterval(liveInt);
       liveInt = null;
@@ -3319,35 +3528,31 @@
         const _inProgress = Number(d.inProgressCount || 0);
         const _noResponse = Number(d.noResponseCount || 0);
         document.getElementById('liveStatsRow').innerHTML = `
-          <div class="stat-pill">
+          <div class="stat-pill${d.totalJoined ? ' sp-teal' : ''}">
             <span class="sp-val">${d.totalJoined}</span>
             <span class="sp-lbl">Joined</span>
           </div>
-          <div class="stat-pill">
-            <span class="sp-val" style="color:${_waiting ? 'var(--amb)' : 'var(--tx3)'}">${_waiting}</span>
-            <span class="sp-lbl">Not Joined</span>
+          <div class="stat-pill${(d.totalActiveNow || 0) > 0 ? ' sp-teal' : ''}">
+            <span class="sp-val">${d.totalActiveNow || 0}</span>
+            <span class="sp-lbl">Active Now</span>
           </div>
-          <div class="stat-pill">
-            <span class="sp-val" style="color:var(--teal)">${d.totalActiveNow || 0}</span>
-            <span class="sp-lbl">Active</span>
-          </div>
-          <div class="stat-pill">
-            <span class="sp-val" style="color:var(--blue)">${_inProgress}</span>
-            <span class="sp-lbl">In Progress</span>
-          </div>
-          <div class="stat-pill">
-            <span class="sp-val" style="color:var(--grn)">${d.totalFinished}</span>
+          <div class="stat-pill${d.totalFinished > 0 ? ' sp-grn' : ''}">
+            <span class="sp-val">${d.totalFinished}</span>
             <span class="sp-lbl">Finished</span>
           </div>
-          <div class="stat-pill">
-            <span class="sp-val" style="color:${_noResponse ? 'var(--red)' : 'var(--tx3)'}">${_noResponse}</span>
-            <span class="sp-lbl">No Responses</span>
+          <div class="stat-pill${_inProgress > 0 ? '' : ''}">
+            <span class="sp-val">${_inProgress}</span>
+            <span class="sp-lbl">In Progress</span>
           </div>
-          <div class="stat-pill">
-            <span class="sp-val" style="color:${_vCount ? 'var(--red)' : 'var(--tx3)'}">${_vCount}</span>
-            <span class="sp-lbl" style="${_vCount ? 'color:var(--red)' : ''}">Violations</span>
+          <div class="stat-pill${_waiting > 0 ? ' sp-amb' : ''}">
+            <span class="sp-val">${_waiting}</span>
+            <span class="sp-lbl">Not Joined</span>
           </div>
-          <div class="stat-pill">
+          <div class="stat-pill${_vCount > 0 ? ' sp-red' : ''}">
+            <span class="sp-val">${_vCount}</span>
+            <span class="sp-lbl">Violations</span>
+          </div>
+          <div class="stat-pill${_joinRate >= 80 ? ' sp-grn' : _joinRate > 0 ? ' sp-amb' : ''}">
             <span class="sp-val">${_joinRate}%</span>
             <span class="sp-lbl">Completion</span>
           </div>
@@ -3445,33 +3650,33 @@
                 });
               }
             });
-            const _nlTotalResps = viewQ.studentResponses ? viewQ.studentResponses.length : 0;
-            _nlQHtml += `<div style="display:flex; flex-direction:column; gap:12px;">`;
+            const _nlTotalResps = viewQ.studentResponses ? viewQ.studentResponses.filter(r => r.answer).length : 0;
+            _nlQHtml += `<div style="display:flex; flex-direction:column; gap:8px;">`;
             const _nlCorrectInds = viewQ.correctIndices || [];
+            const _LTRS_NL = ['A','B','C','D','E','F','G','H'];
             viewQ.choices.forEach((c, idx) => {
               const st = _nlChoicesCount[c];
               const pct = _nlTotalResps > 0 ? Math.round((st.count / _nlTotalResps) * 100) : 0;
-              const avgConf = st.confCount > 0 ? (st.confSum / st.confCount).toFixed(1) : '-';
+              const avgConf = st.confCount > 0 ? (st.confSum / st.confCount).toFixed(1) : null;
               const isC = _nlCorrectInds.includes(idx);
-              const border = isC ? 'border: 2px solid var(--teal);' : 'border: 1px solid var(--bd);';
-              const bg = isC ? 'background: var(--tealBg);' : 'background: var(--s);';
-              let studentListHtml = '';
-              if (st.students.length > 0) {
-                studentListHtml = `<div style="margin-top:8px; font-size:12px; color:var(--tx2); line-height:1.4;">
-                  <strong>Students:</strong> ${st.students.map(name => DOMPurify.sanitize(name)).join(', ')}
-                </div>`;
-              }
-              _nlQHtml += `<div style="padding:12px 14px; border-radius:8px; font-size:14px; ${bg} ${border}">
-                  <div style="display:flex; justify-content:space-between; align-items: flex-start; gap: 12px;">
-                      <div style="font-weight:600; color:var(--tx); flex:1; max-width:100%; overflow:hidden;">
-                          <div class="rte-content">${DOMPurify.sanitize(c)}</div>
-                          ${studentListHtml}
-                      </div>
-                      <div style="display:flex; flex-direction:column; align-items:flex-end; white-space:nowrap; font-size:12px;">
-                          <span style="font-weight:700; color:var(--tx2);">${st.count} selected (${pct}%)</span>
-                          <span style="color:var(--tx3)">Avg Conf: <strong>${avgConf}</strong></span>
-                      </div>
-                  </div>
+              const letter = _LTRS_NL[idx] || String.fromCharCode(65 + idx);
+              const barColor = isC ? 'var(--grn)' : 'var(--red)';
+              const studentListHtml = st.students.length > 0
+                ? `<div style="margin-top:5px;font-size:11px;color:var(--tx3);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${st.students.map(n => DOMPurify.sanitize(n)).join(', ')}">${st.students.map(n => DOMPurify.sanitize(n)).join(', ')}</div>`
+                : '';
+              _nlQHtml += `<div class="choice-row${isC ? ' choice-row-correct' : ''}">
+                <div class="mc-ltr" style="${isC ? 'background:rgba(5,150,105,0.15);border-color:rgba(5,150,105,0.4);color:var(--grn);' : ''}">${letter}</div>
+                <div class="choice-body">
+                  <div class="mc-ctxt">${DOMPurify.sanitize(c)}</div>
+                  ${studentListHtml}
+                  <div class="choice-bar-track"><div class="choice-bar-fill" style="width:${pct}%;background:${barColor};"></div></div>
+                </div>
+                <div class="choice-stats">
+                  <span class="choice-count" style="${isC ? 'color:var(--grn);' : ''}">${st.count}</span>
+                  <span class="choice-pct">${pct}%</span>
+                  ${isC ? '<span class="choice-correct-mark">✓</span>' : ''}
+                  ${avgConf ? `<span style="font-size:10px;color:var(--tx3);font-family:Inter,sans-serif">C${avgConf}</span>` : ''}
+                </div>
               </div>`;
             });
             _nlQHtml += `</div>`;
@@ -3644,42 +3849,40 @@
             }
           });
 
-          const totalResps = viewQ.studentResponses ? viewQ.studentResponses.length : 0;
-          qFullHtml += `<div style="display:flex; flex-direction:column; gap:12px;">`;
+          const totalResps = viewQ.studentResponses ? viewQ.studentResponses.filter(r => r.answer).length : 0;
+          qFullHtml += `<div style="display:flex; flex-direction:column; gap:8px;">`;
           const correctInds = viewQ.correctIndices || [];
+          const _LTRS_LS = ['A','B','C','D','E','F','G','H'];
           viewQ.choices.forEach((c, idx) => {
             const st = choicesCount[c];
             const pct = totalResps > 0 ? Math.round((st.count / totalResps) * 100) : 0;
-            const avgConf = st.confCount > 0 ? (st.confSum / st.confCount).toFixed(1) : '-';
+            const avgConf = st.confCount > 0 ? (st.confSum / st.confCount).toFixed(1) : null;
             const isC = correctInds.includes(idx);
+            const letter = _LTRS_LS[idx] || String.fromCharCode(65 + idx);
+            const barColor = isC ? 'var(--grn)' : 'var(--red)';
+            const studentListHtml = st.students.length > 0
+              ? `<div style="margin-top:5px; font-size:11px; color:var(--tx3); line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${st.students.map(n => DOMPurify.sanitize(n)).join(', ')}">${st.students.map(n => DOMPurify.sanitize(n)).join(', ')}</div>`
+              : '';
 
-            const border = isC ? 'border: 2px solid var(--teal);' : 'border: 1px solid var(--bd);';
-            const bg = isC ? 'background: var(--tealBg);' : 'background: var(--s);';
-
-            let studentListHtml = '';
-            if (st.students.length > 0) {
-              studentListHtml = `<div style="margin-top:8px; font-size:12px; color:var(--tx2); line-height:1.4;">
-                <strong>Students:</strong> ${st.students.map(name => DOMPurify.sanitize(name)).join(', ')}
-              </div>`;
-            }
-
-            qFullHtml += `<div style="padding:12px 14px; border-radius:8px; font-size:14px; ${bg} ${border}">
-                <div style="display:flex; justify-content:space-between; align-items: flex-start; gap: 12px;">
-                    <div style="font-weight:600; color:var(--tx); flex:1; max-width:100%; overflow:hidden;">
-                        <div class="rte-content">${DOMPurify.sanitize(c)}</div>
-                        ${studentListHtml}
-                    </div>
-                    <div style="display:flex; flex-direction:column; align-items:flex-end; white-space:nowrap; font-size:12px;">
-                        <span style="font-weight:700; color:var(--tx2);">${st.count} selected (${pct}%)</span>
-                        <span style="color:var(--tx3)">Avg Conf: <strong>${avgConf}</strong></span>
-                    </div>
-                </div>
+            qFullHtml += `<div class="choice-row${isC ? ' choice-row-correct' : ''}">
+              <div class="mc-ltr" style="${isC ? 'background:rgba(5,150,105,0.15);border-color:rgba(5,150,105,0.4);color:var(--grn);' : ''}">${letter}</div>
+              <div class="choice-body">
+                <div class="mc-ctxt">${DOMPurify.sanitize(c)}</div>
+                ${studentListHtml}
+                <div class="choice-bar-track"><div class="choice-bar-fill" style="width:${pct}%;background:${barColor};"></div></div>
+              </div>
+              <div class="choice-stats">
+                <span class="choice-count" style="${isC ? 'color:var(--grn);' : ''}">${st.count}</span>
+                <span class="choice-pct">${pct}%</span>
+                ${isC ? '<span class="choice-correct-mark">✓</span>' : ''}
+                ${avgConf ? `<span style="font-size:10px;color:var(--tx3);font-family:Inter,sans-serif">C${avgConf}</span>` : ''}
+              </div>
             </div>`;
           });
           qFullHtml += `</div>`;
         } else if (viewQ.type === 'sa') {
           qFullHtml += `<div style="font-weight:700; font-size:14px; margin-bottom:12px; border-bottom:1px solid var(--bd); padding-bottom:8px;">Responses List</div>`;
-          qFullHtml += `<div style="display:flex; flex-direction:column; gap:12px; max-height: 400px; overflow-y: auto; padding-right: 8px;">`;
+          qFullHtml += `<div style="display:flex; flex-direction:column; gap:10px; max-height: 400px; overflow-y: auto; padding-right: 8px;">`;
 
           if (!viewQ.studentResponses || viewQ.studentResponses.length === 0) {
              qFullHtml += `<div style="color:var(--tx3); font-style:italic; font-size:13px;">No responses yet.</div>`;
@@ -3775,7 +3978,10 @@
           </div>`;
         leftHtml += cpHT;
       }
-      if (_ch.left) document.getElementById('liveDashboardLeft').innerHTML = leftHtml;
+      if (_ch.left) {
+        document.getElementById('liveDashboardLeft').innerHTML = leftHtml;
+        renderKaTeX_(document.getElementById('liveDashboardLeft'));
+      }
 
       // === RIGHT COLUMN TABS ===
       if (liveTab === 'students' && _ch.students) {
@@ -3798,48 +4004,81 @@
           return acc;
         }, { all: withStateAll.length, correct: 0, incorrect: 0, none: 0 });
         let rightHtml = `<div class="live-overview-bar">
-          <div class="live-overview-pill"><div class="k">Showing</div><div class="v">${withFilteredState.length} students</div></div>
-          <div class="live-overview-pill"><div class="k">Correct</div><div class="v" style="color:var(--grn)">${_stateCounts.correct || 0}</div></div>
-          <div class="live-overview-pill"><div class="k">Incorrect</div><div class="v" style="color:var(--red)">${_stateCounts.incorrect || 0}</div></div>
+          <div class="live-overview-pill"><div class="k">Showing</div><div class="v">${withFilteredState.length}</div></div>
+          <div class="live-overview-pill ov-grn"><div class="k">Correct</div><div class="v">${_stateCounts.correct || 0}</div></div>
+          <div class="live-overview-pill ov-red"><div class="k">Incorrect</div><div class="v">${_stateCounts.incorrect || 0}</div></div>
           <div class="live-overview-pill"><div class="k">No Response</div><div class="v">${_stateCounts.none || 0}</div></div>
         </div>`;
 
         if (unresolvedViolations.length) {
-        rightHtml += `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong>Students locked out (${unresolvedViolations.length})</strong><span class="muted" style="font-size:12px">Resolve by re-admitting student</span></div><div style="margin-top:10px;display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${v.studentId}')">Re-admit</button></div>`).join('')}</div></div>`;
+          rightHtml += `<div class="card" style="border-color:rgba(225,29,72,0.3);background:rgba(225,29,72,0.04);margin-bottom:4px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><strong style="color:var(--red)">⚠ Locked out (${unresolvedViolations.length})</strong><span class="muted" style="font-size:12px">Unlock to re-admit</span></div><div style="margin-top:10px;display:grid;gap:8px">${Object.values(readmitByStudent).map(v => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border:1px solid rgba(225,29,72,0.2);border-radius:8px;background:var(--s2)"><div><div style="font-weight:600">${DOMPurify.sanitize(v.studentName || v.studentId)}</div><div class="muted" style="font-size:12px">${v.type || 'violation'} · ${v.timestamp || ''}</div></div><button class="btn bp" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${v.studentId}')">Unlock</button></div>`).join('')}</div></div>`;
         }
+
+        // ── Student tile grid ──
+        const _LTRS = ['A','B','C','D','E','F','G','H'];
         rightHtml += `<div class="student-grid">${withFilteredState.map(s => {
+          // Progress bar
+          const _progPct = (s.total > 0) ? Math.round(((s.answered || 0) / s.total) * 100) : 0;
+
+          // Status badge
+          const _statusMap = { active: ['sb-active','Active'], finished: ['sb-done','Done'], 'locked-out': ['sb-locked','Locked'], 'not-joined': ['sb-absent','Absent'] };
+          const [_badgeCls, _badgeLbl] = _statusMap[s.status] || ['sb-absent', s.status || 'Absent'];
+
+          // Tile state
+          const _tileStateCls = s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none';
+
+          // Answer snippet (lockstep only)
           let ansSnippet = '';
           if (isLS && q && s.qResp && s.qResp.answer) {
             let parsedAns = s.qResp.answer;
-            try {
-              const arr = JSON.parse(parsedAns);
-              if (Array.isArray(arr)) parsedAns = arr.join(', ');
-            } catch (e) {
-              console.error('Error generating detailed QStats:', e);
-            }
-            // Clean up any remaining quotes or brackets just in case
+            try { const arr = JSON.parse(parsedAns); if (Array.isArray(arr)) parsedAns = arr.join(', '); } catch (e) {}
             parsedAns = String(parsedAns).replace(/^\["|"\]$/g, '').replace(/","/g, ', ').replace(/"/g, '');
-            ansSnippet = `<div style="margin-top:8px; padding:6px; background:var(--s); border-radius:4px; font-size:13px; font-weight:600; text-align:center; color:var(--tx2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${parsedAns.replace(/"/g, '&quot;')}">${parsedAns}</div>`;
+            ansSnippet = `<div class="st-ans-snippet" title="${DOMPurify.sanitize(parsedAns).replace(/"/g,'&quot;')}">${DOMPurify.sanitize(parsedAns)}</div>`;
           } else if (isLS && q) {
-            ansSnippet = `<div style="margin-top:8px; padding:6px; background:var(--bd); border-radius:4px; font-size:12px; text-align:center; color:var(--tx3); font-style:italic;">No response</div>`;
+            ansSnippet = `<div class="st-ans-none">No response</div>`;
           }
-          let reAd = readmitByStudent[s.studentId] ? `<div style="margin-top:8px"><button class="btn bp" style="background:var(--teal)" title="Clears this student's lockout so they can re-enter the exam" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${s.studentId}')">Unlock Student</button></div>` : '';
-          // For not-joined roster students with a known email, show a resend link button
-          const resendBtn = (s.status === 'not-joined' && s.email)
-            ? `<div style="margin-top:8px"><button class="btn bg" style="width:100%;font-size:11px" onclick="event.stopPropagation();sendSingleEmail('${d.session.sessionId}','${DOMPurify.sanitize(s.email)}')">📧 Resend Link</button></div>`
+
+          // Context chips
+          const _qChip = (s.status === 'active' && s.currentQIndex !== undefined && s.total > 0)
+            ? `<span class="st-badge-chip bc-qpos">Q${(s.currentQIndex || 0) + 1}</span>` : '';
+          const _flagChip = (s.flaggedQs && s.flaggedQs.length > 0)
+            ? `<span class="st-badge-chip bc-flag">★ ${s.flaggedQs.length}</span>` : '';
+          const _extChip = s.timerExtensionMs
+            ? `<span class="st-badge-chip bc-ext">+${Math.round(s.timerExtensionMs/1000)}s</span>` : '';
+          const _confChip = (() => {
+            const c = (s.qResp && s.qResp.confidence) ? s.qResp.confidence : s.avgConf;
+            return c ? `<span class="st-badge-chip bc-conf">C${c}</span>` : '';
+          })();
+          const _activeDot = s.activeNow ? `<span class="st-active-dot" title="Online now"></span>` : '';
+          const _chipsHtml = (_qChip || _flagChip || _extChip || _confChip || _activeDot)
+            ? `<div class="st-meta-row">${_qChip}${_flagChip}${_extChip}${_confChip}${_activeDot}<span class="st-meta-label">${s.answered || 0}/${s.total || 0}</span></div>`
+            : `<div class="st-meta-row"><span class="st-meta-label">${s.answered || 0}/${s.total || 0} answered</span></div>`;
+
+          // Action buttons
+          const _unlockBtn = readmitByStudent[s.studentId]
+            ? `<button class="btn bp" style="font-size:11px;width:100%;" title="Clears lockout so student can re-enter" onclick="event.stopPropagation();readmitS('${d.session.sessionId}','${s.studentId}')">Unlock Student</button>`
             : '';
-          const _curQDisp = (s.status === 'active' && s.currentQIndex !== undefined && s.total > 0)
-            ? `<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(13,148,136,0.12);color:var(--teal);border:1px solid rgba(13,148,136,0.25)">on Q${(s.currentQIndex || 0) + 1}</span>` : '';
-          const _flagDisp = (s.flaggedQs && s.flaggedQs.length > 0)
-            ? `<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(245,158,11,0.1);color:var(--amb);border:1px solid rgba(245,158,11,0.25)">&#9733; ${s.flaggedQs.length}</span>` : '';
-          const _extDisp = s.timerExtensionMs ? `<span style="font-size:11px;padding:2px 6px;border-radius:4px;background:rgba(59,130,246,0.1);color:var(--blu);border:1px solid rgba(59,130,246,0.25)">+${Math.round(s.timerExtensionMs/1000)}s</span>` : '';
-          const _extendBtn = (s.status === 'active' && s.studentId)
-            ? `<div style="margin-top:6px;display:flex;gap:4px"><button class="btn bg" style="font-size:10px;padding:2px 6px;flex:1" onclick="event.stopPropagation();extendStudentTime('${d.session.sessionId}','${s.studentId}',60)">+1m</button><button class="btn bg" style="font-size:10px;padding:2px 6px;flex:1" onclick="event.stopPropagation();extendStudentTime('${d.session.sessionId}','${s.studentId}',300)">+5m</button></div>`
+          const _resendBtn = (s.status === 'not-joined' && s.email)
+            ? `<button class="btn bg" style="font-size:11px;width:100%;" onclick="event.stopPropagation();sendSingleEmail('${d.session.sessionId}','${DOMPurify.sanitize(s.email)}')">Resend Link</button>`
             : '';
-          return `<div class="student-tile ${s.tileState === 'correct' ? 'tile-ok' : s.tileState === 'incorrect' ? 'tile-bad' : 'tile-none'}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')"><div class="nm">${DOMPurify.sanitize(s.name)}</div><div class="meta"><span>${s.status || 'not-joined'}</span><span>${s.answered || 0}/${s.total || 0}</span></div><div class="meta" style="margin-top:4px"><span>Meta: ${(s.qResp && s.qResp.confidence) ? s.qResp.confidence : (s.avgConf || '/')}</span><span>${s.activeNow ? '🟢 now' : '⚪ idle'}</span></div>${_curQDisp || _flagDisp || _extDisp ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${_curQDisp}${_flagDisp}${_extDisp}</div>` : ''}${ansSnippet}${reAd}${resendBtn}${_extendBtn}</div>`;
+          const _extendBtns = (s.status === 'active' && s.studentId)
+            ? `<div class="st-actions"><button class="btn bg" style="font-size:10px;padding:2px 6px;flex:1" onclick="event.stopPropagation();extendStudentTime('${d.session.sessionId}','${s.studentId}',60)">+1m</button><button class="btn bg" style="font-size:10px;padding:2px 6px;flex:1" onclick="event.stopPropagation();extendStudentTime('${d.session.sessionId}','${s.studentId}',300)">+5m</button></div>`
+            : '';
+
+          return `<div class="student-tile ${_tileStateCls}" onclick="openStudentDetail('${d.session.sessionId}','${s.studentId || ''}')">
+            <div class="st-header">
+              <div class="st-name">${DOMPurify.sanitize(s.name)}</div>
+              <div class="st-status-badge ${_badgeCls}">${_badgeLbl}</div>
+            </div>
+            <div class="st-prog-wrap"><div class="st-prog-bar" style="width:${_progPct}%"></div></div>
+            ${_chipsHtml}
+            ${ansSnippet}
+            ${_unlockBtn}${_resendBtn}${_extendBtns}
+          </div>`;
         }).join('')}</div>`;
 
         document.getElementById('tab-students').innerHTML = rightHtml;
+        renderKaTeX_(document.getElementById('tab-students'));
       }
 
       if (liveTab === 'details' && _ch.details) {
@@ -3849,6 +4088,7 @@
           detHtml += `<div class="card"><div class="card-title"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}">Q${q.idx + 1}</span> <span style="margin-left:8px;font-size:12px;color:var(--tx3)">Avg confidence: ${q.avgConf || '-'}</span></div><div style="font-size:15px; margin-bottom:16px">${DOMPurify.sanitize(q.text)}</div><div style="background:var(--s2); border-radius:6px; padding:16px;">${(q.studentResponses || []).map(r => `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--bd);"><div style="width:170px; font-weight:600">${DOMPurify.sanitize(r.name)}</div><div style="flex:1; color:var(--tx2)">${DOMPurify.sanitize(r.answer) || '<span style="color:var(--tx3)">No answer</span>'}</div><div style="width:64px; text-align:right">${r.confidence ? `C${r.confidence}` : ''}</div>${r.isCorrect !== undefined ? `<div style="width:35px; text-align:right; color:${r.isCorrect === true || r.isCorrect === 'TRUE' ? 'var(--grn)' : 'var(--red)'}">${r.isCorrect === true || r.isCorrect === 'TRUE' ? '✓' : '✗'}</div>` : ''}</div>${r.feedback ? `<div style="padding:8px 0 12px 170px;color:var(--tx2);font-size:12px"><strong>AI:</strong> ${r.score} pt · ${DOMPurify.sanitize(r.feedback)}</div>` : ''}`).join('')}</div></div>`;
         });
         document.getElementById('tab-details').innerHTML = detHtml || '<div class="card">No responses yet.</div>';
+        renderKaTeX_(document.getElementById('tab-details'));
       }
       if (liveTab === 'grading' && _ch.grading) {
         renderGradingTab(d);
