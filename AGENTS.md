@@ -320,6 +320,10 @@ Veritas Assess has a premium glassmorphism aesthetic. Do not introduce Tailwind,
 * Student tiles use semantic CSS classes for layout: `.st-header`, `.st-name`, `.st-status-badge` (with `.sb-active`, `.sb-done`, `.sb-locked`, `.sb-absent`), `.st-prog-wrap`/`.st-prog-bar` (mini progress bar), `.st-meta-row`, `.st-badge-chip` (with `.bc-qpos`, `.bc-flag`, `.bc-ext`, `.bc-conf`), `.st-active-dot`, `.st-ans-snippet`/`.st-ans-none`. Do not revert to inline-style tiles.
 * MC answer choice distribution in the left column uses `.choice-row` / `.choice-row-correct` with `.mc-ltr` (letter label), `.mc-ctxt` (Noto Serif answer text), `.choice-bar-track`/`.choice-bar-fill` (visual percentage bar), and `.choice-stats` (count + %). This gives teachers immediate visual insight into answer distribution without reading numbers.
 * Stat pills use semantic modifier classes: `.sp-teal` (active users), `.sp-grn` (completed/success), `.sp-red` (violations/errors), `.sp-amb` (warnings/pending). Pills without a modifier use neutral styling.
+* The lockstep controls bar is organized into three semantic groups (`.ls-group`): left navigation/context, centered timers, and right-side actions. Keep this grouping intact for readability and to avoid control overflow.
+* Question/session timer controls are intentionally simplified to `pause/resume` + click-to-edit (`MM:SS`) pills (`#teacherQTimerPill`, `#teacherSessionTimerPill`). Do not reintroduce multi-button increment/reset clusters in the top bar.
+* Student tile timer overrides now use a single bypass toggle (`toggleStudentTimerBypass`) instead of `+1m/+5m` buttons. Bypass is represented by a sentinel extension value (`>= 999999000 ms`) and should be treated as “unlimited time until restored.”
+* Live confidence calibration is surfaced in the right-column students tab via `.live-meta-widget` so teachers can monitor metacognition without scrolling to archived analysis.
 
 ### KaTeX Math Rendering
 Both `StudentApp.html` and `TeacherApp.html` load KaTeX (v0.16.9) from CDN. Math expressions are rendered as `<span class="katex-inline" data-latex="...">` elements.
