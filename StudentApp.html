@@ -688,6 +688,13 @@
       background: var(--rBg) !important;
       box-shadow: none;
     }
+    .mc-opt.reveal-readonly {
+      cursor: default;
+      pointer-events: none;
+    }
+    .mc-opt.reveal-readonly .ltr {
+      border-color: rgba(148,163,184,.35);
+    }
 
     .mc-opt.elim {
       opacity: 0.45;
@@ -2191,7 +2198,7 @@
       let html = '';
 
       if (isRevealed) {
-        // STATE 5: Revealed Phase (Anti-Screenshot)
+        // STATE 5: Revealed Phase (same-question review with anti-screenshot masking)
 
         // Show stimulus if linked
         if (q.stimulusId) {
@@ -2204,20 +2211,56 @@
         }
 
         html += '<div class="q-card" style="padding: 40px">';
-
         html += '<div style="margin-bottom:24px; text-align:center; font-weight:700; color:var(--red); font-size:14px; text-transform:uppercase; letter-spacing:1px;">HOVER OVER A SECTION TO REVEAL IT.</div>';
 
         html += '<div class="anti-ss-container">';
 
-        // Anti-ss Side 1: The Question
+        // Anti-ss Side 1: The Question + choices shown exactly like question view
         html += '<div class="anti-ss-side" style="padding:24px; background:var(--s); border:2px solid var(--bd); border-radius:var(--rs);">';
-        html += '<div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:12px; letter-spacing:1px">Hover to view Question</div>';
-        html += '<div class="q-text" style="font-size:18px; margin-bottom:0">' + DOMPurify.sanitize(q.text) + '</div>';
+        html += '<div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:12px; letter-spacing:1px">Hover to view Question + Markup</div>';
+        html += '<div class="q-text" style="font-size:18px; margin-bottom:14px">' + DOMPurify.sanitize(q.text) + '</div>';
+        if (isMC) {
+          const _submittedRaw = S.ans[q.id];
+          let _submittedChoices = [];
+          if (Array.isArray(_submittedRaw)) {
+            _submittedChoices = _submittedRaw;
+          } else if (typeof _submittedRaw === 'string') {
+            try {
+              const parsed = JSON.parse(_submittedRaw);
+              _submittedChoices = Array.isArray(parsed) ? parsed : [_submittedRaw];
+            } catch (e) {
+              _submittedChoices = _submittedRaw ? [_submittedRaw] : [];
+            }
+          } else if (_submittedRaw !== undefined && _submittedRaw !== null && _submittedRaw !== '') {
+            _submittedChoices = [_submittedRaw];
+          }
+          const _submittedSet = new Set(_submittedChoices.map(function (x) { return String(x); }));
+          const _correctIdxs = q.correctIndices && q.correctIndices.length
+            ? q.correctIndices
+            : [q.correctIndex != null ? q.correctIndex : 0];
+
+          let _revMcHtml = '<div class="mc-list">';
+          (q.choices || []).forEach(function (choice, i) {
+            const _ltr = String.fromCharCode(65 + i);
+            const _isCorrectChoice = _correctIdxs.includes(i);
+            const _isChosen = _submittedSet.has(String(choice));
+            let _cls = 'mc-opt reveal-readonly';
+            if (_isCorrectChoice) _cls += ' correct';
+            if (_isChosen && !_isCorrectChoice) _cls += ' wrong';
+            _revMcHtml += '<div class="' + _cls + '">';
+            _revMcHtml += '<div class="ltr">' + _ltr + '</div><div class="ctxt">' + DOMPurify.sanitize(choice) + '</div>';
+            if (_isCorrectChoice) _revMcHtml += '<div style="margin-left:auto;color:var(--grn);font-weight:800">✓</div>';
+            else if (_isChosen) _revMcHtml += '<div style="margin-left:auto;color:var(--red);font-weight:800">✕</div>';
+            _revMcHtml += '</div>';
+          });
+          _revMcHtml += '</div>';
+          html += _revMcHtml;
+        }
         html += '</div>';
 
-        // Anti-ss Side 2: The Answer & Feedback
+        // Anti-ss Side 2: Result summary
         html += '<div class="anti-ss-side" style="padding:24px; background:var(--s); border:2px solid var(--bd); border-radius:var(--rs);">';
-        html += '<div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:12px; letter-spacing:1px">Hover to view Answer</div>';
+        html += '<div style="font-size:12px; font-weight:700; color:var(--tx3); text-transform:uppercase; margin-bottom:12px; letter-spacing:1px">Hover to view Result</div>';
 
         // Use server-revealed ptsEarned, falling back to cached confirmed score from submission
         let _ptsEarned = q.ptsEarned;
@@ -2225,7 +2268,9 @@
           _ptsEarned = S.confirmedScores[q.id].points;
         }
         const ptStr = (_ptsEarned !== undefined && _ptsEarned !== null) ? `<span style="float:right; color:var(--teal)">Score: ${_ptsEarned} / ${q.points || 1}</span>` : '';
-        html += `<div style="font-size:18px; margin-bottom:16px"><strong style="color:var(--tx2)">Your Answer:</strong>${ptStr}<br/>` + (DOMPurify.sanitize(S.ans[q.id]) || '<em style="color:var(--tx3)">No answer submitted</em>') + '</div>';
+        const _isIncorrect = (_ptsEarned !== undefined && _ptsEarned !== null && Number(_ptsEarned) <= 0);
+        const _ansColor = _isIncorrect ? 'var(--red)' : 'var(--tx)';
+        html += `<div style="font-size:18px; margin-bottom:16px"><strong style="color:var(--tx2)">Your Answer:</strong>${ptStr}<br/><span style="color:${_ansColor}">` + (DOMPurify.sanitize(S.ans[q.id]) || '<em style="color:var(--tx3)">No answer submitted</em>') + '</span></div>';
 
         if (S.metaEnabled && S.conf[q.id]) {
           const confMap = { 1: 'Guessing', 2: 'Somewhat Sure', 3: 'Very Sure', 4: 'Absolutely Certain' };

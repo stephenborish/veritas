@@ -341,6 +341,16 @@ For the student app, call `document.querySelectorAll('.katex-inline').forEach(el
 
 The teacher question editor has a rich-text toolbar (`rteTB()`) with math insertion shortcuts for fractions (`frac`), square roots (`sqrt`), and other common expressions.
 
+### Lockstep Reveal UX Contract (Student + Teacher Live Monitor)
+* In lockstep reveal state, keep anti-screenshot masking behavior intact, but render the **same MC question/choice layout** students just answered (do not switch to an unrelated answer-only card).
+* MC reveal highlighting convention:
+  * all correct choices are green (`.mc-opt.correct`);
+  * any incorrect student-selected choice is red (`.mc-opt.wrong`);
+  * options in reveal mode are read-only (`.mc-opt.reveal-readonly`, no click interactions).
+* On teacher live monitor, normalize lockstep top-bar action controls with a shared `.ls-action-btn` class to prevent mixed button heights/widths.
+* Student tiles should visually encode response correctness by tile background tint (`.tile-ok` / `.tile-bad`) in addition to border/progress color for rapid scanning.
+* Confidence calibration widget should show both percentages **and student-name lists** per bucket (Sure/Unsure × Right/Wrong) for immediate intervention decisions.
+
 ---
 
 ## 9. Question & Session Data Model

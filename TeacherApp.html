@@ -462,6 +462,22 @@
       justify-content: flex-end;
       flex-wrap: wrap;
     }
+    .ls-action-btn {
+      min-height: 34px;
+      min-width: 110px;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .ls-action-btn.compact {
+      min-width: 92px;
+    }
     .ls-timer-group { display:flex; align-items:center; gap:6px; }
     .ls-timer-pill {
       font-size:13px; font-weight:700; padding:4px 12px; border-radius:12px;
@@ -1560,8 +1576,8 @@
       box-shadow: var(--sh2);
       transform: translateY(-1px);
     }
-    .tile-ok  { border-left-color: var(--grn); }
-    .tile-bad { border-left-color: var(--red); }
+    .tile-ok  { border-left-color: var(--grn); background: rgba(16,185,129,0.08); }
+    .tile-bad { border-left-color: var(--red); background: rgba(239,68,68,0.08); }
     .tile-none { border-left-color: var(--bd2); }
 
     /* Header row: name + status badge */
@@ -1702,6 +1718,25 @@
     .lmg-uw { background:var(--s3); border:1px solid var(--bd); }
     .lmg-uw .lmg-pct { color:var(--tx2); } .lmg-uw .lmg-lbl { color:var(--tx2); }
     .live-meta-note { font-size:11px; color:var(--tx3); text-align:center; }
+    .live-meta-list-wrap { margin-top: 8px; display:grid; gap:6px; }
+    .live-meta-list {
+      padding: 7px 8px;
+      border-radius: 7px;
+      border: 1px solid var(--bd);
+      background: rgba(255,255,255,0.65);
+    }
+    .live-meta-list .lm-title {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 3px;
+    }
+    .live-meta-list .lm-names {
+      font-size: 11px;
+      color: var(--tx2);
+      line-height: 1.35;
+    }
 
     .frow {
       display: flex;
@@ -3462,8 +3497,8 @@
       // Session pause button helper
       const _isPaused = !!(d.session && d.session.sessionPaused);
       const _pauseBtnHtml = _isPaused
-        ? `<button class="btn" style="background:#d97706;color:#fff;border:none;font-weight:700;font-size:12px" onclick="resumeSessionNow()">▶ Resume Session</button>`
-        : `<button class="btn bd" style="font-size:12px" onclick="pauseSessionNow()">⏸ Pause Session</button>`;
+        ? `<button class="btn ls-action-btn" style="background:#d97706;color:#fff;border:none" onclick="resumeSessionNow()">▶ Resume Session</button>`
+        : `<button class="btn bd ls-action-btn" onclick="pauseSessionNow()">⏸ Pause Session</button>`;
       const _pauseIndicator = _isPaused
         ? `<span style="font-size:13px;font-weight:700;padding:4px 12px;border-radius:12px;background:rgba(217,119,6,0.15);color:#d97706;border:1px solid #d97706;white-space:nowrap;animation:pulse 2s ease-in-out infinite">⏸ SESSION PAUSED</span>`
         : '';
@@ -3492,7 +3527,7 @@
               </div>
               <div class="ls-group ls-group-center">${_buildSessionTimerHtml(d.session)}</div>
               <div class="ls-group ls-group-right">
-                <button class="btn bp" onclick="lsNext()">▶ Begin Q1</button>
+                <button class="btn bp ls-action-btn" onclick="lsNext()">▶ Begin Q1</button>
               </div>
             `;
           } else {
@@ -3501,17 +3536,17 @@
               ? `<span style="font-size:13px;font-weight:700;padding:3px 10px;border-radius:20px;border:1.5px solid ${participationColor};color:${participationColor};white-space:nowrap;">${participationText}</span>`
               : '';
             const lockBtnHtml = isLocked
-              ? `<button class="btn" style="background:#dc2626;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔒 Locked</button>`
-              : `<button class="btn" style="background:#059669;color:#fff;border:none;font-weight:700" id="btnLockToggle" onclick="lsInitiateLock('${d.qStats[curQIdx].id}')">🔓 Lock</button>`;
+              ? `<button class="btn ls-action-btn compact" style="background:#dc2626;color:#fff;border:none" id="btnLockToggle" onclick="lsToggleLock('${d.qStats[curQIdx].id}')">🔒 Locked</button>`
+              : `<button class="btn ls-action-btn compact" style="background:#059669;color:#fff;border:none" id="btnLockToggle" onclick="lsInitiateLock('${d.qStats[curQIdx].id}')">🔓 Lock</button>`;
 
             const isLastQ = curQIdx === d.session.questionCount - 1;
             const nextBtnHtml = isLastQ
-              ? `<button class="btn bd" onclick="endS()">🏁 End Archive</button>`
-              : `<button class="btn bp" onclick="lsNext()">Next →</button>`;
+              ? `<button class="btn bd ls-action-btn" onclick="endS()">🏁 End Archive</button>`
+              : `<button class="btn bp ls-action-btn compact" onclick="lsNext()">Next →</button>`;
 
             const isSA = d.qStats[curQIdx].type === 'sa';
             const gradeBtnHtml = (isLocked && isSA)
-              ? `<button class="btn bp" style="background:var(--teal);color:white" onclick="runGrade(aSid)">🤖 AI Grade</button>`
+              ? `<button class="btn bp ls-action-btn compact" style="background:var(--teal);color:white" onclick="runGrade(aSid)">🤖 AI Grade</button>`
               : '';
 
             const gs = window.__gradeStatus || {};
@@ -3547,7 +3582,7 @@
             if (!lsConfirmPending) {
               document.getElementById('lsActions').innerHTML = `
                 <div class="ls-group">
-                  <button class="btn bg" onclick="lsPrev()">← Prev</button>
+                  <button class="btn bg ls-action-btn compact" onclick="lsPrev()">← Prev</button>
                   <span class="ls-q-label">${qLabel}</span>
                   ${partHtml}
                 </div>
@@ -3561,7 +3596,7 @@
                   ${_pauseIndicator}
                   ${gradeIndicator}
                   ${gradeBtnHtml}
-                  <button class="btn bg" onclick="lsReveal()">👁 Reveal</button>
+                  <button class="btn bg ls-action-btn compact" onclick="lsReveal()">👁 Reveal</button>
                   ${nextBtnHtml}
                 </div>
               `;
@@ -3575,7 +3610,7 @@
             document.getElementById('lsActions').innerHTML = `
               <div class="ls-group"><span class="ls-q-label">${_modeLabel}: Not Started</span></div>
               <div class="ls-group ls-group-center">${_timerStr}</div>
-              <div class="ls-group ls-group-right"><button class="btn bp" onclick="lsNext()">▶ Start Session</button></div>
+              <div class="ls-group ls-group-right"><button class="btn bp ls-action-btn" onclick="lsNext()">▶ Start Session</button></div>
             `;
           } else {
             const _finished = (d.students || []).filter(st => st.status === 'finished').length;
@@ -3583,7 +3618,7 @@
             document.getElementById('lsActions').innerHTML = `
               <div class="ls-group"><span class="ls-q-label">${_modeLabel}: ${d.session.questionCount} Q · ${_finished}/${_totalJoined} finished</span></div>
               <div class="ls-group ls-group-center">${_timerStr}</div>
-              <div class="ls-group ls-group-right">${_pauseBtnHtml}${_pauseIndicator}<button class="btn bd" onclick="endS()">🏁 End Session</button></div>
+              <div class="ls-group ls-group-right">${_pauseBtnHtml}${_pauseIndicator}<button class="btn bd ls-action-btn" onclick="endS()">🏁 End Session</button></div>
             `;
           }
         }
@@ -4099,16 +4134,26 @@
         let liveMetaHtml = '';
         if (isLS && q) {
           let t_sr = 0, t_sw = 0, t_ur = 0, t_uw = 0;
+          const n_sr = []; const n_sw = []; const n_ur = []; const n_uw = [];
           withStateAll.forEach(s => {
             const conf = s.qResp && s.qResp.confidence ? Number(s.qResp.confidence) : 0;
             if (!conf || !s.qResp || s.tileState === 'none') return;
             const isC = s.tileState === 'correct';
-            if (conf >= 3) { if (isC) t_sr++; else t_sw++; }
-            else { if (isC) t_ur++; else t_uw++; }
+            const _safeName = DOMPurify.sanitize(s.name || s.studentId || 'Student');
+            if (conf >= 3) {
+              if (isC) { t_sr++; n_sr.push(_safeName); }
+              else { t_sw++; n_sw.push(_safeName); }
+            } else {
+              if (isC) { t_ur++; n_ur.push(_safeName); }
+              else { t_uw++; n_uw.push(_safeName); }
+            }
           });
           const total = t_sr + t_sw + t_ur + t_uw;
           if (total > 0) {
             const p = n => Math.round((n / total) * 100) + '%';
+            const _fmtNames = function(list) {
+              return list.length ? list.join(', ') : '<span style="opacity:.65;font-style:italic">None</span>';
+            };
             liveMetaHtml = `
               <div class="live-meta-widget">
                 <div class="live-meta-title">🧠 Confidence Calibration — Q${q.idx + 1}</div>
@@ -4117,6 +4162,24 @@
                   <div class="lmg-cell lmg-sw"><div class="lmg-pct">${p(t_sw)}</div><div class="lmg-lbl">Sure & Wrong ⚠</div></div>
                   <div class="lmg-cell lmg-ur"><div class="lmg-pct">${p(t_ur)}</div><div class="lmg-lbl">Unsure & Right</div></div>
                   <div class="lmg-cell lmg-uw"><div class="lmg-pct">${p(t_uw)}</div><div class="lmg-lbl">Unsure & Wrong</div></div>
+                </div>
+                <div class="live-meta-list-wrap">
+                  <div class="live-meta-list">
+                    <div class="lm-title" style="color:var(--grn)">Sure & Right (${n_sr.length})</div>
+                    <div class="lm-names">${_fmtNames(n_sr)}</div>
+                  </div>
+                  <div class="live-meta-list">
+                    <div class="lm-title" style="color:var(--red)">Sure & Wrong (${n_sw.length})</div>
+                    <div class="lm-names">${_fmtNames(n_sw)}</div>
+                  </div>
+                  <div class="live-meta-list">
+                    <div class="lm-title" style="color:var(--amb)">Unsure & Right (${n_ur.length})</div>
+                    <div class="lm-names">${_fmtNames(n_ur)}</div>
+                  </div>
+                  <div class="live-meta-list">
+                    <div class="lm-title" style="color:var(--tx2)">Unsure & Wrong (${n_uw.length})</div>
+                    <div class="lm-names">${_fmtNames(n_uw)}</div>
+                  </div>
                 </div>
                 <div class="live-meta-note">${total} rated response${total !== 1 ? 's' : ''} for this question</div>
               </div>
