@@ -351,6 +351,13 @@ The teacher question editor has a rich-text toolbar (`rteTB()`) with math insert
 * Student tiles should visually encode response correctness by tile background tint (`.tile-ok` / `.tile-bad`) in addition to border/progress color for rapid scanning.
 * Confidence calibration widget should show both percentages **and student-name lists** per bucket (Sure/Unsure × Right/Wrong) for immediate intervention decisions.
 
+### Launch Session UX Conventions (TeacherApp)
+* The launch screen is now intentionally organized into a guided, step-based flow (`.launch-guidance` + `.launch-grid`) so teachers can scan setup in this order: **Assessment/Roster → Session Flow → Timing → Supports → Bank/Templates → Launch CTA**.
+* Preserve the existing launch form element IDs (`#lSet`, `#lBk`, `#lMode`, `#lRev`, `#lTT`, `#lTM`, `#lQTimerSec`, `#lOpenAt`, `#lCloseAt`, `#lCE`, `#lME`, `#lBankMode`, `#lBankSize`, `#tplPicker`) because frontend logic and template application rely on those stable hooks.
+* Keep roster validation feedback (`#rosterCountPreview`) visually prominent near roster selection so teachers can quickly detect mismatched/empty rosters before launching.
+* Keep the launch CTA in a dedicated highlighted panel (`.launch-cta`) separated from configuration controls to reduce accidental launches while mid-configuration.
+* Maintain responsive collapse behavior: launch layout shifts from two-column (`.launch-grid`) to single-column at tablet widths (≤1100px), and checklist controls (`.launch-check-row`) collapse to one-per-row on mobile (≤768px).
+
 ---
 
 ## 9. Question & Session Data Model
