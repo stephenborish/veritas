@@ -1810,8 +1810,173 @@
       font-size: 13px
     }
 
+    /* Launch session UX refresh */
+    .launch-shell {
+      display: grid;
+      gap: 18px;
+    }
+
+    .launch-guidance {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .launch-step {
+      border: 1px solid var(--bd);
+      border-radius: 12px;
+      background: var(--s2);
+      padding: 12px 14px;
+    }
+
+    .launch-step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--teal);
+      background: rgba(20, 184, 166, 0.15);
+      margin-bottom: 8px;
+    }
+
+    .launch-step h3 {
+      font-size: 14px;
+      margin: 0 0 4px;
+      font-weight: 700;
+      color: var(--tx);
+    }
+
+    .launch-step p {
+      margin: 0;
+      font-size: 12px;
+      color: var(--tx2);
+      line-height: 1.45;
+    }
+
+    .launch-grid {
+      display: grid;
+      grid-template-columns: 1.3fr .9fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .launch-panel {
+      border: 1px solid var(--bd);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.62);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+
+    .launch-panel:last-child {
+      margin-bottom: 0;
+    }
+
+    .launch-panel h3 {
+      margin: 0 0 12px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--tx);
+      font-family: 'Outfit', sans-serif;
+      letter-spacing: .2px;
+    }
+
+    .launch-check-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin: 6px 0 0;
+    }
+
+    .launch-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--bd);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--tx2);
+      text-transform: none;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .launch-check input {
+      width: auto;
+      transform: scale(1.08);
+      margin: 0;
+      box-shadow: none;
+    }
+
+    .launch-help {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--tx3);
+      line-height: 1.4;
+    }
+
+    .launch-cta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      border: 1px solid rgba(13, 148, 136, 0.22);
+      background: rgba(20, 184, 166, 0.08);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-top: 8px;
+    }
+
+    .launch-cta-copy {
+      font-size: 13px;
+      color: var(--tx2);
+      line-height: 1.4;
+    }
+
+    .launch-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--teal);
+      text-transform: uppercase;
+      letter-spacing: .35px;
+    }
+
+    .session-live-card {
+      margin-top: 20px;
+      padding: 20px 24px;
+      border-radius: 12px;
+      background: rgba(20, 184, 166, 0.08);
+      border: 2px solid var(--teal);
+    }
+
+    .session-live-code {
+      font-size: 38px;
+      font-weight: 800;
+      letter-spacing: 8px;
+      color: var(--tx);
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 14px;
+    }
+
     @media(max-width:1100px) {
       .live-dashboard {
+        grid-template-columns: 1fr;
+      }
+      .launch-grid {
+        grid-template-columns: 1fr;
+      }
+      .launch-guidance {
         grid-template-columns: 1fr;
       }
       .live-dashboard-left {
@@ -1843,6 +2008,9 @@
 
       .fg {
         grid-template-columns: 1fr
+      }
+      .launch-check-row {
+        grid-template-columns: 1fr;
       }
 
       .quick-actions {
@@ -2065,90 +2233,124 @@
         <div class="sec-hdr">
           <div>
             <h1>Launch Session</h1>
-            <p>Configure and activate an assessment</p>
+            <p>Set pacing, timing, and roster controls before students join</p>
           </div>
         </div>
         <div class="card">
-          <div class="fg">
-            <div class="fr"><label>Question Set</label><select id="lSet"></select></div>
-            <div class="fr"><label>Block Roster</label><select id="lBk" onchange="updateRosterCountPreview()">
-                <option value="">Loading Rosters...</option>
-              </select>
-              <div id="rosterCountPreview" style="font-size:12px;color:var(--tx2);margin-top:4px;min-height:18px"></div>
+          <div class="launch-shell">
+            <div class="launch-guidance">
+              <div class="launch-step">
+                <span class="launch-step-num">1</span>
+                <h3>Choose content + class</h3>
+                <p>Select the question set and matching roster first so launch settings can validate correctly.</p>
               </div>
-          </div>
-          <div class="fg">
-            <div class="fr"><label>Mode</label><select id="lMode" onchange="document.getElementById('lQTimerRow').style.display=this.value==='lockstep'?'flex':'none';checkBankLockstep()">
-                <option value="self-paced">Self-Paced</option>
-                <option value="lockstep" selected>Lockstep (Teacher paced)</option>
-                <option value="randomized">Randomized Questions</option>
-              </select></div>
-            <div class="fr"><label>Answer Reveal</label><select id="lRev">
-                <option value="end">After submission</option>
-                <option value="immediate">Immediately</option>
-                <option value="teacher" selected>Teacher reveals</option>
-                <option value="never">Never</option>
-              </select></div>
-          </div>
-          <div class="fg">
-            <div class="fr"><label>Timer</label><select id="lTT"
-                onchange="document.getElementById('lTR').style.display=this.value==='none'?'none':'block'">
-                <option value="none">No Timer</option>
-                <option value="total">Total Timer</option>
-              </select></div>
-            <div class="fr" id="lTR" style="display:none"><label>Minutes</label><input type="number" id="lTM" value="30"
-                min="1" max="180"></div>
-          </div>
-
-          <div class="fg" id="lQTimerRow" style="display:flex">
-            <div class="fr"><label>Question Time Limit</label><input type="number" id="lQTimerSec" value="60" min="5" max="3600" placeholder="seconds"></div>
-            <div class="fr" style="align-items:center;padding-top:18px"><span style="font-size:12px;color:var(--tx2)">seconds per question (lockstep only)</span></div>
-          </div>
-
-          <div class="fg">
-            <div class="fr"><label>Opens At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lOpenAt"><span class="tz-label" style="font-size:11px;color:var(--tx2);margin-top:2px"></span></div>
-            <div class="fr"><label>Closes At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lCloseAt"><span class="tz-label" style="font-size:11px;color:var(--tx2);margin-top:2px"></span></div>
-          </div>
-
-          <div style="display:flex;gap:20px;margin:16px 0 16px;flex-wrap:wrap">
-            <label
-              style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500"><input
-                type="checkbox" id="lCE" style="width:auto; transform:scale(1.1)"> Enable Calculator</label>
-            <label
-              style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500"><input
-                type="checkbox" id="lME" checked style="width:auto; transform:scale(1.1)"> Require Metacognition</label>
-          </div>
-
-          <!-- Bank Draw: pull a random subset of N questions per student -->
-          <div style="margin:0 0 20px;padding:14px 16px;border:1px solid var(--bd);border-radius:10px;background:var(--s2)">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;margin:0">
-              <input type="checkbox" id="lBankMode" style="width:auto;transform:scale(1.1)" onchange="toggleBankSize()">
-              Draw random question subset per student
-            </label>
-            <div id="bankSizeRow" style="display:none;margin-top:12px;align-items:center;gap:10px;flex-wrap:wrap">
-              <label style="margin:0;font-size:13px;color:var(--tx2);font-weight:500">Questions per student:</label>
-              <input type="number" id="lBankSize" min="1" max="9999" style="width:72px" placeholder="e.g. 20">
-              <span id="bankSizeHint" style="font-size:12px;color:var(--tx3)"></span>
-            </div>
-            <div id="bankLockstepWarn" style="display:none;margin-top:10px;font-size:12px;color:var(--amb)">
-              &#9888; Question bank drawing is not available in Lockstep mode.
-            </div>
-          </div>
-
-          <!-- Session Templates -->
-          <div class="fg" style="margin-bottom:12px">
-            <div class="fr">
-              <label>Session Template</label>
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <select id="tplPicker" onchange="applyTemplate(this.value)" style="flex:1"><option value="">— No template —</option></select>
-                <button class="btn bg" onclick="saveTpl()" style="font-size:13px;white-space:nowrap">Save as Template</button>
+              <div class="launch-step">
+                <span class="launch-step-num">2</span>
+                <h3>Set pacing + timing</h3>
+                <p>Pick lockstep or self-paced, then tune timers, open/close window, and answer reveal behavior.</p>
               </div>
-              <div id="tplChips" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"></div>
+              <div class="launch-step">
+                <span class="launch-step-num">3</span>
+                <h3>Enable supports</h3>
+                <p>Turn on calculator, metacognition, and optional question bank settings before launching.</p>
+              </div>
+            </div>
+
+            <div class="launch-grid">
+              <div>
+                <div class="launch-panel">
+                  <h3>Assessment + Roster</h3>
+                  <div class="fg">
+                    <div class="fr"><label>Question Set</label><select id="lSet"></select></div>
+                    <div class="fr"><label>Block Roster</label><select id="lBk" onchange="updateRosterCountPreview()">
+                        <option value="">Loading Rosters...</option>
+                      </select>
+                      <div id="rosterCountPreview" style="font-size:12px;color:var(--teal);margin-top:4px;min-height:18px;font-weight:600"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="launch-panel">
+                  <h3>Session Flow</h3>
+                  <div class="fg">
+                    <div class="fr"><label>Mode</label><select id="lMode" onchange="document.getElementById('lQTimerRow').style.display=this.value==='lockstep'?'flex':'none';checkBankLockstep()">
+                        <option value="self-paced">Self-Paced</option>
+                        <option value="lockstep" selected>Lockstep (Teacher paced)</option>
+                        <option value="randomized">Randomized Questions</option>
+                      </select></div>
+                    <div class="fr"><label>Answer Reveal</label><select id="lRev">
+                        <option value="end">After submission</option>
+                        <option value="immediate">Immediately</option>
+                        <option value="teacher" selected>Teacher reveals</option>
+                        <option value="never">Never</option>
+                      </select></div>
+                  </div>
+                  <div class="fg" id="lQTimerRow" style="display:flex">
+                    <div class="fr"><label>Question Time Limit</label><input type="number" id="lQTimerSec" value="60" min="5" max="3600" placeholder="seconds"></div>
+                    <div class="fr" style="align-items:center;padding-top:18px"><span style="font-size:12px;color:var(--tx2)">seconds per question (lockstep only)</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div class="launch-panel">
+                  <h3>Timing + Availability</h3>
+                  <div class="fr"><label>Timer</label><select id="lTT" onchange="document.getElementById('lTR').style.display=this.value==='none'?'none':'block'">
+                      <option value="none">No Timer</option>
+                      <option value="total">Total Timer</option>
+                    </select></div>
+                  <div class="fr" id="lTR" style="display:none"><label>Minutes</label><input type="number" id="lTM" value="30" min="1" max="180"></div>
+                  <div class="fg">
+                    <div class="fr"><label>Opens At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lOpenAt"><span class="tz-label" style="font-size:11px;color:var(--tx2);margin-top:2px"></span></div>
+                    <div class="fr"><label>Closes At <span style="font-weight:400;font-size:11px;color:var(--tx2)">(optional)</span></label><input type="datetime-local" id="lCloseAt"><span class="tz-label" style="font-size:11px;color:var(--tx2);margin-top:2px"></span></div>
+                  </div>
+                </div>
+                <div class="launch-panel">
+                  <h3>Supports + Extras</h3>
+                  <div class="launch-check-row">
+                    <label class="launch-check"><input type="checkbox" id="lCE"> Enable Calculator</label>
+                    <label class="launch-check"><input type="checkbox" id="lME" checked> Require Metacognition</label>
+                  </div>
+                  <div class="launch-help">Tip: Keep metacognition enabled to capture confidence and calibration data in reports.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="launch-panel">
+              <h3>Question Bank + Templates</h3>
+              <div style="margin:0 0 16px;padding:14px 16px;border:1px solid var(--bd);border-radius:10px;background:var(--s2)">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:13px;font-weight:500;margin:0">
+                  <input type="checkbox" id="lBankMode" style="width:auto;transform:scale(1.1)" onchange="toggleBankSize()">
+                  Draw random question subset per student
+                </label>
+                <div id="bankSizeRow" style="display:none;margin-top:12px;align-items:center;gap:10px;flex-wrap:wrap">
+                  <label style="margin:0;font-size:13px;color:var(--tx2);font-weight:500">Questions per student:</label>
+                  <input type="number" id="lBankSize" min="1" max="9999" style="width:72px" placeholder="e.g. 20">
+                  <span id="bankSizeHint" style="font-size:12px;color:var(--tx3)"></span>
+                </div>
+                <div id="bankLockstepWarn" style="display:none;margin-top:10px;font-size:12px;color:var(--amb)">
+                  &#9888; Question bank drawing is not available in Lockstep mode.
+                </div>
+              </div>
+              <div class="fg" style="margin-bottom:0">
+                <div class="fr" style="margin-bottom:0">
+                  <label>Session Template</label>
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <select id="tplPicker" onchange="applyTemplate(this.value)" style="flex:1"><option value="">— No template —</option></select>
+                    <button class="btn bg" onclick="saveTpl()" style="font-size:13px;white-space:nowrap">Save as Template</button>
+                  </div>
+                  <div id="tplChips" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="launch-cta">
+              <div class="launch-cta-copy">
+                <div class="launch-pill">Ready to launch</div>
+                Confirm settings above, then start the session and send personalized student links.
+              </div>
+              <div style="display:flex;gap:10px"><button class="btn bp" style="font-size:15px; padding:12px 28px" onclick="launchS()">🚀 Launch Assessment</button></div>
             </div>
           </div>
-
-          <div style="display:flex;gap:10px"><button class="btn bp" style="font-size:15px; padding:12px 28px"
-              onclick="launchS()">🚀 Launch Assessment</button></div>
         </div>
         <div id="activeInfo"></div>
       </div>
@@ -3289,9 +3491,9 @@
           document.getElementById('sec-launch').classList.add('active');
           // Show prominent post-launch action panel with session code
           document.getElementById('activeInfo').innerHTML = `
-            <div style="margin-top:20px;padding:20px 24px;border-radius:12px;background:rgba(20,184,166,0.08);border:2px solid var(--teal)">
+            <div class="session-live-card">
               <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--teal);letter-spacing:1px;margin-bottom:8px">Session Live</div>
-              <div style="font-size:38px;font-weight:800;letter-spacing:8px;color:var(--tx);font-family:monospace;margin-bottom:14px">${DOMPurify.sanitize(r.code)}</div>
+              <div class="session-live-code">${DOMPurify.sanitize(r.code)}</div>
               <div style="font-size:13px;color:var(--tx2);margin-bottom:18px">Share this code with students, or send personalized email links.</div>
               <div style="display:flex;gap:10px;flex-wrap:wrap">
                 <button class="btn bp" style="font-size:14px" onclick="sendEmails()">📧 Send Emails to Roster</button>
