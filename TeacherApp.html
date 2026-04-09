@@ -506,6 +506,42 @@
       flex-wrap: wrap;
       min-width: 0;
     }
+    .live-end-state {
+      max-width: 760px;
+      margin: 28px auto 8px;
+      padding: 30px 28px;
+      border-radius: 18px;
+      border: 1px solid rgba(20, 184, 166, 0.35);
+      background: linear-gradient(145deg, rgba(20, 184, 166, 0.14), rgba(255, 255, 255, 0.9));
+      box-shadow: var(--sh);
+      text-align: center;
+    }
+    .live-end-state .end-icon {
+      font-size: 40px;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+    .live-end-state h2 {
+      margin: 0;
+      color: var(--tx);
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .live-end-state p {
+      margin: 12px auto 0;
+      max-width: 62ch;
+      color: var(--tx2);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .live-end-actions {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 20px;
+    }
 
     .live-stat-row {
       display: flex;
@@ -3290,15 +3326,65 @@
             toast('Ended', 'ok');
             aSid = null;
             if (liveInt) clearInterval(liveInt);
-            document.getElementById('liveStatusBanner').innerHTML = '<div class="card" style="text-align:center; padding: 40px"><div style="font-size:40px">🏁</div><h2 style="font-size:24px; font-weight:700; margin-bottom:12px">Session Ended Successfully</h2><div style="color:var(--tx2);margin-top:10px">Student data has been archived. You may now launch a new session.</div><button class="nbtn" style="margin-top:24px" onclick="document.querySelector(\'.ni[data-s=dashboard]\').click()">Go to Home</button></div>';
-            document.getElementById('lockstepControls').style.display = 'none';
-            document.getElementById('lView').innerHTML = '';
+            liveInt = null;
+            renderLiveSessionEndedState_();
             loadLaunch();
           }).endSession(aSid);
         } else {
           toast('Google Apps Script API not available.', 'err');
         }
       }, true);
+    }
+
+    function exitLiveToHome_() {
+      document.querySelector('.ni[data-s=dashboard]').click();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function renderLiveSessionEndedState_() {
+      const banner = document.getElementById('liveStatusBanner');
+      const stats = document.getElementById('liveStatsRow');
+      const controls = document.getElementById('lockstepControls');
+      const jumpStrip = document.getElementById('lsQJump');
+      const leftPane = document.getElementById('liveDashboardLeft');
+      const studentsTab = document.getElementById('tab-students');
+      const detailsTab = document.getElementById('tab-details');
+      const gradingTab = document.getElementById('tab-grading');
+      const filter = document.getElementById('liveRightFilter');
+      const actionsHtml = `
+        <div class="live-end-state">
+          <div class="end-icon">🏁</div>
+          <h2>Session Ended & Archived</h2>
+          <p>Student responses and monitoring events were archived successfully. You can now return home, review analytics, or launch another session.</p>
+          <div class="live-end-actions">
+            <button class="btn bp" onclick="exitLiveToHome_()">🏠 Return Home</button>
+            <button class="btn bg" onclick="document.querySelector('.ni[data-s=analytics]').click()">📊 Review Archive</button>
+            <button class="btn bg" onclick="document.querySelector('.ni[data-s=launch]').click()">🚀 Launch New Session</button>
+          </div>
+        </div>
+      `;
+      if (banner) banner.innerHTML = '<div style="font-weight:700; font-size:15px; color:var(--tx2)">Live monitor session closed.</div>';
+      if (stats) stats.innerHTML = '';
+      if (controls) controls.style.display = 'none';
+      if (jumpStrip) {
+        jumpStrip.style.display = 'none';
+        jumpStrip.innerHTML = '';
+      }
+      if (filter) {
+        filter.style.display = 'none';
+        filter.innerHTML = '';
+      }
+      if (leftPane) leftPane.innerHTML = actionsHtml;
+      if (studentsTab) studentsTab.innerHTML = actionsHtml;
+      if (detailsTab) detailsTab.innerHTML = '';
+      if (gradingTab) gradingTab.innerHTML = '';
+      liveTab = 'students';
+      document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+      const overviewTab = document.querySelector('.tab[onclick*="students"]');
+      if (overviewTab) overviewTab.classList.add('active');
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      if (studentsTab) studentsTab.classList.add('active');
+      __renderFP = {};
     }
 
     function sendEmails() {

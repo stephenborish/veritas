@@ -350,6 +350,7 @@ The teacher question editor has a rich-text toolbar (`rteTB()`) with math insert
 * On teacher live monitor, normalize lockstep top-bar action controls with a shared `.ls-action-btn` class to prevent mixed button heights/widths.
 * Student tiles should visually encode response correctness by tile background tint (`.tile-ok` / `.tile-bad`) in addition to border/progress color for rapid scanning.
 * Confidence calibration widget should show both percentages **and student-name lists** per bucket (Sure/Unsure × Right/Wrong) for immediate intervention decisions.
+* End-session UX in `TeacherApp.html` is stateful: `endS()` should call `renderLiveSessionEndedState_()` to clear live monitor panes/tabs and show a dedicated completion card with Home/Archive/Launch actions. Do **not** write to legacy `#lView` (it no longer exists); doing so throws a null-reference error that can interrupt post-end navigation back to Home.
 
 ---
 
