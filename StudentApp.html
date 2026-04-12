@@ -629,10 +629,10 @@
 
     .q-text {
       font-family: 'Noto Serif', Georgia, serif;
-      font-size: 18px;
+      font-size: 15px;
       line-height: 1.68;
       color: var(--tx);
-      margin-bottom: 28px;
+      margin-bottom: 16px;
     }
 
     .q-text img,
@@ -647,20 +647,20 @@
     .mc-list {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 16px
+      gap: 10px
     }
 
     .mc-opt {
       display: flex;
       align-items: flex-start;
       gap: 16px;
-      padding: 16px 18px;
+      padding: 10px 14px;
       border: 1px solid var(--bd);
       border-radius: var(--rs);
       cursor: pointer;
       transition: var(--tr);
       background: var(--panel);
-      font-size: 18px;
+      font-size: 15px;
       line-height: 1.6;
     }
 
@@ -783,7 +783,7 @@
       flex: 1;
       min-width: 0;
       font-family: 'Noto Serif', Georgia, serif;
-      font-size: 18px;
+      font-size: 15px;
       line-height: 1.68;
     }
 
@@ -802,7 +802,7 @@
       border: 1px solid var(--bd2);
       border-radius: var(--rs);
       font-family: 'Noto Serif', Georgia, serif;
-      font-size: 18px;
+      font-size: 15px;
       line-height: 1.7;
       resize: vertical;
       transition: var(--tr);
@@ -1571,6 +1571,7 @@
       sid: null, stuId: null, qs: [], cur: 0, ans: {}, conf: {}, correct: {},
       locked: false, done: false, poll: null, timerInt: null, endTime: 0, timerConfig: null,
       mode: 'self-paced', metaEnabled: true, needsFS: false, accessToken: '', lockedQs: [], revealedQs: [],
+      noBackNav: false,
       submittedAns: {}, gradeStatus: 'idle', confirmedScores: {},
       // pendingMulti stores in-progress multi-select choices (array) before submission
       pendingMulti: {},
@@ -2023,6 +2024,7 @@
           }
           if (d.lockedQs) S.lockedQs = d.lockedQs;
           if (d.revealedQs) S.revealedQs = d.revealedQs;
+          S.noBackNav = !!d.noBackNav;
           // Merge any locally-saved flagged state (supplement server with local — server is authoritative)
           lsLoad();
           if (d.revealedDetails) {
@@ -2164,7 +2166,7 @@
       renderTimeline();
 
       // Lockstep Logic: Hide Next/Prev buttons entirely so students cannot advance on their own
-      document.getElementById('prevBtn').style.visibility = (S.cur > 0 && S.mode !== 'lockstep') ? 'visible' : 'hidden';
+      document.getElementById('prevBtn').style.visibility = (S.cur > 0 && S.mode !== 'lockstep' && !S.noBackNav) ? 'visible' : 'hidden';
       document.getElementById('nextBtn').style.visibility = (S.mode !== 'lockstep') ? 'visible' : 'hidden';
       document.getElementById('nextBtn').innerHTML = S.cur === total - 1 ? 'Submit Assessment' : 'Next Question &rarr;';
       if (S.mode === 'lockstep') {
@@ -2174,7 +2176,7 @@
       }
 
       const isLocked = S.mode === 'lockstep' && S.lockedQs.includes(q.id);
-      const isRevealed = S.mode === 'lockstep' && S.revealedQs.includes(q.id);
+      const isRevealed = !!(S.revealedQs && S.revealedQs.includes(q.id));
       const isMC = q.type === 'mc';
       const hasAns = !!S.ans[q.id] && String(S.ans[q.id]).trim().length > 0;
 
@@ -2642,6 +2644,7 @@
     }
 
     function goPrev() {
+      if (S.noBackNav) return;
       if (S.cur > 0 && S.mode !== 'lockstep') {
         // Fix 18: log time spent on previous question
         const _prevQ = S.qs && S.qs[S.cur];
@@ -2784,8 +2787,10 @@
 
     function renderSummary(d) {
       let html = '';
-      if (d && d.pendingGrades) {
-        html = '<div style="font-size:18px;color:var(--tx2);font-weight:600;line-height:1.6">Your responses have been recorded.<br><span style="font-size:15px;font-weight:400;color:var(--tx3)">Short answer responses are being graded — your teacher will share results shortly.</span></div>';
+      if (d && d.pendingGrades && d.mcTotalMax > 0) {
+        html = '<div class="score-big">' + Math.round((d.mcTotalPts / d.mcTotalMax) * 100) + '%</div><div style="font-size:24px;color:var(--tx2);font-weight:600">MC Score: ' + d.mcTotalPts + ' / ' + d.mcTotalMax + '</div><div style="font-size:15px;font-weight:400;color:var(--tx3);margin-top:10px">Short answer responses are being graded — final score coming soon.</div>';
+      } else if (d && d.pendingGrades) {
+        html = '<div style="font-size:18px;color:var(--tx2);font-weight:600;line-height:1.6">Your responses have been recorded.<br><span style="font-size:15px;font-weight:400;color:var(--tx3)">Short answer responses are being graded — final score coming soon.</span></div>';
       } else if (d && d.showScore) {
         html += '<div class="score-big">' + d.pct + '%</div><div style="font-size:24px;color:var(--tx2);font-weight:600">' + d.totalPts + ' / ' + d.totalMax + ' Points Earned</div>';
       } else {
@@ -2804,6 +2809,23 @@
           .withSuccessHandler(function (st) {
           S._connFails = 0;
           if (!st) return;
+          S.noBackNav = !!st.noBackNav;
+          const _prevRevealed = JSON.stringify(S.revealedQs || []);
+          if (st.lockedQs) S.lockedQs = st.lockedQs;
+          if (st.revealedQs) S.revealedQs = st.revealedQs;
+          const _revealedChanged = _prevRevealed !== JSON.stringify(S.revealedQs || []);
+          if (st.revealedDetails) {
+            S.qs.forEach(qq => {
+              if (st.revealedDetails[qq.id]) {
+                qq.clientCorrectAnswer = st.revealedDetails[qq.id].clientCorrectAnswer;
+                qq.clientRubric = st.revealedDetails[qq.id].clientRubric;
+                qq.clientSampleAnswer = st.revealedDetails[qq.id].clientSampleAnswer;
+                qq.aiScore = st.revealedDetails[qq.id].aiScore;
+                qq.aiFeedback = st.revealedDetails[qq.id].aiFeedback;
+                qq.ptsEarned = st.revealedDetails[qq.id].ptsEarned;
+              }
+            });
+          }
           if (st.sessionStatus === 'ended') {
             // Eagerly save SA if we are typing before end
             const shortAnswerInput = document.getElementById('saIn');
@@ -2998,6 +3020,8 @@
             S.cur = 0;
             if (!S.timerInt && S.endTime) startTimer(); // Start session timer now that session has begun
             renderQ();
+          } else if (S.mode !== 'lockstep' && _revealedChanged && !S.isTransitioning) {
+            renderQ({ keepScroll: true });
           }
         }).studentCheckStatus(S.sid, S.stuId);
       }, 4000);

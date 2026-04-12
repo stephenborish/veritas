@@ -2309,6 +2309,7 @@
                   <div class="launch-check-row">
                     <label class="launch-check"><input type="checkbox" id="lCE"> Enable Calculator</label>
                     <label class="launch-check"><input type="checkbox" id="lME" checked> Require Metacognition</label>
+                    <label class="launch-check"><input type="checkbox" id="lNoBackNav"> Block back navigation</label>
                   </div>
                   <div class="launch-help">Tip: Keep metacognition enabled to capture confidence and calibration data in reports.</div>
                 </div>
@@ -3175,7 +3176,7 @@
 
     function addQ(t) {
       const id = 'q' + Date.now().toString(36);
-      if (t === 'mc') edQ.push({ id, type: 'mc', text: '', choices: ['', '', '', ''], correctIndices: [0], points: 1 });
+      if (t === 'mc') edQ.push({ id, type: 'mc', text: '', choices: ['', '', '', ''], correctIndices: [], points: 1 });
       else edQ.push({ id, type: 'sa', text: '', points: 1, rubric: '', sampleAnswer: '' });
       renderEdQ();
       setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 100);
@@ -3187,6 +3188,13 @@
       el.innerHTML = edQ.map((q, i) => {
         const ctrl = `<div class="q-ed-handle"><button class="btn bg bs" onclick="mvQ(${i},-1)">↑</button><button class="btn bg bs" onclick="mvQ(${i},1)">↓</button><button class="btn bd bs" onclick="rmQ(${i})">✕ Delete</button></div>`;
         let body = '';
+        const selectedCount = Array.isArray(q.correctIndices) ? q.correctIndices.length : 0;
+        const selectionModeTag = q.type === 'mc'
+          ? `<span style="margin-left:10px;font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px;background:${selectedCount > 1 ? 'rgba(245,158,11,.14)' : 'rgba(16,185,129,.12)'};color:${selectedCount > 1 ? 'var(--amb)' : 'var(--grn)'}">${selectedCount > 1 ? 'Multi-Answer (Select All)' : 'Single Answer'}</span>`
+          : '';
+        const missingCorrectTag = (q.type === 'mc' && selectedCount === 0)
+          ? `<span style="margin-left:10px;font-size:11px;font-weight:700;padding:4px 8px;border-radius:999px;background:rgba(239,68,68,.12);color:var(--red)">⚠ No correct answer selected</span>`
+          : '';
 
         // Build stimulus link dropdown
         const stimOpts = edStimuli.length
@@ -3232,7 +3240,7 @@
 
         return `<div class="q-ed-card" style="border-left:5px solid ${q.type === 'mc' ? 'var(--blue)' : 'var(--pur)'}">
       ${ctrl}
-      <div style="margin-bottom:20px"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}" style="font-size:14px; padding:6px 14px">Question ${i + 1} — ${q.type.toUpperCase()}</span>${q.stimulusId ? `<span style="font-size:12px; color:var(--grn); margin-left:12px; font-weight:600">📎 ${(edStimuli.find(s=>s.id===q.stimulusId)||{title:'Stimulus'}).title}</span>` : ''}</div>
+      <div style="margin-bottom:20px"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}" style="font-size:14px; padding:6px 14px">Question ${i + 1} — ${q.type.toUpperCase()}</span>${selectionModeTag}${missingCorrectTag}${q.stimulusId ? `<span style="font-size:12px; color:var(--grn); margin-left:12px; font-weight:600">📎 ${(edStimuli.find(s=>s.id===q.stimulusId)||{title:'Stimulus'}).title}</span>` : ''}</div>
       ${body}
     </div>`;
       }).join('');
@@ -3251,7 +3259,7 @@
       _qsDraftSave();
     }
 
-    function togCI(qi, ci) { if (!edQ[qi].correctIndices) edQ[qi].correctIndices = []; const a = edQ[qi].correctIndices; const p = a.indexOf(ci); if (p >= 0) a.splice(p, 1); else a.push(ci); if (!a.length) a.push(ci); edQ[qi].correctIndex = a[0]; }
+    function togCI(qi, ci) { if (!edQ[qi].correctIndices) edQ[qi].correctIndices = []; const a = edQ[qi].correctIndices; const p = a.indexOf(ci); if (p >= 0) a.splice(p, 1); else a.push(ci); edQ[qi].correctIndex = a.length ? a[0] : null; renderEdQ(); }
     function mvQ(i, d) { const j = i + d; if (j < 0 || j >= edQ.length) return;[edQ[i], edQ[j]] = [edQ[j], edQ[i]]; renderEdQ(); }
 
     function rmQ(i) {
@@ -3261,7 +3269,7 @@
     }
 
     function addCh(i) { edQ[i].choices.push(''); renderEdQ(); }
-    function rmCh(qi, ci) { edQ[qi].choices.splice(ci, 1); edQ[qi].correctIndices = (edQ[qi].correctIndices || []).filter(x => x !== ci).map(x => x > ci ? x - 1 : x); if (!edQ[qi].correctIndices.length) edQ[qi].correctIndices = [0]; renderEdQ(); }
+    function rmCh(qi, ci) { edQ[qi].choices.splice(ci, 1); edQ[qi].correctIndices = (edQ[qi].correctIndices || []).filter(x => x !== ci).map(x => x > ci ? x - 1 : x); renderEdQ(); }
 
     // ── STIMULI ──
     function addStim() {
@@ -3348,6 +3356,22 @@
       edStimuli.forEach((stim, si) => {
         const el = document.getElementById(`rte_stim_${si}`); if (el) stim.content = el.innerHTML;
       });
+      const missingCorrect = [];
+      edQ.forEach((q, idx) => {
+        if (q.type !== 'mc') return;
+        const ci = Array.isArray(q.correctIndices) ? q.correctIndices : [];
+        if (!ci.length) missingCorrect.push('Q' + (idx + 1));
+      });
+      if (missingCorrect.length) {
+        sysConfirm(
+          'Correct Answers Required',
+          'Questions ' + missingCorrect.join(', ') + ' have no correct answer selected. Please select at least one correct answer before saving.',
+          'Review Questions',
+          function(){},
+          true
+        );
+        return;
+      }
 
       const cid = document.getElementById('qCourse').value;
       showLoad('Saving Question Set...');
@@ -3475,6 +3499,7 @@
         openAt:  _openAtVal  ? new Date(_openAtVal).toISOString()  : null,
         closeAt: _closeAtVal ? new Date(_closeAtVal).toISOString() : null,
         qTimerSeconds: (_mode === 'lockstep' && _qTimerSec > 0) ? _qTimerSec : null,
+        noBackNav: document.getElementById('lNoBackNav').checked,
         bankSize: (document.getElementById('lBankMode').checked && _mode !== 'lockstep')
           ? (parseInt(document.getElementById('lBankSize').value, 10) || 0)
           : 0
@@ -3775,6 +3800,7 @@
         return `
           <div class="ls-timer-group">
             <button class="btn ls-timer-btn" onclick="toggleSessionTimer()" title="${_isPaused ? 'Resume' : 'Pause'} session timer">${_isPaused ? '▶' : '⏸'}</button>
+            <button class="btn ls-timer-btn" onclick="restartSessionTimer()" title="Restart session timer">↺</button>
             <span id="teacherSessionTimerPill" class="ls-timer-pill ${_isPaused ? 'paused' : ''}" data-end="${_endMs}" data-paused="${_isPaused ? '1' : '0'}" onclick="editSessionTimerStart(this)" title="Click to set session timer">
               ${_isPaused ? '⏸' : '⏱'} ${_mm}:${_ss}
             </span>
@@ -3903,10 +3929,11 @@
           } else {
             const _finished = (d.students || []).filter(st => st.status === 'finished').length;
             const _totalJoined = (d.students || []).filter(st => st.status !== 'not-joined').length;
+            const _revealAllBtn = `<button class="btn bg ls-action-btn" onclick="revealAllNow()">👁 Reveal All</button>`;
             document.getElementById('lsActions').innerHTML = `
               <div class="ls-group"><span class="ls-q-label">${_modeLabel}: ${d.session.questionCount} Q · ${_finished}/${_totalJoined} finished</span></div>
               <div class="ls-group ls-group-center">${_timerStr}</div>
-              <div class="ls-group ls-group-right">${_pauseBtnHtml}${_pauseIndicator}<button class="btn bd ls-action-btn" onclick="endS()">🏁 End Session</button></div>
+              <div class="ls-group ls-group-right">${_pauseBtnHtml}${_pauseIndicator}${_revealAllBtn}<button class="btn bd ls-action-btn" onclick="endS()">🏁 End Session</button></div>
             `;
           }
         }
@@ -4183,7 +4210,7 @@
       if (isLS && viewQ) {
         // Evaluate visual state for Teacher card (lock/reveal based on current student question)
         const lockedQsList = (d.session.config && d.session.config.lockedQs) || [];
-        const revealedQsList = (d.session.config && d.session.config.revealedQs) || [];
+        const revealedQsList = d.session.revealedQs || [];
         const isViewLocked = lockedQsList.includes(viewQ.id);
         const isViewRevealed = revealedQsList.includes(viewQ.id);
         const isPreviewing = viewQIdx !== curQIdx;
@@ -4521,6 +4548,9 @@
           const _chipsHtml = (_qChip || _flagChip || _extChip || _confChip || _activeDot)
             ? `<div class="st-meta-row">${_qChip}${_flagChip}${_extChip}${_confChip}${_activeDot}<span class="st-meta-label">${s.answered || 0}/${s.total || 0}</span></div>`
             : `<div class="st-meta-row"><span class="st-meta-label">${s.answered || 0}/${s.total || 0} answered</span></div>`;
+          const _mcPerf = (!isLS && s.mcTotal > 0)
+            ? `<div class="st-meta-row"><span class="st-meta-label" style="color:var(--grn);font-weight:700">${s.mcCorrect}/${s.mcTotal} MC correct</span></div>`
+            : '';
 
           // Action buttons
           const _unlockBtn = readmitByStudent[s.studentId]
@@ -4540,6 +4570,7 @@
             </div>
             <div class="st-prog-wrap"><div class="st-prog-bar" style="width:${_progPct}%"></div></div>
             ${_chipsHtml}
+            ${_mcPerf}
             ${ansSnippet}
             ${_unlockBtn}${_resendBtn}${_extendBtns}
           </div>`;
@@ -4551,9 +4582,13 @@
 
       if (liveTab === 'details' && _ch.details) {
         let detHtml = '';
+        if (!isLS) {
+          detHtml += `<div class="card" style="margin-bottom:12px"><div style="font-size:13px;color:var(--tx2)">Randomized mode note: students may have different assigned subsets/order. Question cards below aggregate only students assigned each question.</div><div style="margin-top:10px"><button class="btn bg" onclick="revealAllNow()">👁 Reveal All Answers</button></div></div>`;
+        }
         d.qStats.forEach((q, i) => {
           if (isLS && i !== curQIdx) return;
-          detHtml += `<div class="card"><div class="card-title"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}">Q${q.idx + 1}</span> <span style="margin-left:8px;font-size:12px;color:var(--tx3)">Avg confidence: ${q.avgConf || '-'}</span></div><div style="font-size:15px; margin-bottom:16px">${DOMPurify.sanitize(q.text)}</div><div style="background:var(--s2); border-radius:6px; padding:16px;">${(q.studentResponses || []).map(r => `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--bd);"><div style="width:170px; font-weight:600">${DOMPurify.sanitize(r.name)}</div><div style="flex:1; color:var(--tx2)">${DOMPurify.sanitize(r.answer) || '<span style="color:var(--tx3)">No answer</span>'}</div><div style="width:64px; text-align:right">${r.confidence ? `C${r.confidence}` : ''}</div>${r.isCorrect !== undefined ? `<div style="width:35px; text-align:right; color:${r.isCorrect === true || r.isCorrect === 'TRUE' ? 'var(--grn)' : 'var(--red)'}">${r.isCorrect === true || r.isCorrect === 'TRUE' ? '✓' : '✗'}</div>` : ''}</div>${r.feedback ? `<div style="padding:8px 0 12px 170px;color:var(--tx2);font-size:12px"><strong>AI:</strong> ${r.score} pt · ${DOMPurify.sanitize(r.feedback)}</div>` : ''}`).join('')}</div></div>`;
+          const _revealBtn = !isLS ? `<button class="btn bg bs" onclick="revealOne('${q.id}')">👁 Reveal Q${q.idx + 1}</button>` : '';
+          detHtml += `<div class="card"><div class="card-title"><span class="badge ${q.type === 'mc' ? 'b-mc' : 'b-sa'}">Q${q.idx + 1}</span> <span style="margin-left:8px;font-size:12px;color:var(--tx3)">Avg confidence: ${q.avgConf || '-'}</span> <span style="margin-left:auto">${_revealBtn}</span></div><div style="font-size:15px; margin-bottom:16px">${DOMPurify.sanitize(q.text)}</div><div style="background:var(--s2); border-radius:6px; padding:16px;">${(q.studentResponses || []).map(r => `<div style="display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--bd);"><div style="width:170px; font-weight:600">${DOMPurify.sanitize(r.name)}</div><div style="flex:1; color:var(--tx2)">${DOMPurify.sanitize(r.answer) || '<span style="color:var(--tx3)">No answer</span>'}</div><div style="width:64px; text-align:right">${r.confidence ? `C${r.confidence}` : ''}</div>${r.isCorrect !== undefined ? `<div style="width:35px; text-align:right; color:${r.isCorrect === true || r.isCorrect === 'TRUE' ? 'var(--grn)' : 'var(--red)'}">${r.isCorrect === true || r.isCorrect === 'TRUE' ? '✓' : '✗'}</div>` : ''}</div>${r.feedback ? `<div style="padding:8px 0 12px 170px;color:var(--tx2);font-size:12px"><strong>AI:</strong> ${r.score} pt · ${DOMPurify.sanitize(r.feedback)}</div>` : ''}`).join('')}</div></div>`;
         });
         document.getElementById('tab-details').innerHTML = detHtml || '<div class="card">No responses yet.</div>';
         renderKaTeX_(document.getElementById('tab-details'));
@@ -4717,6 +4752,20 @@
       if (!d || typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run.withSuccessHandler(() => refreshLive()).revealAnswer(aSid, d.qStats[curQIdx].id);
     }
+    function revealOne(qId) {
+      if (!qId || typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('Answer revealed.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to reveal answer: ' + (e.message || 'Unknown error'), 'err'))
+        .revealAnswer(aSid, qId);
+    }
+    function revealAllNow() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('All answers revealed.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to reveal all answers: ' + (e.message || 'Unknown error'), 'err'))
+        .revealAllAnswers(aSid);
+    }
     function lsNext() {
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
       const d = window.__liveD;
@@ -4868,6 +4917,13 @@
     function resumeSessionTimer() {
       if (typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run.withSuccessHandler(() => { refreshLive(); toast('Session timer resumed.', 'ok'); }).withFailureHandler(e => toast('Failed to resume session timer: ' + (e.message||'Unknown error'), 'err')).resumeSessionTimer(aSid);
+    }
+    function restartSessionTimer() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(() => { refreshLive(); toast('Session timer restarted.', 'ok'); })
+        .withFailureHandler(e => toast('Failed to restart session timer: ' + (e.message || 'Unknown error'), 'err'))
+        .startSessionTimer(aSid);
     }
     function editSessionTimerStart(pillEl) {
       if (!pillEl) return;
@@ -5188,6 +5244,7 @@
         if (cfg.mode && document.getElementById('lMode')) { document.getElementById('lMode').value = cfg.mode; document.getElementById('lMode').dispatchEvent(new Event('change')); }
         if (cfg.timer && document.getElementById('lTT')) { document.getElementById('lTT').value = cfg.timer.type||'none'; document.getElementById('lTT').dispatchEvent(new Event('change')); }
         if (cfg.revealMode && document.getElementById('lRev')) document.getElementById('lRev').value = cfg.revealMode;
+        if (document.getElementById('lNoBackNav')) document.getElementById('lNoBackNav').checked = !!cfg.noBackNav;
         toast('Template applied.', 'ok');
       } catch(e) { toast('Could not apply template.', 'err'); }
     }
@@ -5198,7 +5255,8 @@
         setId: document.getElementById('lSet') ? document.getElementById('lSet').value : '',
         mode: document.getElementById('lMode') ? document.getElementById('lMode').value : '',
         timer: { type: document.getElementById('lTT') ? document.getElementById('lTT').value : 'none', seconds: document.getElementById('lTM') ? Number(document.getElementById('lTM').value)*60 : 0 },
-        revealMode: document.getElementById('lRev') ? document.getElementById('lRev').value : ''
+        revealMode: document.getElementById('lRev') ? document.getElementById('lRev').value : '',
+        noBackNav: document.getElementById('lNoBackNav') ? document.getElementById('lNoBackNav').checked : false
       };
       google.script.run
         .withSuccessHandler(() => { toast('Template saved.', 'ok'); _loadSessionTemplates(); })

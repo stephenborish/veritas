@@ -456,3 +456,14 @@ You have full authorization to deploy directly via `clasp`. Do not ask for permi
 
 ### Performance Note: Fast Row Lookups
 To quickly find a matching row in a large sheet without pulling the entire dataset into memory via `getValues()`, use `createTextFinder`. Example: `const matches = sheet.createTextFinder(searchString).matchEntireCell(true).findAll();`. This operates natively within the Sheets API and runs orders of magnitude faster with ~0 runtime memory overhead compared to `getValues()` arrays in App Script's V8 engine.
+
+---
+
+## 14. Randomized Assessment Reliability Notes (2026-04-12)
+
+* Per-student totals for randomized/banked sessions must be derived from each student's assigned subset (`qOrder` + `bankSize`) rather than full set length. This affects live monitor totals and student summary denominators.
+* Student summaries should expose MC-only partial scoring while SA grading is pending. Keep final combined score hidden until SA grading completes.
+* Teacher-driven answer reveal must work in non-lockstep modes too. Student reveal rendering should key off `revealedQs`, not lockstep mode checks.
+* Session timer restart is server-supported by `startSessionTimer()` and requires a dedicated teacher UI control (`↺`) in addition to pause/resume.
+* MC editor integrity: new MC questions should start with no selected correct answer, allow temporary no-answer state while editing, and block save when any MC question lacks at least one correct answer.
+* `noBackNav` is a session-level config flag that must propagate through `_normalizeSessionState()` and be enforced in StudentApp navigation logic.
