@@ -435,19 +435,23 @@ const DB = {
       noBackNav:     !!cfg.noBackNav
     };
   },
-  _resolveStudentAssignedQuestions_(sess, stuId) {
+  _resolveStudentAssignedQuestions_(sess, stuId, qOrderRaw) {
     const baseQuestions = this._getSessionQuestions_(sess);
     if (!baseQuestions || !baseQuestions.length) return [];
     let questions = JSON.parse(JSON.stringify(baseQuestions));
-    const ssSheet = this.sh('StudentSessions');
-    const sd = ssSheet.getDataRange().getValues();
     let qOrder = null;
-    for (let i = 1; i < sd.length; i++) {
-      if (sd[i][0] === sess.sessionId && sd[i][1] === stuId) {
-        if (sd[i][9]) {
-          try { qOrder = JSON.parse(sd[i][9]); } catch (e) { qOrder = null; }
+    if (qOrderRaw !== undefined && qOrderRaw !== null && qOrderRaw !== '') {
+      try { qOrder = Array.isArray(qOrderRaw) ? qOrderRaw : JSON.parse(qOrderRaw); } catch (e) { qOrder = null; }
+    } else {
+      const ssSheet = this.sh('StudentSessions');
+      const sd = ssSheet.getDataRange().getValues();
+      for (let i = 1; i < sd.length; i++) {
+        if (sd[i][0] === sess.sessionId && sd[i][1] === stuId) {
+          if (sd[i][9]) {
+            try { qOrder = JSON.parse(sd[i][9]); } catch (e) { qOrder = null; }
+          }
+          break;
         }
-        break;
       }
     }
     if (Array.isArray(qOrder) && qOrder.length && sess.mode !== 'lockstep') {
@@ -889,7 +893,7 @@ const DB = {
     const nowMs=Date.now();
     const assignedQuestionsByStudent = {};
     stuSess.forEach(ss => {
-      assignedQuestionsByStudent[ss.studentId] = this._resolveStudentAssignedQuestions_(sess, ss.studentId);
+      assignedQuestionsByStudent[ss.studentId] = this._resolveStudentAssignedQuestions_(sess, ss.studentId, ss.qOrder);
     });
     const students=stuSess.map(ss=>{
       const sr=responsesByStudent[ss.studentId]||[];

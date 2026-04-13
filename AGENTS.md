@@ -467,3 +467,4 @@ To quickly find a matching row in a large sheet without pulling the entire datas
 * Session timer restart is server-supported by `startSessionTimer()` and requires a dedicated teacher UI control (`↺`) in addition to pause/resume.
 * MC editor integrity: new MC questions should start with no selected correct answer, allow temporary no-answer state while editing, and block save when any MC question lacks at least one correct answer.
 * `noBackNav` is a session-level config flag that must propagate through `_normalizeSessionState()` and be enforced in StudentApp navigation logic.
+* Performance guard: when resolving randomized assignments inside `getLiveResults()`, avoid re-reading `StudentSessions` per student. Reuse the already-loaded `qOrder` value from `getStudentSessions()` to prevent N×sheet scans.
