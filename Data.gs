@@ -220,6 +220,42 @@ const DB = {
   updateCourseBlocks(id, blocks) {
     return this.updateCourse(id, undefined, blocks);
   },
+  _sanitizeQuestions_(questions) {
+    return (questions || []).map((q, i) => {
+      const safeQ = Object.assign({}, q || {});
+      if (!safeQ.id) safeQ.id = 'q' + (i + 1) + '_' + Date.now().toString(36);
+      if (safeQ.type === 'mc') {
+        const choices = Array.isArray(safeQ.choices) ? safeQ.choices.slice() : [];
+        safeQ.choices = choices;
+        const raw = Array.isArray(safeQ.correctIndices)
+          ? safeQ.correctIndices
+          : ((safeQ.correctIndex === 0 || safeQ.correctIndex) ? [safeQ.correctIndex] : []);
+        const maxIdx = choices.length - 1;
+        const dedup = [];
+        raw.forEach(v => {
+          const idx = Number(v);
+          if (!Number.isFinite(idx)) return;
+          if (idx < 0 || idx > maxIdx) return;
+          if (!dedup.includes(idx)) dedup.push(idx);
+        });
+        safeQ.correctIndices = dedup;
+        if (dedup.length === 1) safeQ.correctIndex = dedup[0];
+        else delete safeQ.correctIndex;
+      }
+      return safeQ;
+    });
+  },
+  _getCorrectIndices_(q) {
+    if (!q) return [];
+    const choices = Array.isArray(q.choices) ? q.choices : [];
+    const raw = Array.isArray(q.correctIndices)
+      ? q.correctIndices
+      : ((q.correctIndex === 0 || q.correctIndex) ? [q.correctIndex] : []);
+    return raw
+      .map(v => Number(v))
+      .filter(v => Number.isFinite(v) && v >= 0 && v < choices.length)
+      .filter((v, idx, arr) => arr.indexOf(v) === idx);
+  },
   deleteCourse(id) {
     const s=this.sh('Courses'); const d=s.getDataRange().getValues();
     for(let i=1;i<d.length;i++) if(d[i][0]===id){s.deleteRow(i+1);this.logAuditEvent('DELETE_COURSE', id, '');return true;}
@@ -232,10 +268,10 @@ const DB = {
     if (questions.length > 100) return { error: 'Question set cannot exceed 100 questions.' };
     const safeName = String(name).trim();
     const s=this.sh('QSets'); const id='qs_'+Utilities.getUuid().slice(0,8); const now=new Date().toISOString();
-    questions.forEach((q,i)=>{if(!q.id)q.id='q'+(i+1)+'_'+Date.now().toString(36)});
+    const safeQuestions = this._sanitizeQuestions_(questions);
     // Fix 6: col 8 = Status ('active'/'deleted') for soft-delete support
-    s.appendRow([id,safeName,courseId||'',now,now,JSON.stringify(questions),JSON.stringify(stimuli||[]),'active']);
-    return {id,name:safeName,questionCount:questions.length};
+    s.appendRow([id,safeName,courseId||'',now,now,JSON.stringify(safeQuestions),JSON.stringify(stimuli||[]),'active']);
+    return {id,name:safeName,questionCount:safeQuestions.length};
   },
   getQSets(courseId) {
     const d=this.sh('QSets').getDataRange().getValues();
@@ -262,12 +298,13 @@ const DB = {
     if (nameErr) return { error: nameErr };
     if (!Array.isArray(questions)) return { error: 'Questions must be an array.' };
     if (questions.length > 100) return { error: 'Question set cannot exceed 100 questions.' };
+    const safeQuestions = this._sanitizeQuestions_(questions);
     const safeName = String(name).trim();
     const s=this.sh('QSets'); const d=s.getDataRange().getValues();
     for(let i=1;i<d.length;i++) if(d[i][0]===id){
       s.getRange(i+1,2).setValue(safeName); s.getRange(i+1,3).setValue(courseId||'');
       s.getRange(i+1,5).setValue(new Date().toISOString());
-      s.getRange(i+1,6).setValue(JSON.stringify(questions)); s.getRange(i+1,7).setValue(JSON.stringify(stimuli||[]));
+      s.getRange(i+1,6).setValue(JSON.stringify(safeQuestions)); s.getRange(i+1,7).setValue(JSON.stringify(stimuli||[]));
       return {id,name:safeName};
     }
     return null;
@@ -625,11 +662,11 @@ const DB = {
       questions = questions.slice(0, _bankSize);
     }
     // Apply per-student persisted choice order (generated once at join time for consistency across reloads)
-    if(choiceOrders) questions.forEach(q=>{if(q.type==='mc'&&q.choices&&choiceOrders[q.id]){const order=choiceOrders[q.id];const orig=q.choices.slice();const origCi=q.correctIndices||[q.correctIndex];const correctTexts=origCi.map(i=>orig[i]);q.choices=order.map(i=>orig[i]);q.correctIndices=correctTexts.map(ca=>q.choices.indexOf(ca));if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
+    if(choiceOrders) questions.forEach(q=>{if(q.type==='mc'&&q.choices&&choiceOrders[q.id]){const order=choiceOrders[q.id];const orig=q.choices.slice();const origCi=this._getCorrectIndices_(q);const correctTexts=origCi.map(i=>orig[i]);q.choices=order.map(i=>orig[i]);q.correctIndices=correctTexts.map(ca=>q.choices.indexOf(ca)).filter(i=>i>=0);if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
     const studentQs=questions.map(q=>{const sq={...q};
       // Mark multi-answer questions BEFORE stripping correctIndices
       if(q.type==='mc'){
-        const ci = Array.isArray(q.correctIndices) ? q.correctIndices.filter(i => Number.isFinite(Number(i))) : (q.correctIndex===0||q.correctIndex? [q.correctIndex] : []);
+        const ci = this._getCorrectIndices_(q);
         sq.multiSelect = ci.length > 1;
       }
       delete sq.correctIndex;delete sq.correctIndices;delete sq.correctAnswer;delete sq.rubric;delete sq.sampleAnswer;return sq;});
@@ -654,7 +691,7 @@ const DB = {
       let isCorrect=null,points=0,partialCredit=false;
       if(q.type==='mc'){
         const stripHtml = s => String(s || '').replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, '').toLowerCase();
-        const ci=q.correctIndices||[q.correctIndex]; 
+        const ci=this._getCorrectIndices_(q);
         const ca=ci.map(x=>q.choices[x]);
         const sel=Array.isArray(answer)?answer:[answer];
         
@@ -709,7 +746,7 @@ const DB = {
       return {saved:true,isCorrect,points,maxPts,partialCredit,correctInfo:ci3};
     });
   },
-  _correctInfo(q){if(q.type==='mc'){const ci=q.correctIndices||[q.correctIndex];return {correctAnswers:ci.map(i=>q.choices[i]),correctIndices:ci};}return null;},
+  _correctInfo(q){if(q.type==='mc'){const ci=this._getCorrectIndices_(q);return {correctAnswers:ci.map(i=>q.choices[i]),correctIndices:ci};}return null;},
   
   studentSubmitMeta(sessId,stuId,qId,conf) {
     return this.withLock(() => {
@@ -805,7 +842,7 @@ const DB = {
           if (q) {
              const r = respMap[qId];
              const g = gradeMap[qId];
-             const ci = q.correctIndices || [q.correctIndex];
+             const ci = this._getCorrectIndices_(q);
              sessionState.revealedDetails[qId] = {
                 clientCorrectAnswer: q.type === 'mc' ? ci.map(idx => q.choices[idx]).join(', ') : null,
                 clientRubric: q.rubric || '',
@@ -926,7 +963,7 @@ const DB = {
             if (dist[r.answer] !== undefined) dist[r.answer]++;
           }
         });
-        const ci=q.correctIndices||[q.correctIndex];
+        const ci=this._getCorrectIndices_(q);
         return {id:q.id,idx,text:q.text,type:'mc',points:q.points||1,choices:q.choices||[],correctIndices:ci,total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
           studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect,confidence:(metaByStudentQuestion[r.studentId+'|'+q.id]||{}).confidence||null}))};
       }else{
@@ -1234,9 +1271,17 @@ const DB = {
     return this.withLock(() => {
       const sess = this.getSessionById(sessId); if(!sess) return {error:'Session not found'};
       const cfg = sess.config || {};
-      if (!cfg.sessionTimerState || !cfg.sessionTimerState.paused) return {error:'Session timer not paused'};
-      cfg.sessionTimerState.endTime = Date.now() + (cfg.sessionTimerState.pausedRemaining || 0);
+      if (!cfg.sessionTimerState) return {error:'Session timer not configured'};
+      if (!cfg.sessionTimerState.paused) return {ok:true};
+      let remainingMs = Number(cfg.sessionTimerState.pausedRemaining || 0);
+      if (remainingMs <= 0) {
+        const fallbackSeconds = Number(cfg.sessionTimerState.originalSeconds || (sess.timer && sess.timer.seconds) || 0);
+        if (fallbackSeconds <= 0) return {error:'Session timer has no remaining time to resume'};
+        remainingMs = fallbackSeconds * 1000;
+      }
+      cfg.sessionTimerState.endTime = Date.now() + remainingMs;
       cfg.sessionTimerState.paused = false; cfg.sessionTimerState.pausedRemaining = null;
+      cfg.sessionTimerState.cancelled = false;
       this.sh('Sessions').getRange(sess.row,13).setValue(JSON.stringify(cfg));
       const sessionQuestions = this._getSessionQuestions_(sess); const updated = this.getSessionById(sessId);
       return {ok:true, session:this._normalizeSessionState(updated, sessionQuestions.map(q=>q.id))};
@@ -1973,7 +2018,7 @@ const DB = {
       let choiceStats = null;
       let nonFunctioningCount = 0;
       if (q.type === 'mc' && q.choices) {
-        const correctIdxs = q.correctIndices || [q.correctIndex || 0];
+        const correctIdxs = this._getCorrectIndices_(q);
         choiceStats = q.choices.map((optText, optIdx) => {
           const isCorrect = correctIdxs.includes(optIdx);
           const cleanOpt = stripHtml(optText);

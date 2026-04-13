@@ -145,6 +145,7 @@ Because UI rendering relies heavily on template literals injecting server-provid
 ### Input Validation for Teacher Data (`Data.gs`)
 * `DB.validateName_(name)` — validates course/question-set names: rejects empty, whitespace-only, and names >200 characters. Called at the top of `createCourse`, `updateCourse`, `createQSet`, `updateQSet`. Returns an error string on failure or `null` if valid.
 * Question arrays in `createQSet` / `updateQSet` are capped at **100 questions** to prevent oversized payloads from being stored in Sheets cells.
+* MC answer keys are normalized server-side before persistence (`_sanitizeQuestions_` + `_getCorrectIndices_`): invalid indices are dropped, duplicates are removed, and **no implicit fallback to choice A** is allowed when a teacher has not selected a correct answer.
 * `overrideScore(sessId, stuId, qId, score, fb)` — validates: `score` must be a finite non-negative number ≤ `maxPoints`; `fb` is truncated to 2000 chars. Invalid scores return `{ error: '...' }` before touching any data.
 * `regradeWithContext(sessId, qId, ctx)` — the teacher-supplied context string is capped at **500 characters** to prevent API abuse and prompt injection via the Gemini context field.
 
@@ -277,6 +278,9 @@ GAS web app executions (`doGet`/`doPost` context) have a strict 6-minute executi
 
 ### Trigger Guard
 `startGradingAsync()` checks that `checkGradeQueue` trigger exists **before** writing to the queue. If the trigger is missing, it returns a clear error message instructing the teacher to run `setupGradingTrigger()`. Do not remove this guard.
+
+### Session Timer Resume Reliability
+`resumeSessionTimer()` must tolerate stale/zero `pausedRemaining` values (e.g., repeated pause/resume attempts during live traffic). When paused remaining time is missing, it falls back to `originalSeconds`/configured timer duration and clears `cancelled` so student countdowns restart cleanly instead of getting stuck.
 
 ---
 

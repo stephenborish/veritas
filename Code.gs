@@ -360,7 +360,15 @@ function generateAIClassReport(sessId) {
         text: q.text,
         type: q.type,
         choices: q.choices,
-        correctAnswer: q.type === 'mc' ? (q.choices ? q.choices[(q.correctIndices || [q.correctIndex || 0])[0]] : null) : (q.sampleAnswer || q.rubric)
+        correctAnswer: q.type === 'mc'
+          ? (function () {
+              const ci = Array.isArray(q.correctIndices)
+                ? q.correctIndices
+                : ((q.correctIndex === 0 || q.correctIndex) ? [q.correctIndex] : []);
+              const first = ci.length ? Number(ci[0]) : null;
+              return (q.choices && Number.isFinite(first) && first >= 0 && first < q.choices.length) ? q.choices[first] : null;
+            })()
+          : (q.sampleAnswer || q.rubric)
       })),
       responses: data.responses.map(r => ({ questionId: r.questionId, answer: String(r.answer), isCorrect: r.isCorrect === true || r.isCorrect === 'TRUE' })),
       metacognition: data.meta.map(m => ({ questionId: m.questionId, confidence: m.confidence })),
