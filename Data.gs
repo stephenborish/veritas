@@ -431,8 +431,38 @@ const DB = {
       qTimerState:   cfg.qTimerState   || null,
       sessionTimerState: cfg.sessionTimerState || null,
       sessionPaused: !!cfg.sessionPaused,
-      closeAt:       cfg.closeAt       || null
+      closeAt:       cfg.closeAt       || null,
+      noBackNav:     !!cfg.noBackNav
     };
+  },
+  _resolveStudentAssignedQuestions_(sess, stuId, qOrderRaw) {
+    const baseQuestions = this._getSessionQuestions_(sess);
+    if (!baseQuestions || !baseQuestions.length) return [];
+    let questions = JSON.parse(JSON.stringify(baseQuestions));
+    let qOrder = null;
+    if (qOrderRaw !== undefined && qOrderRaw !== null && qOrderRaw !== '') {
+      try { qOrder = Array.isArray(qOrderRaw) ? qOrderRaw : JSON.parse(qOrderRaw); } catch (e) { qOrder = null; }
+    } else {
+      const ssSheet = this.sh('StudentSessions');
+      const sd = ssSheet.getDataRange().getValues();
+      for (let i = 1; i < sd.length; i++) {
+        if (sd[i][0] === sess.sessionId && sd[i][1] === stuId) {
+          if (sd[i][9]) {
+            try { qOrder = JSON.parse(sd[i][9]); } catch (e) { qOrder = null; }
+          }
+          break;
+        }
+      }
+    }
+    if (Array.isArray(qOrder) && qOrder.length && sess.mode !== 'lockstep') {
+      const filtered = qOrder.map(idx => questions[idx]).filter(Boolean);
+      if (filtered.length) questions = filtered;
+    }
+    const bankSize = Number((sess.config && sess.config.bankSize) || 0);
+    if (bankSize > 0 && bankSize < questions.length && sess.mode !== 'lockstep') {
+      questions = questions.slice(0, bankSize);
+    }
+    return questions;
   },
   endSession(id) {
     return this.withLock(() => {
@@ -598,7 +628,10 @@ const DB = {
     if(choiceOrders) questions.forEach(q=>{if(q.type==='mc'&&q.choices&&choiceOrders[q.id]){const order=choiceOrders[q.id];const orig=q.choices.slice();const origCi=q.correctIndices||[q.correctIndex];const correctTexts=origCi.map(i=>orig[i]);q.choices=order.map(i=>orig[i]);q.correctIndices=correctTexts.map(ca=>q.choices.indexOf(ca));if(q.correctIndices.length===1)q.correctIndex=q.correctIndices[0];}});
     const studentQs=questions.map(q=>{const sq={...q};
       // Mark multi-answer questions BEFORE stripping correctIndices
-      if(q.type==='mc'){const ci=q.correctIndices||[q.correctIndex];sq.multiSelect=Array.isArray(ci)&&ci.length>1;}
+      if(q.type==='mc'){
+        const ci = Array.isArray(q.correctIndices) ? q.correctIndices.filter(i => Number.isFinite(Number(i))) : (q.correctIndex===0||q.correctIndex? [q.correctIndex] : []);
+        sq.multiSelect = ci.length > 1;
+      }
       delete sq.correctIndex;delete sq.correctIndices;delete sq.correctAnswer;delete sq.rubric;delete sq.sampleAnswer;return sq;});
     const resps=this.getAllResponses(sessId).filter(r=>r.studentId===stuId);
     const existing={};resps.forEach(r=>{existing[r.questionId]=r.answer;});
@@ -813,9 +846,10 @@ const DB = {
         s.getRange(i+1,5).setValue('finished');
         s.getRange(i+1,7).setValue(new Date().toISOString());
         const responses=this.getAllResponses(sessId).filter(r=>r.studentId===stuId);
-        return this.buildStudentSummary(sess, responses);
+        const assignedQuestions = sess ? this._resolveStudentAssignedQuestions_(sess, stuId) : [];
+        return this.buildStudentSummary(sess, responses, assignedQuestions);
       }
-      return this.buildStudentSummary(sess, []);
+      return this.buildStudentSummary(sess, [], sess ? this._resolveStudentAssignedQuestions_(sess, stuId) : []);
     });
   },
 
@@ -857,14 +891,20 @@ const DB = {
     grades.forEach(g=>{gradeByStudentQuestion[g.studentId+'|'+g.questionId]=g;});
     
     const nowMs=Date.now();
+    const assignedQuestionsByStudent = {};
+    stuSess.forEach(ss => {
+      assignedQuestionsByStudent[ss.studentId] = this._resolveStudentAssignedQuestions_(sess, ss.studentId, ss.qOrder);
+    });
     const students=stuSess.map(ss=>{
       const sr=responsesByStudent[ss.studentId]||[];
       const sm=metaByStudent[ss.studentId]||[];
+      const assignedQuestions = assignedQuestionsByStudent[ss.studentId] || questions;
+      const assignedIds = assignedQuestions.map(q => q.id);
       let mcC=0,mcT=0;
       sr.forEach(r=>{const q=questionById[r.questionId];if(q&&q.type==='mc'){mcT++;if(r.isCorrect===true||r.isCorrect==='TRUE')mcC++;}});
       const lastTs=[ss.joinedAt,ss.finishedAt].concat(sr.map(x=>x.submittedAt)).concat(sm.map(x=>x.submittedAt)).filter(Boolean).map(x=>new Date(x).getTime()).sort((a,b)=>b-a)[0]||0;
       const activeNow=ss.status==='active' && !ss.lockedOut && (nowMs-lastTs)<(2*60*1000);
-      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,activeNow,answered:sr.length,total:questions.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr,flaggedQs:ss.flaggedQs||[],currentQIndex:ss.currentQIndex||0,answeredQIds:sr.map(r=>r.questionId),timerExtensionMs:ss.timerExtensionMs||0};
+      return {studentId:ss.studentId,name:ss.studentName,status:ss.status,activeNow,answered:sr.length,total:assignedIds.length,mcCorrect:mcC,mcTotal:mcT,lockedOut:ss.lockedOut,violationCount:ss.violationCount,avgConf:sm.length>0?(sm.reduce((s,m)=>s+m.confidence,0)/sm.length).toFixed(1):null,responses:sr,flaggedQs:ss.flaggedQs||[],currentQIndex:ss.currentQIndex||0,answeredQIds:sr.map(r=>r.questionId),assignedQuestionIds:assignedIds,timerExtensionMs:ss.timerExtensionMs||0};
     });
     
     const qStats=questions.map((q,idx)=>{
@@ -1356,22 +1396,42 @@ const DB = {
   studentGetSummary(sessId, stuId) {
     const sess=this.getSessionById(sessId);
     const responses=sess?this.getAllResponses(sessId).filter(r=>r.studentId===stuId):[];
-    return this.buildStudentSummary(sess, responses);
+    const assignedQuestions = sess ? this._resolveStudentAssignedQuestions_(sess, stuId) : [];
+    return this.buildStudentSummary(sess, responses, assignedQuestions);
   },
-  buildStudentSummary(sess, responses) {
+  buildStudentSummary(sess, responses, questions) {
     const cfg=sess?(sess.summaryConfig||{}):{showScore:false};
     const safeResponses=Array.isArray(responses)?responses:[];
+    const safeQuestions=Array.isArray(questions)?questions:[];
     const totalPts=safeResponses.reduce((sum,r)=>sum+(Number(r.points)||0),0);
-    const totalMax=safeResponses.reduce((sum,r)=>sum+(Number(r.maxPoints)||0),0);
+    const totalMax=safeQuestions.length
+      ? safeQuestions.reduce((sum,q)=>sum+(Number(q.points)||1),0)
+      : safeResponses.reduce((sum,r)=>sum+(Number(r.maxPoints)||0),0);
     const pct=totalMax>0?Math.round((totalPts/totalMax)*100):0;
-    // Detect SA responses submitted but not yet AI-graded (isCorrect is null/empty)
-    const hasPendingGrades=safeResponses.some(r=>r.answer&&(r.isCorrect===null||r.isCorrect===''||r.isCorrect===undefined));
+    const questionById = {};
+    safeQuestions.forEach(q => { if (q && q.id) questionById[q.id] = q; });
+    const mcResponses = safeResponses.filter(r => {
+      const q = questionById[r.questionId];
+      return q ? q.type === 'mc' : (r.isCorrect === true || r.isCorrect === false || r.isCorrect === 'TRUE' || r.isCorrect === 'FALSE');
+    });
+    const mcTotalPts = mcResponses.reduce((sum,r)=>sum+(Number(r.points)||0),0);
+    const mcTotalMax = safeQuestions.length
+      ? safeQuestions.filter(q=>q&&q.type==='mc').reduce((sum,q)=>sum+(Number(q.points)||1),0)
+      : mcResponses.reduce((sum,r)=>sum+(Number(r.maxPoints)||0),0);
+    const hasPendingGrades=safeResponses.some(r=>{
+      const q = questionById[r.questionId];
+      const isShortAnswer = q ? q.type === 'sa' : (r.isCorrect===null||r.isCorrect===''||r.isCorrect===undefined);
+      return isShortAnswer && r.answer && (r.isCorrect===null||r.isCorrect===''||r.isCorrect===undefined);
+    });
     return {
       showScore:cfg.showScore!==false&&!hasPendingGrades,
+      showMCScore:cfg.showScore!==false&&mcTotalMax>0,
       pendingGrades:hasPendingGrades,
       pct,
       totalPts,
       totalMax,
+      mcTotalPts,
+      mcTotalMax,
       responses:safeResponses.length,
       revealMode:(sess&&sess.revealMode)||'end'
     };
