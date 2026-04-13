@@ -617,7 +617,7 @@
       background: var(--panel);
       border-radius: var(--r);
       box-shadow: var(--sh);
-      padding: 28px 32px;
+      padding: 22px 26px;
       margin-bottom: 16px;
       border: 1px solid var(--bd);
       transition: var(--tr);
@@ -629,10 +629,10 @@
 
     .q-text {
       font-family: 'Noto Serif', Georgia, serif;
-      font-size: 15px;
-      line-height: 1.68;
+      font-size: 14px;
+      line-height: 1.5;
       color: var(--tx);
-      margin-bottom: 16px;
+      margin-bottom: 10px;
     }
 
     .q-text img,
@@ -647,21 +647,21 @@
     .mc-list {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 10px
+      gap: 8px
     }
 
     .mc-opt {
       display: flex;
       align-items: flex-start;
-      gap: 16px;
-      padding: 10px 14px;
+      gap: 12px;
+      padding: 8px 12px;
       border: 1px solid var(--bd);
       border-radius: var(--rs);
       cursor: pointer;
       transition: var(--tr);
       background: var(--panel);
-      font-size: 15px;
-      line-height: 1.6;
+      font-size: 14px;
+      line-height: 1.45;
     }
 
     .mc-opt:hover {
@@ -757,12 +757,12 @@
 
     .mc-opt .ltr {
       font-family: 'Arial Black', Arial, sans-serif;
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 900;
       color: var(--tx2);
       background: var(--panel-subtle);
-      width: 36px;
-      height: 36px;
+      width: 32px;
+      height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -783,8 +783,8 @@
       flex: 1;
       min-width: 0;
       font-family: 'Noto Serif', Georgia, serif;
-      font-size: 15px;
-      line-height: 1.68;
+      font-size: 14px;
+      line-height: 1.5;
     }
 
     .mc-opt .ctxt img {
@@ -797,13 +797,13 @@
 
     .sa textarea {
       width: 100%;
-      min-height: 190px;
-      padding: 16px;
+      min-height: 170px;
+      padding: 12px;
       border: 1px solid var(--bd2);
       border-radius: var(--rs);
       font-family: 'Noto Serif', Georgia, serif;
-      font-size: 15px;
-      line-height: 1.7;
+      font-size: 14px;
+      line-height: 1.5;
       resize: vertical;
       transition: var(--tr);
       background: #fff;
@@ -3196,6 +3196,7 @@
       if (S.mode === 'lockstep') return;
       if (idx < 0 || idx >= S.qs.length) return;
       if (idx === S.cur) return;
+      if (S.noBackNav && idx < S.cur) return toast('Back navigation is disabled for this assessment.');
       // Fix 18: log time spent on previous question
       const _prevQ = S.qs && S.qs[S.cur];
       if (_prevQ && S.viewedAt && S.viewedAt[_prevQ.id]) {

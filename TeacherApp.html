@@ -6074,7 +6074,9 @@
             let distractorHtml = '';
             if (q.type === 'mc' && q.choices) {
               const opts = q.choices;
-              const correctIdxs = q.correctIndices || [q.correctIndex || 0];
+              const correctIdxs = Array.isArray(q.correctIndices)
+                ? q.correctIndices.filter(i => Number.isFinite(Number(i)))
+                : ((q.correctIndex === 0 || q.correctIndex) ? [Number(q.correctIndex)] : []);
               // totalAns = unique students who responded (correct for single- and multi-select)
               let totalAns = qResps.length;
               // Helper to strip HTML for comparison
