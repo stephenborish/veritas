@@ -47,6 +47,15 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
   }
+  if (p === 'projection') {
+    const sessId = String(e.parameter.session || '').replace(/[^a-zA-Z0-9_]/g, '').slice(0, 50);
+    const t = HtmlService.createTemplateFromFile('ProjectionApp');
+    t.sessId = sessId;
+    return t.evaluate()
+      .setTitle('Veritas — Projection Screen')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1.0');
+  }
   return HtmlService.createHtmlOutputFromFile('TeacherApp')
     .setTitle('Veritas Assess — Dashboard')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
@@ -298,6 +307,7 @@ function dismissViolation(sessId, timestamp) { return DB.dismissViolation(sessId
 // ── Live ──
 function getLiveResults(id) { return DB.getLiveResults(id); }
 function getLiveQuestionDetail(sessId, qId) { return DB.getLiveQuestionDetail(sessId, qId); }
+function getProjectionData(sessId) { return DB.getLiveResults(sessId); }
 function readmitStudent(sessId, stuId) { return DB.readmitStudent(sessId, stuId); }
 function readmitAllStudents(sessId) { try { return DB.readmitAllStudents(sessId); } catch(e) { return {error: e.message}; } }
 

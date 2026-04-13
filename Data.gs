@@ -894,6 +894,8 @@ const DB = {
   getLiveResults(sessId) {
     const sess=this.getSessionById(sessId);if(!sess)return null;
     const questions=this._getSessionQuestions_(sess);
+    const qSet=this.getQSet(sess.setId);
+    const stimuli=(qSet&&qSet.stimuli)||[];
     const snapshot={};
     const stuSess=this.getStudentSessions(sessId,snapshot);const _rawResps=this.getAllResponses(sessId,snapshot);
     // Deduplicate: keep latest response per (studentId, questionId) in case of duplicate sheet rows
@@ -964,10 +966,10 @@ const DB = {
           }
         });
         const ci=this._getCorrectIndices_(q);
-        return {id:q.id,idx,text:q.text,type:'mc',points:q.points||1,choices:q.choices||[],correctIndices:ci,total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
+        return {id:q.id,idx,text:q.text,type:'mc',points:q.points||1,choices:q.choices||[],correctIndices:ci,stimulusId:q.stimulusId||null,total:qr.length,correct,pct:qr.length>0?Math.round((correct/qr.length)*100):0,dist,avgConf:qm.length>0?(qm.reduce((s,m)=>s+m.confidence,0)/qm.length).toFixed(1):null,
           studentResponses:qr.map(r=>({studentId:r.studentId,name:r.studentName,answer:r.answer,isCorrect:r.isCorrect,confidence:(metaByStudentQuestion[r.studentId+'|'+q.id]||{}).confidence||null}))};
       }else{
-        return {id:q.id,idx,text:q.text,type:'sa',points:q.points||1,total:qr.length,
+        return {id:q.id,idx,text:q.text,type:'sa',points:q.points||1,stimulusId:q.stimulusId||null,total:qr.length,
           studentResponses:qr.map(r=>{
             const g=gradeByStudentQuestion[r.studentId+'|'+q.id];
             const m=metaByStudentQuestion[r.studentId+'|'+q.id];
@@ -1007,7 +1009,7 @@ const DB = {
     const waitingToJoinCount = missing.length;
     const inProgressCount = students.filter(s => s.status === 'active').length;
     const noResponseCount = students.filter(s => s.status !== 'not-joined' && (!s.responses || s.responses.length === 0)).length;
-    return {session:{...sess,questionCount:questions.length,sessionPaused:!!_cfg.sessionPaused,sessionTimerState:_cfg.sessionTimerState||null,qTimerState:_cfg.qTimerState||null,qTimerSeconds:_cfg.qTimerSeconds||0},students:[...students,...missing],qStats,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,waitingToJoinCount,inProgressCount,noResponseCount,gradeStatus:Grader.getStatus(sessId)};
+    return {session:{...sess,questionCount:questions.length,sessionPaused:!!_cfg.sessionPaused,sessionTimerState:_cfg.sessionTimerState||null,qTimerState:_cfg.qTimerState||null,qTimerSeconds:_cfg.qTimerSeconds||0},students:[...students,...missing],qStats,stimuli,violations:viols,totalJoined:students.length,totalFinished:students.filter(s=>s.status==='finished').length,totalActiveNow:students.filter(s=>s.activeNow).length,rosterSize:roster.length,missingCount:missing.length,waitingToJoinCount,inProgressCount,noResponseCount,gradeStatus:Grader.getStatus(sessId)};
   },
 
 

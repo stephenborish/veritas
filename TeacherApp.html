@@ -3568,6 +3568,13 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
+    function openProjectionScreen() {
+      if (!aSid) return toast('No active session', 'err');
+      const base = window.location.href.split('?')[0];
+      window.open(base + '?page=projection&session=' + encodeURIComponent(aSid),
+        'veritas_projection', 'width=1440,height=900,resizable=yes,scrollbars=yes');
+    }
+
     function renderLiveSessionEndedState_() {
       const banner = document.getElementById('liveStatusBanner');
       const stats = document.getElementById('liveStatsRow');
@@ -3780,6 +3787,8 @@
         </div>
         <div style="font-size:11px; font-weight:700; background:var(--s); padding:3px 8px; border-radius:5px;
           border:1px solid var(--bd); letter-spacing:1.5px; color:var(--tx2); white-space:nowrap;">${DOMPurify.sanitize(d.session.code)}</div>
+        <button class="btn bg" onclick="openProjectionScreen()" title="Open projection screen in a new window"
+          style="margin-left:auto; white-space:nowrap; flex-shrink:0; font-size:13px; padding:5px 12px;">&#x1F4FD; Project Screen</button>
       `;
       if (!_ch.controls && !_ch.stats && !_ch.left && !_ch.students && !_ch.details && !_ch.grading) return;
 

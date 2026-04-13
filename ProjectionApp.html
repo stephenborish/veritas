@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veritas — Projection Screen</title>
+  <link rel="icon" type="image/x-icon"
+    href="https://raw.githubusercontent.com/stephenborish/veritas/008a8431c35df4622e78f8edcbfd7123d90bebdd/favicon.ico">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;500;600;700&family=Noto+Serif:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+  <style>
+    :root {
+      --bg: #f0f4fb;
+      --s: rgba(255,255,255,0.95);
+      --s2: rgba(255,255,255,1);
+      --s3: #e4eaf4;
+      --bd: rgba(197,208,228,0.85);
+      --tx: #0a1628;
+      --tx2: #2a3d5f;
+      --tx3: #5a6e8a;
+      --teal: #1b3166;
+      --teal2: #2040a0;
+      --tBg: rgba(27,49,102,0.08);
+      --tBd: rgba(27,49,102,0.22);
+      --red: #c01a36;
+      --amb: #b8950c;
+      --grn: #059669;
+      --gBg: rgba(5,150,105,0.06);
+      --gBd: rgba(5,150,105,0.35);
+      --r: 16px;
+      --rs: 10px;
+      --ctrl-h: 64px;
+      --sh: 0 4px 16px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+      --sh2: 0 12px 32px rgba(0,0,0,0.09), 0 4px 12px rgba(0,0,0,0.05);
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--tx);
+      min-height: 100vh;
+      padding-top: var(--ctrl-h);
+    }
+
+    img {
+      max-width: 100%;
+      height: auto;
+      object-fit: contain;
+      display: block;
+      border-radius: 6px;
+    }
+
+    .rte-content img { max-height: 480px !important; object-fit: contain !important; }
+
+    /* ─── Control Bar ─────────────────────────────────────────────────── */
+    #ctrl-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: var(--ctrl-h);
+      background: var(--teal);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 20px;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+      overflow: hidden;
+    }
+
+    .ctrl-brand {
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: rgba(255,255,255,0.92);
+      white-space: nowrap;
+      letter-spacing: 0.3px;
+      flex-shrink: 0;
+    }
+
+    .ctrl-divider {
+      width: 1px;
+      height: 28px;
+      background: rgba(255,255,255,0.2);
+      flex-shrink: 0;
+    }
+
+    .ctrl-session-name {
+      font-family: Outfit, sans-serif;
+      font-weight: 600;
+      font-size: 14px;
+      color: rgba(255,255,255,0.88);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+      flex-shrink: 1;
+    }
+
+    .ctrl-code {
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 3px 10px;
+      background: rgba(255,255,255,0.13);
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 6px;
+      color: #fff;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .ctrl-spacer { flex: 1; }
+
+    /* Toggle buttons */
+    .ctrl-toggle {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1.5px solid rgba(255,255,255,0.28);
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.75);
+      font-family: Inter, sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .ctrl-toggle:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    .ctrl-toggle.active {
+      background: rgba(255,255,255,0.92);
+      border-color: rgba(255,255,255,0.9);
+      color: var(--teal);
+      font-weight: 600;
+    }
+    .ctrl-toggle .toggle-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.35);
+      flex-shrink: 0;
+      transition: background 0.18s ease;
+    }
+    .ctrl-toggle.active .toggle-dot { background: var(--grn); }
+
+    /* Nav buttons */
+    .ctrl-nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .ctrl-btn {
+      padding: 6px 12px;
+      border-radius: 7px;
+      border: 1.5px solid rgba(255,255,255,0.28);
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.82);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      font-family: Inter, sans-serif;
+    }
+    .ctrl-btn:hover:not(:disabled) { background: rgba(255,255,255,0.18); color: #fff; }
+    .ctrl-btn:disabled { opacity: 0.35; cursor: default; }
+
+    .ctrl-q-label {
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      color: #fff;
+      white-space: nowrap;
+      min-width: 72px;
+      text-align: center;
+    }
+
+    /* ─── Main Content ────────────────────────────────────────────────── */
+    #main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 36px 24px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ─── Status states ───────────────────────────────────────────────── */
+    #status-msg {
+      display: none;
+      text-align: center;
+      padding: 80px 20px;
+    }
+    #status-msg.visible { display: block; }
+    .status-icon { font-size: 56px; margin-bottom: 20px; }
+    .status-title {
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: 28px;
+      color: var(--tx);
+      margin-bottom: 10px;
+    }
+    .status-sub {
+      font-size: 16px;
+      color: var(--tx3);
+    }
+
+    /* ─── Stimulus Card ───────────────────────────────────────────────── */
+    #stimulus-card {
+      display: none;
+      background: var(--s2);
+      border: 1px solid var(--bd);
+      border-radius: var(--r);
+      box-shadow: var(--sh);
+      padding: 20px 24px;
+      text-align: center;
+    }
+    #stimulus-card.visible { display: block; }
+    #stimulus-content {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    #stimulus-content img { max-height: 400px; margin: 0 auto; }
+
+    /* ─── Question Card ───────────────────────────────────────────────── */
+    #question-card {
+      background: var(--s2);
+      border: 1px solid var(--bd);
+      border-radius: var(--r);
+      box-shadow: var(--sh);
+      padding: 32px 36px;
+    }
+
+    .q-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .q-num {
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--tx3);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .q-type-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--tBg);
+      color: var(--teal);
+      border: 1px solid var(--tBd);
+      letter-spacing: 0.3px;
+    }
+
+    .q-text {
+      font-family: 'Noto Serif', Georgia, serif;
+      font-size: 30px;
+      line-height: 1.5;
+      color: var(--tx);
+      margin-bottom: 28px;
+    }
+    .q-text img { max-height: 320px; margin: 12px auto; }
+
+    /* ─── MC Choices ──────────────────────────────────────────────────── */
+    .choices-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .choice-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 16px 20px;
+      border-radius: var(--rs);
+      border: 2px solid var(--bd);
+      background: #fff;
+      transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .choice-card.correct-revealed {
+      border-color: var(--gBd);
+      background: var(--gBg);
+      box-shadow: 0 0 0 1px var(--gBd);
+    }
+
+    .choice-letter {
+      width: 52px;
+      height: 52px;
+      min-width: 52px;
+      border-radius: 50%;
+      border: 2px solid var(--bd);
+      background: #f4f7fc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Arial Black', Arial, sans-serif;
+      font-weight: 900;
+      font-size: 17px;
+      color: var(--tx2);
+      transition: all 0.25s ease;
+      flex-shrink: 0;
+    }
+    .choice-card.correct-revealed .choice-letter {
+      background: rgba(5,150,105,0.12);
+      border-color: var(--grn);
+      color: var(--grn);
+    }
+
+    .choice-body {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .choice-text {
+      font-family: 'Noto Serif', Georgia, serif;
+      font-size: 22px;
+      line-height: 1.45;
+      color: var(--tx);
+    }
+    .choice-card.correct-revealed .choice-text { color: var(--tx); }
+
+    /* Percentage bar row */
+    .choice-pct-row {
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+    .choice-pct-row.visible { display: flex; }
+
+    .pct-bar-track {
+      flex: 1;
+      height: 10px;
+      background: var(--s3);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .pct-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--tx3);
+      width: 0%;
+      transition: width 0.5s cubic-bezier(0.16,1,0.3,1);
+    }
+    .choice-card.correct-revealed .pct-bar-fill { background: var(--grn); }
+
+    .pct-label {
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--tx3);
+      white-space: nowrap;
+      min-width: 44px;
+      text-align: right;
+    }
+    .choice-card.correct-revealed .pct-label { color: var(--grn); }
+
+    .pct-count {
+      font-size: 13px;
+      color: var(--tx3);
+      white-space: nowrap;
+      min-width: 60px;
+    }
+
+    /* Correct check mark */
+    .correct-mark {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--grn);
+    }
+    .correct-mark.visible { display: flex; }
+    .correct-mark-icon {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: var(--grn);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    /* ─── SA Responses ────────────────────────────────────────────────── */
+    .sa-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sa-header {
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--tx3);
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--bd);
+    }
+    .sa-responses {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 360px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .sa-response-item {
+      padding: 12px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--bd);
+      background: #fafbfd;
+      font-family: 'Noto Serif', serif;
+      font-size: 16px;
+      color: var(--tx2);
+      line-height: 1.5;
+    }
+    .sa-no-responses {
+      color: var(--tx3);
+      font-style: italic;
+      font-size: 16px;
+      text-align: center;
+      padding: 24px 0;
+    }
+
+    /* ─── Response summary bar ────────────────────────────────────────── */
+    #response-summary {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: Outfit, sans-serif;
+      font-size: 14px;
+      color: var(--tx3);
+      padding: 8px 0 0;
+    }
+    #response-summary strong { color: var(--tx2); }
+
+    /* ─── Loader ──────────────────────────────────────────────────────── */
+    .loader {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 80px 0;
+      color: var(--tx3);
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--bd);
+      border-top-color: var(--teal);
+      border-radius: 50%;
+      animation: spin 0.85s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Holding room ────────────────────────────────────────────────── */
+    #holding-area {
+      display: none;
+      text-align: center;
+      padding: 60px 0;
+    }
+    #holding-area.visible { display: block; }
+    .holding-icon { font-size: 52px; margin-bottom: 16px; }
+    .holding-title {
+      font-family: Outfit, sans-serif;
+      font-weight: 700;
+      font-size: 26px;
+      color: var(--tx);
+      margin-bottom: 8px;
+    }
+    .holding-sub { font-size: 16px; color: var(--tx3); }
+
+    /* ─── Ended state ─────────────────────────────────────────────────── */
+    #ended-area {
+      display: none;
+      text-align: center;
+      padding: 60px 0;
+    }
+    #ended-area.visible { display: block; }
+
+    /* ─── Responsive ──────────────────────────────────────────────────── */
+    @media (max-width: 700px) {
+      .q-text { font-size: 22px; }
+      .choice-text { font-size: 18px; }
+      .choice-letter { width: 40px; height: 40px; min-width: 40px; font-size: 14px; }
+      #main { padding: 20px 12px 40px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── Control Bar ───────────────────────────────────────────────────── -->
+  <div id="ctrl-bar">
+    <div class="ctrl-brand">&#x1F4FD; VERITAS</div>
+    <div class="ctrl-divider"></div>
+    <div class="ctrl-session-name" id="ctrl-session-name">Loading…</div>
+    <div class="ctrl-code" id="ctrl-code" style="display:none"></div>
+
+    <div class="ctrl-spacer"></div>
+
+    <!-- Toggles -->
+    <button class="ctrl-toggle" id="btn-correct" onclick="toggleCorrect()" title="Show or hide the correct answer">
+      <span class="toggle-dot"></span>
+      Show Answer
+    </button>
+    <button class="ctrl-toggle" id="btn-pct" onclick="togglePct()" title="Show or hide response percentages">
+      <span class="toggle-dot"></span>
+      Show %
+    </button>
+
+    <div class="ctrl-divider"></div>
+
+    <!-- Navigation -->
+    <div class="ctrl-nav">
+      <button class="ctrl-btn" id="btn-prev" onclick="navPrev()" disabled>&#8592; Prev</button>
+      <div class="ctrl-q-label" id="ctrl-q-label">—</div>
+      <button class="ctrl-btn" id="btn-next" onclick="navNext()" disabled>Next &#8594;</button>
+    </div>
+
+    <button class="ctrl-toggle" id="btn-auto" onclick="toggleAutoFollow()" title="Auto-follow the current question in the live session">
+      <span class="toggle-dot"></span>
+      Auto-follow
+    </button>
+  </div>
+
+  <!-- ─── Main Content ──────────────────────────────────────────────────── -->
+  <div id="main">
+    <!-- Loading state -->
+    <div id="loader" class="loader">
+      <div class="spinner"></div>
+      <div style="font-size:15px;">Connecting to session…</div>
+    </div>
+
+    <!-- No session state -->
+    <div id="status-msg">
+      <div class="status-icon">&#x1F4CB;</div>
+      <div class="status-title" id="status-title">No Session Found</div>
+      <div class="status-sub" id="status-sub">No active session is available to display.</div>
+    </div>
+
+    <!-- Holding room (session not yet started) -->
+    <div id="holding-area">
+      <div class="holding-icon">&#x23F3;</div>
+      <div class="holding-title">Waiting for Session to Begin</div>
+      <div class="holding-sub">The teacher has not yet started the first question.</div>
+    </div>
+
+    <!-- Session ended -->
+    <div id="ended-area">
+      <div class="holding-icon">&#x2705;</div>
+      <div class="holding-title">Session Ended</div>
+      <div class="holding-sub">This session has been archived.</div>
+    </div>
+
+    <!-- Stimulus -->
+    <div id="stimulus-card">
+      <div id="stimulus-content"></div>
+    </div>
+
+    <!-- Question + Choices -->
+    <div id="question-card" style="display:none">
+      <div class="q-meta">
+        <div class="q-num" id="q-num">Question 1</div>
+        <div class="q-type-badge" id="q-type-badge">Multiple Choice</div>
+      </div>
+      <div class="q-text rte-content" id="q-text"></div>
+      <div id="q-body"></div>
+      <div id="response-summary"></div>
+    </div>
+  </div>
+
+  <script>
+    // ── Session ID injected server-side ──────────────────────────────────
+    const SESS_ID = '<?= sessId ?>';
+
+    // ── State ────────────────────────────────────────────────────────────
+    let showCorrect   = false;
+    let showPct       = false;
+    let autoFollow    = true;
+    let viewQIdx      = 0;
+    let liveData      = null;
+    let pollTimer     = null;
+    let isFirstLoad   = true;
+
+    // ── Utility ──────────────────────────────────────────────────────────
+    function safe(html) {
+      return DOMPurify.sanitize(html || '', {ADD_TAGS: ['math','mrow','mi','mo','mn','msup','msub','mfrac','mroot','msqrt','munder','mover','munderover','mtable','mtr','mtd'], ADD_ATTR: ['class','style','xmlns']});
+    }
+
+    // ── Toggle Controls ──────────────────────────────────────────────────
+    function toggleCorrect() {
+      showCorrect = !showCorrect;
+      document.getElementById('btn-correct').classList.toggle('active', showCorrect);
+      render();
+    }
+
+    function togglePct() {
+      showPct = !showPct;
+      document.getElementById('btn-pct').classList.toggle('active', showPct);
+      render();
+    }
+
+    function toggleAutoFollow() {
+      autoFollow = !autoFollow;
+      document.getElementById('btn-auto').classList.toggle('active', autoFollow);
+      if (autoFollow && liveData) {
+        const cur = liveData.session.currentQ;
+        if (cur >= 0) viewQIdx = cur;
+        render();
+      }
+    }
+
+    // ── Navigation ───────────────────────────────────────────────────────
+    function navPrev() {
+      if (viewQIdx > 0) {
+        viewQIdx--;
+        autoFollow = false;
+        document.getElementById('btn-auto').classList.remove('active');
+        render();
+      }
+    }
+
+    function navNext() {
+      if (!liveData) return;
+      const total = (liveData.qStats || []).length;
+      if (viewQIdx < total - 1) {
+        viewQIdx++;
+        autoFollow = false;
+        document.getElementById('btn-auto').classList.remove('active');
+        render();
+      }
+    }
+
+    // ── Polling ──────────────────────────────────────────────────────────
+    function startPoll() {
+      fetchData();
+      pollTimer = setInterval(fetchData, 4000);
+    }
+
+    function fetchData() {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(onData)
+        .withFailureHandler(onError)
+        .getProjectionData(SESS_ID);
+    }
+
+    function onData(d) {
+      document.getElementById('loader').style.display = 'none';
+      isFirstLoad = false;
+
+      if (!d) {
+        showStatus('No Session Found', 'No active session could be found for this URL. Please check with your teacher.');
+        return;
+      }
+      if (d.session && d.session.status === 'ended') {
+        hideAll();
+        document.getElementById('ended-area').classList.add('visible');
+        updateCtrlBar(d);
+        return;
+      }
+
+      liveData = d;
+
+      // Auto-follow current question
+      if (autoFollow) {
+        const cur = d.session.currentQ;
+        viewQIdx = cur >= 0 ? cur : 0;
+      }
+
+      updateCtrlBar(d);
+      render();
+    }
+
+    function onError(err) {
+      if (isFirstLoad) {
+        document.getElementById('loader').style.display = 'none';
+        showStatus('Connection Error', 'Could not connect to the session. Please refresh the page.');
+      }
+    }
+
+    // ── Update control bar ───────────────────────────────────────────────
+    function updateCtrlBar(d) {
+      const nameEl = document.getElementById('ctrl-session-name');
+      const codeEl = document.getElementById('ctrl-code');
+      if (d && d.session) {
+        nameEl.textContent = (d.session.setName || 'Session') + (d.session.block ? ' · ' + d.session.block : '');
+        codeEl.textContent = d.session.code || '';
+        codeEl.style.display = d.session.code ? '' : 'none';
+      }
+
+      const total = d ? (d.qStats || []).length : 0;
+      const labelEl = document.getElementById('ctrl-q-label');
+      const prevBtn = document.getElementById('btn-prev');
+      const nextBtn = document.getElementById('btn-next');
+
+      if (total > 0) {
+        labelEl.textContent = 'Q ' + (viewQIdx + 1) + ' / ' + total;
+        prevBtn.disabled = viewQIdx <= 0;
+        nextBtn.disabled = viewQIdx >= total - 1;
+      } else {
+        labelEl.textContent = '—';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+      }
+    }
+
+    // ── Render ───────────────────────────────────────────────────────────
+    function render() {
+      if (!liveData) return;
+
+      const d = liveData;
+      const qStats = d.qStats || [];
+      const total = qStats.length;
+
+      // Session not yet started
+      if (d.session.currentQ < 0) {
+        hideAll();
+        document.getElementById('holding-area').classList.add('visible');
+        updateCtrlBar(d);
+        return;
+      }
+
+      if (total === 0) {
+        showStatus('No Questions', 'This session has no questions to display.');
+        return;
+      }
+
+      const qIdx = Math.max(0, Math.min(viewQIdx, total - 1));
+      const q = qStats[qIdx];
+      if (!q) return;
+
+      // Update q-label
+      updateCtrlBar(d);
+
+      hideAll();
+      document.getElementById('question-card').style.display = '';
+
+      // Stimulus
+      const stimulusCard = document.getElementById('stimulus-card');
+      const stimulusContent = document.getElementById('stimulus-content');
+      const stimuli = d.stimuli || [];
+      const stimulus = q.stimulusId ? stimuli.find(s => s.id === q.stimulusId) : null;
+      if (stimulus && stimulus.content) {
+        stimulusContent.innerHTML = safe(stimulus.content);
+        stimulusCard.classList.add('visible');
+      } else {
+        stimulusContent.innerHTML = '';
+        stimulusCard.classList.remove('visible');
+      }
+
+      // Question meta
+      document.getElementById('q-num').textContent = 'Question ' + (qIdx + 1) + ' of ' + total;
+      document.getElementById('q-type-badge').textContent = q.type === 'sa' ? 'Short Answer' : 'Multiple Choice';
+      document.getElementById('q-text').innerHTML = safe(q.text);
+
+      // Render by type
+      if (q.type === 'mc') {
+        renderMC(q);
+      } else {
+        renderSA(q);
+      }
+    }
+
+    function renderMC(q) {
+      const LETTERS = ['A','B','C','D','E','F','G','H'];
+      const choices = q.choices || [];
+      const correctIndices = q.correctIndices || [];
+      const responses = q.studentResponses || [];
+      const totalResponded = responses.filter(r => r.answer).length;
+
+      // Build choice-level count map
+      const countMap = {};
+      choices.forEach(c => countMap[c] = 0);
+      responses.forEach(r => {
+        if (!r.answer) return;
+        let answers = [];
+        try {
+          const parsed = JSON.parse(r.answer);
+          answers = Array.isArray(parsed) ? parsed : [parsed];
+        } catch(e) {
+          answers = [r.answer];
+        }
+        answers.forEach(a => {
+          if (Object.prototype.hasOwnProperty.call(countMap, a)) countMap[a]++;
+        });
+      });
+
+      let html = '<div class="choices-list">';
+      choices.forEach((choice, idx) => {
+        const isCorrect = correctIndices.includes(idx);
+        const count = countMap[choice] || 0;
+        const pct = totalResponded > 0 ? Math.round((count / totalResponded) * 100) : 0;
+        const letter = LETTERS[idx] || String.fromCharCode(65 + idx);
+        const correctClass = (showCorrect && isCorrect) ? ' correct-revealed' : '';
+
+        html += `<div class="choice-card${correctClass}" id="choice-${idx}">
+          <div class="choice-letter">${letter}</div>
+          <div class="choice-body">
+            <div class="choice-text">${safe(choice)}</div>
+            <div class="choice-pct-row${showPct ? ' visible' : ''}">
+              <div class="pct-bar-track">
+                <div class="pct-bar-fill" style="width:${showPct ? pct : 0}%"></div>
+              </div>
+              <div class="pct-label">${pct}%</div>
+              <div class="pct-count">${count} student${count !== 1 ? 's' : ''}</div>
+            </div>
+            ${showCorrect && isCorrect ? `<div class="correct-mark visible">
+              <div class="correct-mark-icon">&#10003;</div>
+              Correct Answer
+            </div>` : '<div class="correct-mark"></div>'}
+          </div>
+        </div>`;
+      });
+      html += '</div>';
+
+      document.getElementById('q-body').innerHTML = html;
+
+      // Response summary
+      const summaryEl = document.getElementById('response-summary');
+      if (showPct) {
+        summaryEl.innerHTML = `<strong>${totalResponded}</strong> response${totalResponded !== 1 ? 's' : ''} received`;
+      } else {
+        summaryEl.innerHTML = '';
+      }
+    }
+
+    function renderSA(q) {
+      const responses = (q.studentResponses || []).filter(r => r.answer);
+
+      let html = '<div class="sa-container">';
+      html += `<div class="sa-header">${responses.length} Response${responses.length !== 1 ? 's' : ''} Received</div>`;
+
+      if (responses.length === 0) {
+        html += '<div class="sa-no-responses">No responses yet.</div>';
+      } else {
+        html += '<div class="sa-responses">';
+        responses.forEach(r => {
+          let displayAns = r.answer || '';
+          try {
+            const parsed = JSON.parse(displayAns);
+            if (Array.isArray(parsed)) displayAns = parsed.join(', ');
+          } catch(e) { /* plain string */ }
+          html += `<div class="sa-response-item">${safe(displayAns)}</div>`;
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+
+      document.getElementById('q-body').innerHTML = html;
+      document.getElementById('response-summary').innerHTML = '';
+
+      // Disable showPct toggle for SA (not meaningful)
+      document.getElementById('btn-pct').disabled = true;
+      document.getElementById('btn-pct').style.opacity = '0.4';
+      document.getElementById('btn-pct').title = 'Response % not available for short-answer questions';
+    }
+
+    // ── State helpers ────────────────────────────────────────────────────
+    function hideAll() {
+      document.getElementById('status-msg').classList.remove('visible');
+      document.getElementById('holding-area').classList.remove('visible');
+      document.getElementById('ended-area').classList.remove('visible');
+      document.getElementById('stimulus-card').classList.remove('visible');
+      document.getElementById('question-card').style.display = 'none';
+      // Re-enable pct toggle (may have been disabled for SA)
+      document.getElementById('btn-pct').disabled = false;
+      document.getElementById('btn-pct').style.opacity = '';
+      document.getElementById('btn-pct').title = 'Show or hide response percentages';
+    }
+
+    function showStatus(title, sub) {
+      hideAll();
+      document.getElementById('status-title').textContent = title;
+      document.getElementById('status-sub').textContent = sub;
+      document.getElementById('status-msg').classList.add('visible');
+    }
+
+    // ── Init ─────────────────────────────────────────────────────────────
+    // Set initial toggle state
+    document.getElementById('btn-auto').classList.add('active');
+
+    if (!SESS_ID) {
+      document.getElementById('loader').style.display = 'none';
+      showStatus('No Session ID', 'This projection screen was opened without a session ID. Please open it from the teacher dashboard.');
+    } else {
+      startPoll();
+    }
+  </script>
+</body>
+</html>
